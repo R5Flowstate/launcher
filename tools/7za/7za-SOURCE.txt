@@ -1,0 +1,14 @@
+7za.exe is the standalone console binary from 7-Zip Extra (LGPL).
+Do not commit 7za.exe (repo gitignores *.exe). Drop it here locally.
+
+This tree's Extra package:
+  7-Zip 26.02 Extra (2026-06-25)
+  https://github.com/ip7z/7zip/releases/download/26.02/7z2602-extra.7z
+  file used: x64/7za.exe
+
+COPYING is License.txt from that Extra archive.
+
+Source:
+  https://github.com/ip7z/7zip/releases/tag/26.02
+  https://www.7-zip.org/sdk.html
+

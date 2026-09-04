@@ -1,0 +1,9 @@
+oo2core_8_win64.dll -- Oodle Data Compression runtime
+(C) Copyright 1994-2021 Epic Games Tools LLC
+
+Redistributed as the runtime library an application ships, solely so the
+launcher can decode Oodle-compressed loadscreen paks. Not the Oodle SDK:
+no headers, no link libraries, no source. Oodle is Epic's property and is
+not covered by this repository's MIT licence.
+
+https://www.epicgames.com/site/en-US/epic-online-services

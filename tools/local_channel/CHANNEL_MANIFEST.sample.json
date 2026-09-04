@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "kind": "channel_manifest",
+  "sdk_version": "R5FlowstateSDK001",
+  "gate_name": "R5FlowstateSDK001",
+  "marketing_tag": "local-dev",
+  "channel": "local",
+  "prerelease": true,
+  "base_url": null,
+  "notes": "Sample only. Generate a machine-local copy with tools/local_channel/make_local_channel.py (R5F_INSTALL_PATH, R5F_BUILDS_ROOT, R5F_UNIFY_BASETYPES). Do not commit generated files.",
+  "client": {
+    "preset": "client",
+    "catalog_version": "1.0.0",
+    "content_hash": "replace-from-s21-builds-client-meta",
+    "share_manifest_url": null,
+    "share_manifest_sha256": null,
+    "total_bytes": 0,
+    "local_install_hint": null,
+    "assets": []
+  },
+  "server": {
+    "preset": "server",
+    "catalog_version": "1.0.0",
+    "content_hash": "replace-from-s21-builds-server-meta",
+    "share_manifest_url": null,
+    "share_manifest_sha256": null,
+    "total_bytes": 0,
+    "local_install_hint": null,
+    "assets": []
+  },
+  "script_checksums": null
+}

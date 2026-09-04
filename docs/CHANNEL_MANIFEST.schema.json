@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://r5flowstate.local/schemas/CHANNEL_MANIFEST.schema.json",
+  "title": "CHANNEL_MANIFEST / ShipReleaseEnvelope",
+  "description": "Content discovery SoT on GH/CDN. r5fms is policy SoT only (releases.name = SDK_VERSION). gate_name/sdk_version must be WireVersion, never catalog semver.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "kind", "sdk_version", "marketing_tag", "channel", "prerelease"],
+  "properties": {
+    "schema": {
+      "type": "integer",
+      "const": 1,
+      "description": "Document schema version."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["channel_manifest", "ship_release_envelope"],
+      "description": "Document kind. channel_manifest and ship_release_envelope are aliases."
+    },
+    "sdk_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "WireVersion / SDK_VERSION. Sole r5fms gate key (releases.name). Never catalog semver."
+    },
+    "gate_name": {
+      "type": ["string", "null"],
+      "description": "Optional alias for sdk_version. When set must equal sdk_version."
+    },
+    "marketing_tag": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Shell / GH / display version. Independent of WireVersion."
+    },
+    "channel": {
+      "type": "string",
+      "enum": ["stable", "prerelease", "local"],
+      "description": "Distribution channel tip."
+    },
+    "prerelease": {
+      "type": "boolean",
+      "description": "True for beta content/shell; GA wire uses allowed=true only on production MS."
+    },
+    "base_url": {
+      "type": ["string", "null"],
+      "description": "Optional CDN/GH base for relative asset URLs."
+    },
+    "client": {
+      "$ref": "#/$defs/trackTip",
+      "description": "Client content track tip. Null/omitted = client track not shipped this envelope."
+    },
+    "server": {
+      "$ref": "#/$defs/trackTip",
+      "description": "Server/dedi content track tip. Null/omitted = server track not shipped this envelope."
+    },
+    "platform": {
+      "$ref": "#/$defs/trackTip",
+      "description": "Live overlay tip (scripts + optional runtime). Null/omitted = no overlay this envelope."
+    },
+    "script_checksums": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 4294967295
+      },
+      "description": "Optional u32 audit list for release_name=SDK_VERSION. Never install file verify."
+    },
+    "notes": {
+      "type": ["string", "null"],
+      "description": "One-line current-tip blurb. Full changelog is NOTES.json."
+    },
+    "notes_url": {
+      "type": ["string", "null"],
+      "description": "Optional NOTES.json URL. When omitted the shell loads NOTES.json next to this CHANNEL."
+    }
+  },
+  "$defs": {
+    "trackTip": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["preset", "catalog_version", "content_hash", "assets"],
+      "properties": {
+        "preset": {
+          "type": "string",
+          "enum": ["client", "server", "platform"]
+        },
+        "catalog_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ContentCatalogSemver tip (e.g. 1.0.0). Not wire version."
+        },
+        "content_hash": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Folded content identity from base/patch meta.json content_hash."
+        },
+        "share_manifest_url": {
+          "type": ["string", "null"],
+          "description": "URL or file:// path to SHARE_MANIFEST.json for this tip."
+        },
+        "share_manifest_sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "total_bytes": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "local_install_hint": {
+          "type": ["string", "null"],
+          "description": "Local testing only: absolute install root when assets are empty."
+        },
+        "base": {
+          "type": ["object", "null"],
+          "description": "Full-track base. Assets may be empty until share infra is wired.",
+          "additionalProperties": true
+        },
+        "patches": {
+          "type": ["array", "null"],
+          "description": "Ordered contiguous patches. Assets may be empty until share infra is wired.",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "assets": {
+          "type": "array",
+          "description": "Asset inventory for this track. Empty allowed for v1 local play (install_hint).",
+          "items": {
+            "$ref": "#/$defs/assetRef"
+          }
+        }
+      }
+    },
+    "assetRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "url", "kind"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Filename or volume id (e.g. client_1.0.0_paks_00.zip)."
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Absolute https://, file://, or base_url-relative path."
+        },
+        "sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "description": "Required for public ship; optional for local placeholders."
+        },
+        "size": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "share_manifest",
+            "share_volume",
+            "7z_volume",
+            "patch_manifest",
+            "content_manifest",
+            "script_checksums",
+            "other"
+          ]
+        }
+      }
+    }
+  }
+}

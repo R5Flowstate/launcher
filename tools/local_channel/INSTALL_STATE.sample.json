@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "sdk_version_expected": "R5FlowstateSDK001",
+  "client_catalog_version": "1.0.0",
+  "server_catalog_version": "1.0.0",
+  "client_content_hash": "replace-from-s21-builds-client-meta",
+  "server_content_hash": "replace-from-s21-builds-server-meta",
+  "incomplete": false,
+  "last_error": null,
+  "install_path": null
+}

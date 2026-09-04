@@ -1,0 +1,148 @@
+## Build
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]uild/
+[Oo]ut/
+msbuild.log
+msbuild.err
+msbuild.wrn
+*.dll
+*.exe
+*.pdb
+
+# 7-Zip Extra, redistributed with the LGPL notices beside it
+!tools/7za/7za.exe
+
+# Oodle runtime redistributable, needed to decode compressed loadscreen paks
+!tools/oo2core/oo2core_8_win64.dll
+*.ilk
+*.meta
+*.obj
+*.iobj
+*.ipdb
+*.pgc
+*.pgd
+*.rsp
+*.sbr
+*.tlb
+*.tli
+*.tlh
+*.tmp
+*.tmp_proj
+*.log
+*.vspscc
+*.vssscc
+.builds
+*.pidb
+*.svclog
+*.scc
+
+## Visual Studio
+.vs/
+*.user
+*.userosscache
+*.suo
+*.userprefs
+*.sln.docstates
+*.rsuser
+*.VC.db
+*.VC.VC.opendb
+*.opendb
+ipch/
+*.aps
+*.ncb
+*.opendb
+*.opensdf
+*.sdf
+*.cachefile
+*.VC.db
+*.VC.VC.opendb
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+_NCrunch_*
+.*crunch*.local.xml
+nCrunchTemp_*
+
+## Rider / VS Code
+.idea/
+*.sln.iml
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+
+## NuGet / packages
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nupkg
+*.snupkg
+**/[Pp]ackages/repositories.config
+project.lock.json
+project.fragment.lock.json
+artifacts/
+packages/
+*.nuget.props
+*.nuget.targets
+
+## User secrets / local config
+**/secrets.json
+**/appsettings.*.local.json
+*.local.json
+.env
+.env.*
+!.env.example
+
+## Test / coverage
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.trx
+*.coverage
+*.coveragexml
+coverage*
+TestResults/
+
+## OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+## Publish / ship artifacts (never commit game content)
+publish/
+dist/
+releases/
+RELEASES
+*.Setup.exe
+**/InstallPath/
+**/game_content/
+
+# Build output and agent scratch
+[Bb]in/
+[Oo]bj/
+.grok/
+
+# Machine-local stage path for the launcher overlay
+Directory.Build.props
+
+# Generated operator channel (names a local install)
+tools/local_channel/CHANNEL_MANIFEST.json
+tools/local_channel/CHANNEL_MANIFEST.local.json
+tools/local_channel/INSTALL_STATE.json
+tools/local_channel/INSTALL_STATE.local.json
+
+# Scratch
+tools/_preview_icon.png
+tools/innosetup/
+
+# Operator / design notes stay local. Public tree is README.md only.
+*.md
+!/README.md
