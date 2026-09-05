@@ -143,6 +143,7 @@ tools/local_channel/INSTALL_STATE.local.json
 tools/_preview_icon.png
 tools/innosetup/
 
-# Operator / design notes stay local. Public tree is README.md only.
+# Operator / design notes stay local. Shipped docs are listed explicitly.
 *.md
 !/README.md
+!/RELEASING.md
