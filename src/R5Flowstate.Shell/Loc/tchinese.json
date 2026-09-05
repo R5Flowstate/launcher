@@ -247,10 +247,11 @@
   "join_locked": "此伺服器已鎖定。輸入密碼才能加入。",
   "join_server": "加入伺服器",
   "password_illegal": "不要引號、分號或反斜線。",
-  "confirm_type": "輸入 {0} 以確認。",
+  "confirm_type": "在下面的輸入框中鍵入此單字以確認：",
+  "confirm_hint": "不區分大小寫。相符後按鈕即可點擊。",
   "remove_headline": "刪除全部遊戲檔案？",
   "remove_detail": "會清空整個安裝資料夾及其全部內容。無法復原。",
-  "remove_phrase": "確認刪除",
+  "remove_phrase": "REMOVE",
   "overlay_title": "指令碼檔案",
   "overlay_changed": "指令碼檔案已被更改",
   "overlay_detail": "{0} 個官方檔案不一致，另有 {1} 個額外檔案不在包裡。",
@@ -562,5 +563,12 @@
   "credits_tools_link": "R5Flowstate 全部倉庫",
   "dedi_package_hint": "在其他機器上開服？",
   "dedi_package_link": "下載伺服器包",
-  "tip_dedi_package": "僅專用伺服器，打包為一個 zip。無需安裝客戶端。"
+  "tip_dedi_package": "僅專用伺服器，打包為一個 zip。無需安裝客戶端。",
+  "status_removing": "正在刪除遊戲檔案...",
+  "status_removed_partial": "部分檔案無法刪除。請關閉正在使用該資料夾的程式後重試。",
+  "msg_remove_partial": "已刪除 {0} 個檔案。{1} 個無法刪除，通常是因為其他程式仍在占用：",
+  "tip_install_first": "請先安裝遊戲。",
+  "uninstall_title": "解除安裝 R5Flowstate",
+  "uninstall_prompt": "是否同時刪除已下載的遊戲檔案？\n\n{0}\n{1}\n\n是：刪除啟動器和遊戲檔案。\n否：僅刪除啟動器，保留遊戲檔案。",
+  "uninstall_size_unknown": "大小未知"
 }

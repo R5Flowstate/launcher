@@ -247,10 +247,11 @@
   "join_locked": "Este servidor está bloqueado. Introduce la contraseña para unirte.",
   "join_server": "Unirse al servidor",
   "password_illegal": "Sin comillas, punto y coma ni barras invertidas.",
-  "confirm_type": "Escribe {0} para confirmar.",
+  "confirm_type": "Escribe esta palabra en el campo de abajo para confirmar:",
+  "confirm_hint": "Mayusculas o minusculas dan igual. El boton se desbloquea al coincidir.",
   "remove_headline": "¿Borrar todos los archivos del juego?",
   "remove_detail": "Esto borra toda la carpeta de instalación y lo que hay dentro. No se puede deshacer.",
-  "remove_phrase": "sí borrar",
+  "remove_phrase": "REMOVE",
   "overlay_title": "Archivos de script",
   "overlay_changed": "Se cambiaron archivos de script",
   "overlay_detail": "{0} archivo(s) oficial(es) difieren y {1} extra no están en el pack.",
@@ -562,5 +563,12 @@
   "credits_tools_link": "Todos los repositorios de R5Flowstate",
   "dedi_package_hint": "Alojas en otra maquina?",
   "dedi_package_link": "Descargar el paquete de servidor",
-  "tip_dedi_package": "Solo el servidor dedicado, en un unico zip. No hace falta instalar el cliente."
+  "tip_dedi_package": "Solo el servidor dedicado, en un unico zip. No hace falta instalar el cliente.",
+  "status_removing": "Eliminando los archivos del juego...",
+  "status_removed_partial": "No se pudieron eliminar algunos archivos. Cierra lo que use la carpeta e intentalo otra vez.",
+  "msg_remove_partial": "Se eliminaron {0} archivo(s). {1} no se pudieron borrar, normalmente porque otro programa los tiene abiertos:",
+  "tip_install_first": "Instala el juego primero.",
+  "uninstall_title": "Desinstalar R5Flowstate",
+  "uninstall_prompt": "Quieres eliminar tambien los archivos del juego descargados?\n\n{0}\n{1}\n\nSi: elimina el launcher y los archivos del juego.\nNo: elimina solo el launcher y conserva los archivos del juego.",
+  "uninstall_size_unknown": "tamano desconocido"
 }

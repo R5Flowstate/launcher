@@ -247,10 +247,11 @@
   "join_locked": "Dieser Server ist gesperrt. Passwort eingeben, um beizutreten.",
   "join_server": "Server beitreten",
   "password_illegal": "Keine Anführungszeichen, Semikolons oder Backslashes.",
-  "confirm_type": "Tippen Sie {0} zur Bestätigung.",
+  "confirm_type": "Tippen Sie dieses Wort unten ein, um zu bestätigen:",
+  "confirm_hint": "Gross- oder Kleinschreibung spielt keine Rolle. Der Knopf wird bei Uebereinstimmung frei.",
   "remove_headline": "Alle Spieldateien löschen?",
   "remove_detail": "Das löscht den ganzen Installationsordner und alles darin. Unwiderruflich.",
-  "remove_phrase": "ja los",
+  "remove_phrase": "REMOVE",
   "overlay_title": "Skriptdateien",
   "overlay_changed": "Skriptdateien wurden geändert",
   "overlay_detail": "{0} offizielle Datei(en) weichen ab und {1} Extra-Datei(en) sind nicht im Pack.",
@@ -562,5 +563,12 @@
   "credits_tools_link": "Alle R5Flowstate-Repositories",
   "dedi_package_hint": "Auf einem anderen Rechner hosten?",
   "dedi_package_link": "Serverpaket herunterladen",
-  "tip_dedi_package": "Der dedizierte Server allein, als eine ZIP. Keine Client-Installation noetig."
+  "tip_dedi_package": "Der dedizierte Server allein, als eine ZIP. Keine Client-Installation noetig.",
+  "status_removing": "Spieldateien werden entfernt...",
+  "status_removed_partial": "Einige Dateien konnten nicht entfernt werden. Schliessen Sie alles, was den Ordner nutzt, und versuchen Sie es erneut.",
+  "msg_remove_partial": "{0} Datei(en) entfernt. {1} konnten nicht geloescht werden, meist weil ein anderes Programm sie noch geoeffnet hat:",
+  "tip_install_first": "Installieren Sie zuerst das Spiel.",
+  "uninstall_title": "R5Flowstate deinstallieren",
+  "uninstall_prompt": "Auch die heruntergeladenen Spieldateien entfernen?\n\n{0}\n{1}\n\nJa: Launcher und Spieldateien entfernen.\nNein: nur den Launcher entfernen, Spieldateien behalten.",
+  "uninstall_size_unknown": "Groesse unbekannt"
 }

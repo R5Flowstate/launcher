@@ -37,6 +37,9 @@ public partial class MainWindow
 
     private void OnSimpleTabConsole(object sender, RoutedEventArgs e)
     {
+        if (TabBlockedBySetup())
+            return;
+
         if (!_settings.SimpleMode && _simpleTab == SimpleTab.Console)
         {
             ApplySimpleTab(SimpleTab.Play);

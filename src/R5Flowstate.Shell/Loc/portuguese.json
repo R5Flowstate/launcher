@@ -247,10 +247,11 @@
   "join_locked": "Este servidor está trancado. Introduza a senha para entrar.",
   "join_server": "Entrar no servidor",
   "password_illegal": "Sem aspas, ponto e vírgula ou barras invertidas.",
-  "confirm_type": "Escreva {0} para confirmar.",
+  "confirm_type": "Escreva esta palavra no campo abaixo para confirmar:",
+  "confirm_hint": "Maiusculas ou minusculas nao importam. O botao desbloqueia ao coincidir.",
   "remove_headline": "Apagar todos os ficheiros do jogo?",
   "remove_detail": "Isto apaga a pasta de instalação inteira e tudo o que está lá. Não tem volta.",
-  "remove_phrase": "sim apagar",
+  "remove_phrase": "REMOVE",
   "overlay_title": "Ficheiros de script",
   "overlay_changed": "Ficheiros de script foram alterados",
   "overlay_detail": "{0} ficheiro(s) oficial(is) diferem e {1} extra não estão no pack.",
@@ -562,5 +563,12 @@
   "credits_tools_link": "Todos os repositorios R5Flowstate",
   "dedi_package_hint": "Hospedando em outra maquina?",
   "dedi_package_link": "Baixar o pacote de servidor",
-  "tip_dedi_package": "Apenas o servidor dedicado, num unico zip. Nao precisa instalar o cliente."
+  "tip_dedi_package": "Apenas o servidor dedicado, num unico zip. Nao precisa instalar o cliente.",
+  "status_removing": "A remover os ficheiros do jogo...",
+  "status_removed_partial": "Alguns ficheiros nao puderam ser removidos. Feche o que estiver a usar a pasta e tente de novo.",
+  "msg_remove_partial": "Removidos {0} ficheiro(s). {1} nao puderam ser eliminados, normalmente porque outro programa os mantem abertos:",
+  "tip_install_first": "Instale o jogo primeiro.",
+  "uninstall_title": "Desinstalar o R5Flowstate",
+  "uninstall_prompt": "Remover tambem os ficheiros do jogo transferidos?\n\n{0}\n{1}\n\nSim: remove o launcher e os ficheiros do jogo.\nNao: remove apenas o launcher e mantem os ficheiros do jogo.",
+  "uninstall_size_unknown": "tamanho desconhecido"
 }

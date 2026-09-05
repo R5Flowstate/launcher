@@ -67,21 +67,42 @@ public static class InstallPathPolicy
         return false;
     }
 
+    /// <summary>
+    /// Probe only. A folder this created for the probe is removed again, so
+    /// browsing to a path never leaves an empty install behind.
+    /// </summary>
     public static bool TryCreateWritable(string path)
     {
+        var created = false;
+        string full;
         try
         {
-            var full = Path.GetFullPath(path);
+            full = Path.GetFullPath(path);
+            created = !Directory.Exists(full);
             Directory.CreateDirectory(full);
             var probe = Path.Combine(full, ".r5f-write-test");
             File.WriteAllText(probe, "ok");
             File.Delete(probe);
-            return true;
         }
         catch
         {
             return false;
         }
+
+        if (created)
+        {
+            try
+            {
+                if (!Directory.EnumerateFileSystemEntries(full).Any())
+                    Directory.Delete(full);
+            }
+            catch
+            {
+                // leaving it is harmless; the install would create it anyway
+            }
+        }
+
+        return true;
     }
 
     public static string ResolveFreshDefault(string? appBaseDirectory = null)

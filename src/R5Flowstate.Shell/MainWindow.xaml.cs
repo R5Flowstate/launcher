@@ -466,6 +466,7 @@ public partial class MainWindow : Window
                 WatchHostedMatch();
                 WatchHostedClientGone();
                 WatchSessionModsClient();
+                WatchInstallPresence();
                 UpdateKillButtons();
             };
             _procWatch.Start();
@@ -483,6 +484,33 @@ public partial class MainWindow : Window
             MessageBox.Show(this, Loc.Format("msg_startup_failed", ex.Message), Loc.Get("title_app"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private bool? _installPresent;
+
+    /// <summary>
+    /// The game folder can be deleted from Explorer while the launcher is open.
+    /// Nothing else notices, so PLAY would keep pointing at files that are gone.
+    /// </summary>
+    private void WatchInstallPresence()
+    {
+        if (_installBusy || _verifyBusy)
+            return;
+
+        var present = !NeedsSetup(ReadInstallPathBox());
+        if (_installPresent == present)
+            return;
+
+        _installPresent = present;
+        if (!IsLoaded)
+            return;
+
+        Log(present ? "Install folder is present again." : "Install folder went missing.");
+        InvalidateHealthMemo();
+        if (!present)
+            ShowSimpleSetupLayout(true);
+        RefreshInstallStateLabels();
+        ApplyInstallGates();
     }
 
     private static bool NeedsSetup(string installPath)
@@ -509,6 +537,11 @@ public partial class MainWindow : Window
             UpdateStatus(Loc.Get("status_set_dir"));
             SetSimpleStatus(Loc.Get("status_pick_folder_install"));
             ApplyInstallDiskStatus();
+            // Without this the big button keeps whatever caption it was last
+            // painted with, which reads as PLAY on a folder that is gone.
+            InvalidateHealthMemo();
+            ShowSimpleSetupLayout(true);
+            RefreshSimplePlayButton();
         }
         else
         {
@@ -3359,8 +3392,12 @@ public partial class MainWindow : Window
     private void OnOpenToolsRepos(object sender, RoutedEventArgs e) =>
         OpenExternal(ProductConstants.ToolsReposUrl);
 
-    private void OnModeToggle(object sender, RoutedEventArgs e) =>
+    private void OnModeToggle(object sender, RoutedEventArgs e)
+    {
+        if (_settings.SimpleMode && TabBlockedBySetup())
+            return;
         ApplyShellMode(simple: !_settings.SimpleMode, persist: true);
+    }
 
     private void ApplyShellMode(bool simple, bool persist)
     {
@@ -3564,6 +3601,15 @@ public partial class MainWindow : Window
             case SimplePlayKind.Play:
             default:
                 {
+                    // The caption can predate a folder that was deleted underneath us.
+                    if (NeedsSetup(ReadInstallPathBox()))
+                    {
+                        InvalidateHealthMemo();
+                        ShowSimpleSetupLayout(true);
+                        RefreshSimplePlayButton();
+                        SetSimpleStatus(Loc.Get("status_install_first"));
+                        return;
+                    }
                     if (_selectedMode is null)
                     {
                         SetSimpleStatus(Loc.Get("status_pick_mode"));
@@ -4563,7 +4609,67 @@ public partial class MainWindow : Window
             RefreshSimpleInstallCopy();
             ClearServerList();
         }
+        ApplyInstallGates();
         RefreshHeaderSubtitle();
+    }
+
+    /// <summary>
+    /// Everything past the install card reads or drives a game that is not there
+    /// yet: the console tails its logs, mods write into it, settings edit its
+    /// launch arguments, and Advanced launches it. Locked until the files exist.
+    /// </summary>
+    internal bool InstallGateLocked => NeedsSetup(ReadInstallPathBox());
+
+    private bool _applyingGates;
+
+    private void ApplyInstallGates()
+    {
+        if (_applyingGates)
+            return;
+        _applyingGates = true;
+        try { ApplyInstallGatesCore(); }
+        finally { _applyingGates = false; }
+    }
+
+    private void ApplyInstallGatesCore()
+    {
+        var locked = InstallGateLocked;
+        var tip = locked ? Loc.Get("tip_install_first") : null;
+
+        void Gate(Button? b, string? unlockedTip)
+        {
+            if (b is null)
+                return;
+            b.IsEnabled = !locked;
+            b.Opacity = locked ? 0.4 : 1;
+            b.ToolTip = locked ? tip : unlockedTip;
+        }
+
+        Gate(BtnTabConsole, null);
+        Gate(BtnTabMods, null);
+        Gate(BtnTabSettings, Loc.Get("tip_settings"));
+        Gate(BtnTabToolSettings, Loc.Get("tip_settings"));
+        Gate(BtnHeaderConsole, Loc.Get("tab_console"));
+        Gate(BtnModeToggle, Loc.Get("tip_mode_advanced"));
+        Gate(BtnTabToolAdvanced, Loc.Get("tip_mode_advanced"));
+
+        if (!locked)
+            return;
+
+        if (!_settings.SimpleMode)
+            ApplyShellMode(simple: true, persist: false);
+        if (_simpleTab is SimpleTab.Console or SimpleTab.Mods or SimpleTab.Settings or SimpleTab.Servers)
+            ApplySimpleTab(SimpleTab.Play);
+    }
+
+    /// <summary>Refuse a tab that needs an install, and say why once.</summary>
+    private bool TabBlockedBySetup()
+    {
+        if (!InstallGateLocked)
+            return false;
+        ApplySimpleTab(SimpleTab.Play);
+        SetSimpleStatus(Loc.Get("status_install_first"));
+        return true;
     }
 
     /// <summary>The tab bar already names the open tab; the subtitle carries only what it cannot.</summary>
@@ -5275,7 +5381,7 @@ public partial class MainWindow : Window
         }
     }
 
-    void OnRemoveGameFiles(object sender, RoutedEventArgs e)
+    async void OnRemoveGameFiles(object sender, RoutedEventArgs e)
     {
         var root = TxtInstallRoot.Text.Trim();
         if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
@@ -5308,19 +5414,52 @@ public partial class MainWindow : Window
             return;
         }
 
+        // The shell's own log used to live under the install and kept a handle
+        // open, which failed the whole delete on the first file.
+        LauncherLog.Close();
+        SetSimpleStatus(Loc.Get("status_removing"));
+        SevenZipLocator.KillOurUnpackers();
+
+        RemoveReport report;
         try
         {
-            Directory.Delete(root, recursive: true);
-            Log("Removed game files: " + root);
-            _settings.InitialInstallAccepted = false;
-            SettingsStore.Save(_settings);
-            RefreshInstallStateLabels();
-            SetSimpleStatus(Loc.Get("status_removed"));
+            report = await Task.Run(() => DirectoryRemover.Remove(root)).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
             MessageBox.Show(this, Loc.Format("msg_delete_failed", ex.Message), Loc.Get("title_remove"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
         }
+
+        Log($"Remove game: deleted {report.FilesDeleted} file(s), " +
+            $"{report.BytesDeleted / (1024 * 1024)} MB, {report.Failures.Count} failure(s).");
+
+        _settings.InitialInstallAccepted = false;
+        try { SettingsStore.Save(_settings); }
+        catch (Exception ex) { Log("Settings save failed: " + ex.Message); }
+
+        InvalidateHealthMemo();
+        RefreshInstallStateLabels();
+
+        if (report.RootRemoved && report.Failures.Count == 0)
+        {
+            SetSimpleStatus(Loc.Get("status_removed"));
+            return;
+        }
+
+        var stuck = string.Join(Environment.NewLine,
+            report.Failures.Take(8).Select(f => f.Path));
+        if (report.Failures.Count > 8)
+            stuck += Environment.NewLine + "...";
+
+        SetSimpleStatus(Loc.Get("status_removed_partial"));
+        MessageBox.Show(
+            this,
+            Loc.Format("msg_remove_partial", report.FilesDeleted, report.Failures.Count) +
+                Environment.NewLine + Environment.NewLine + stuck,
+            Loc.Get("title_remove"),
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
     }
 }

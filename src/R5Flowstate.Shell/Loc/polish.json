@@ -247,10 +247,11 @@
   "join_locked": "Ten serwer jest zablokowany. Wpisz hasło, aby dołączyć.",
   "join_server": "Dołącz do serwera",
   "password_illegal": "Bez cudzysłowów, średników i backslashy.",
-  "confirm_type": "Wpisz {0}, aby potwierdzić.",
+  "confirm_type": "Wpisz to słowo w polu poniżej, aby potwierdzić:",
+  "confirm_hint": "Wielkosc liter nie ma znaczenia. Przycisk odblokuje sie po dopasowaniu.",
   "remove_headline": "Usunąć wszystkie pliki gry?",
   "remove_detail": "To wyczyści cały folder instalacji i wszystko w nim. Nieodwracalne.",
-  "remove_phrase": "tak ruszaj",
+  "remove_phrase": "REMOVE",
   "overlay_title": "Pliki skryptów",
   "overlay_changed": "Pliki skryptów zostały zmienione",
   "overlay_detail": "{0} oficjalnych plików się różni, a {1} dodatkowych nie ma w paczce.",
@@ -562,5 +563,12 @@
   "credits_tools_link": "Wszystkie repozytoria R5Flowstate",
   "dedi_package_hint": "Hostujesz na innym komputerze?",
   "dedi_package_link": "Pobierz pakiet serwera",
-  "tip_dedi_package": "Sam serwer dedykowany, jako jeden zip. Instalacja klienta nie jest potrzebna."
+  "tip_dedi_package": "Sam serwer dedykowany, jako jeden zip. Instalacja klienta nie jest potrzebna.",
+  "status_removing": "Usuwanie plikow gry...",
+  "status_removed_partial": "Nie udalo sie usunac czesci plikow. Zamknij programy uzywajace folderu i sprobuj ponownie.",
+  "msg_remove_partial": "Usunieto {0} plik(ow). {1} nie udalo sie usunac, zwykle dlatego, ze inny program wciaz je otwiera:",
+  "tip_install_first": "Najpierw zainstaluj gre.",
+  "uninstall_title": "Odinstaluj R5Flowstate",
+  "uninstall_prompt": "Usunac takze pobrane pliki gry?\n\n{0}\n{1}\n\nTak: usun launcher i pliki gry.\nNie: usun tylko launcher i zachowaj pliki gry.",
+  "uninstall_size_unknown": "rozmiar nieznany"
 }

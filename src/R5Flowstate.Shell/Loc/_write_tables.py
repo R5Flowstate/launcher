@@ -1721,18 +1721,31 @@ add("password_illegal",
     korean="따옴표, 세미콜론, 백슬래시는 안 됩니다.",
     portuguese="Sem aspas, ponto e vírgula ou barras invertidas.")
 add("confirm_type",
-    english="Type {0} to confirm.",
-    french="Tapez {0} pour confirmer.",
-    german="Tippen Sie {0} zur Bestätigung.",
-    italian="Digita {0} per confermare.",
-    japanese="確認のため {0} と入力してください。",
-    polish="Wpisz {0}, aby potwierdzić.",
-    russian="Введите {0} для подтверждения.",
-    spanish="Escribe {0} para confirmar.",
-    schinese="输入 {0} 以确认。",
-    tchinese="輸入 {0} 以確認。",
-    korean="확인하려면 {0}을(를) 입력하세요.",
-    portuguese="Escreva {0} para confirmar.")
+    english="Type this word in the box below to confirm:",
+    french="Tapez ce mot dans le champ ci-dessous pour confirmer :",
+    german="Tippen Sie dieses Wort unten ein, um zu bestätigen:",
+    italian="Digita questa parola nel campo qui sotto per confermare:",
+    japanese="確認のため、下の欄にこの語を入力してください:",
+    polish="Wpisz to słowo w polu poniżej, aby potwierdzić:",
+    russian="Введите это слово в поле ниже для подтверждения:",
+    spanish="Escribe esta palabra en el campo de abajo para confirmar:",
+    schinese="在下面的输入框中键入此单词以确认：",
+    tchinese="在下面的輸入框中鍵入此單字以確認：",
+    korean="확인하려면 아래 칸에 이 단어를 입력하세요:",
+    portuguese="Escreva esta palavra no campo abaixo para confirmar:")
+add("confirm_hint",
+    english="Upper or lower case, it does not matter. The button unlocks on a match.",
+    french="Majuscules ou minuscules, peu importe. Le bouton se debloque des que cela correspond.",
+    german="Gross- oder Kleinschreibung spielt keine Rolle. Der Knopf wird bei Uebereinstimmung frei.",
+    italian="Maiuscole o minuscole non contano. Il pulsante si sblocca quando corrisponde.",
+    japanese="大文字と小文字は問いません。一致するとボタンが有効になります。",
+    polish="Wielkosc liter nie ma znaczenia. Przycisk odblokuje sie po dopasowaniu.",
+    russian="Регистр не важен. Кнопка разблокируется при совпадении.",
+    spanish="Mayusculas o minusculas dan igual. El boton se desbloquea al coincidir.",
+    schinese="不区分大小写。匹配后按钮即可点击。",
+    tchinese="不區分大小寫。相符後按鈕即可點擊。",
+    korean="대소문자는 상관없습니다. 일치하면 버튼이 활성화됩니다.",
+    portuguese="Maiusculas ou minusculas nao importam. O botao desbloqueia ao coincidir.")
 add("remove_headline",
     english="Delete all game files?",
     french="Supprimer tous les fichiers du jeu ?",
@@ -1760,9 +1773,9 @@ add("remove_detail",
     korean="설치 폴더와 그 안의 모든 것을 지웁니다. 되돌릴 수 없습니다.",
     portuguese="Isto apaga a pasta de instalação inteira e tudo o que está lá. Não tem volta.")
 add("remove_phrase",
-    english="yep go", french="oui vas-y", german="ja los", italian="si vai",
-    japanese="さくじょする", polish="tak ruszaj", russian="да удалить", spanish="sí borrar",
-    schinese="确认删除", tchinese="確認刪除", korean="삭제한다", portuguese="sim apagar")
+    english="REMOVE", french="REMOVE", german="REMOVE", italian="REMOVE",
+    japanese="REMOVE", polish="REMOVE", russian="REMOVE", spanish="REMOVE",
+    schinese="REMOVE", tchinese="REMOVE", korean="REMOVE", portuguese="REMOVE")
 add("overlay_title",
     english="Script files", french="Fichiers de script", german="Skriptdateien", italian="File di script",
     japanese="スクリプトファイル", polish="Pliki skryptów", russian="Файлы скриптов", spanish="Archivos de script",
@@ -4603,6 +4616,39 @@ add("dedi_package_link",
 
 add("tip_dedi_package",
     english="The dedicated server on its own, as one zip. No client install needed.", french="Le serveur dedie seul, en un seul zip. Aucune installation du client requise.", german="Der dedizierte Server allein, als eine ZIP. Keine Client-Installation noetig.", italian="Il server dedicato da solo, in un unico zip. Nessuna installazione del client.", japanese="専用サーバーのみを1つのzipで。クライアントのインストールは不要です。", polish="Sam serwer dedykowany, jako jeden zip. Instalacja klienta nie jest potrzebna.", russian="Только выделенный сервер, одним zip-архивом. Установка клиента не нужна.", spanish="Solo el servidor dedicado, en un unico zip. No hace falta instalar el cliente.", schinese="仅专用服务器，打包为一个 zip。无需安装客户端。", tchinese="僅專用伺服器，打包為一個 zip。無需安裝客戶端。", korean="전용 서버만 zip 하나로. 클라이언트 설치가 필요 없습니다.", portuguese="Apenas o servidor dedicado, num unico zip. Nao precisa instalar o cliente.")
+
+
+add("status_removing",
+    english="Removing game files...", french="Suppression des fichiers du jeu...", german="Spieldateien werden entfernt...", italian="Rimozione dei file di gioco...", japanese="ゲームファイルを削除しています...", polish="Usuwanie plikow gry...", russian="Удаление файлов игры...", spanish="Eliminando los archivos del juego...", schinese="正在删除游戏文件...", tchinese="正在刪除遊戲檔案...", korean="게임 파일을 삭제하는 중...", portuguese="A remover os ficheiros do jogo...")
+
+add("status_removed_partial",
+    english="Some files could not be removed. Close anything using the folder and try again.", french="Certains fichiers n'ont pas pu etre supprimes. Fermez ce qui utilise le dossier et reessayez.", german="Einige Dateien konnten nicht entfernt werden. Schliessen Sie alles, was den Ordner nutzt, und versuchen Sie es erneut.", italian="Alcuni file non sono stati rimossi. Chiudi cio che usa la cartella e riprova.", japanese="一部のファイルを削除できませんでした。フォルダーを使用しているものを閉じて、もう一度お試しください。", polish="Nie udalo sie usunac czesci plikow. Zamknij programy uzywajace folderu i sprobuj ponownie.", russian="Некоторые файлы удалить не удалось. Закройте всё, что использует папку, и повторите.", spanish="No se pudieron eliminar algunos archivos. Cierra lo que use la carpeta e intentalo otra vez.", schinese="部分文件无法删除。请关闭正在使用该文件夹的程序后重试。", tchinese="部分檔案無法刪除。請關閉正在使用該資料夾的程式後重試。", korean="일부 파일을 삭제하지 못했습니다. 폴더를 사용 중인 프로그램을 닫고 다시 시도하세요.", portuguese="Alguns ficheiros nao puderam ser removidos. Feche o que estiver a usar a pasta e tente de novo.")
+
+add("msg_remove_partial",
+    english="Removed {0} file(s). {1} could not be deleted, usually because another program still has them open:", french="{0} fichier(s) supprime(s). {1} n'ont pas pu etre supprimes, generalement parce qu'un autre programme les garde ouverts :", german="{0} Datei(en) entfernt. {1} konnten nicht geloescht werden, meist weil ein anderes Programm sie noch geoeffnet hat:", italian="Rimossi {0} file. {1} non sono stati eliminati, di solito perche un altro programma li tiene aperti:", japanese="{0} 個のファイルを削除しました。{1} 個は削除できませんでした。通常は他のプログラムが開いたままです:", polish="Usunieto {0} plik(ow). {1} nie udalo sie usunac, zwykle dlatego, ze inny program wciaz je otwiera:", russian="Удалено файлов: {0}. Не удалось удалить: {1} - обычно их держит открытыми другая программа:", spanish="Se eliminaron {0} archivo(s). {1} no se pudieron borrar, normalmente porque otro programa los tiene abiertos:", schinese="已删除 {0} 个文件。{1} 个无法删除，通常是因为其他程序仍在占用：", tchinese="已刪除 {0} 個檔案。{1} 個無法刪除，通常是因為其他程式仍在占用：", korean="{0}개 파일을 삭제했습니다. {1}개는 삭제하지 못했습니다. 보통 다른 프로그램이 열어 두고 있기 때문입니다:", portuguese="Removidos {0} ficheiro(s). {1} nao puderam ser eliminados, normalmente porque outro programa os mantem abertos:")
+
+add("tip_install_first",
+    english="Install the game first.", french="Installez d'abord le jeu.", german="Installieren Sie zuerst das Spiel.", italian="Installa prima il gioco.", japanese="先にゲームをインストールしてください。", polish="Najpierw zainstaluj gre.", russian="Сначала установите игру.", spanish="Instala el juego primero.", schinese="请先安装游戏。", tchinese="請先安裝遊戲。", korean="게임을 먼저 설치하세요.", portuguese="Instale o jogo primeiro.")
+
+add("uninstall_title",
+    english="Uninstall R5Flowstate", french="Desinstaller R5Flowstate", german="R5Flowstate deinstallieren", italian="Disinstalla R5Flowstate", japanese="R5Flowstate をアンインストール", polish="Odinstaluj R5Flowstate", russian="Удаление R5Flowstate", spanish="Desinstalar R5Flowstate", schinese="卸载 R5Flowstate", tchinese="解除安裝 R5Flowstate", korean="R5Flowstate 제거", portuguese="Desinstalar o R5Flowstate")
+
+add("uninstall_prompt",
+    english="Remove the downloaded game files as well?\n\n{0}\n{1}\n\nYes: remove the launcher and the game files.\nNo: remove the launcher only and keep the game files.",
+    french="Supprimer aussi les fichiers du jeu telecharges ?\n\n{0}\n{1}\n\nOui : supprimer le lanceur et les fichiers du jeu.\nNon : supprimer seulement le lanceur et garder les fichiers du jeu.",
+    german="Auch die heruntergeladenen Spieldateien entfernen?\n\n{0}\n{1}\n\nJa: Launcher und Spieldateien entfernen.\nNein: nur den Launcher entfernen, Spieldateien behalten.",
+    italian="Rimuovere anche i file di gioco scaricati?\n\n{0}\n{1}\n\nSi: rimuove il launcher e i file di gioco.\nNo: rimuove solo il launcher e mantiene i file di gioco.",
+    japanese="ダウンロード済みのゲームファイルも削除しますか?\n\n{0}\n{1}\n\nはい: ランチャーとゲームファイルを削除します。\nいいえ: ランチャーのみ削除し、ゲームファイルは残します。",
+    polish="Usunac takze pobrane pliki gry?\n\n{0}\n{1}\n\nTak: usun launcher i pliki gry.\nNie: usun tylko launcher i zachowaj pliki gry.",
+    russian="Удалить также загруженные файлы игры?\n\n{0}\n{1}\n\nДа: удалить лаунчер и файлы игры.\nНет: удалить только лаунчер, файлы игры оставить.",
+    spanish="Quieres eliminar tambien los archivos del juego descargados?\n\n{0}\n{1}\n\nSi: elimina el launcher y los archivos del juego.\nNo: elimina solo el launcher y conserva los archivos del juego.",
+    schinese="是否同时删除已下载的游戏文件？\n\n{0}\n{1}\n\n是：删除启动器和游戏文件。\n否：仅删除启动器，保留游戏文件。",
+    tchinese="是否同時刪除已下載的遊戲檔案？\n\n{0}\n{1}\n\n是：刪除啟動器和遊戲檔案。\n否：僅刪除啟動器，保留遊戲檔案。",
+    korean="내려받은 게임 파일도 삭제할까요?\n\n{0}\n{1}\n\n예: 런처와 게임 파일을 삭제합니다.\n아니요: 런처만 삭제하고 게임 파일은 남깁니다.",
+    portuguese="Remover tambem os ficheiros do jogo transferidos?\n\n{0}\n{1}\n\nSim: remove o launcher e os ficheiros do jogo.\nNao: remove apenas o launcher e mantem os ficheiros do jogo.")
+
+add("uninstall_size_unknown",
+    english="size unknown", french="taille inconnue", german="Groesse unbekannt", italian="dimensione sconosciuta", japanese="サイズ不明", polish="rozmiar nieznany", russian="размер неизвестен", spanish="tamano desconocido", schinese="大小未知", tchinese="大小未知", korean="크기 알 수 없음", portuguese="tamanho desconhecido")
 
 
 LANGS = [

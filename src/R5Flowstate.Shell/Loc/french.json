@@ -247,10 +247,11 @@
   "join_locked": "Ce serveur est verrouillé. Entrez le mot de passe pour rejoindre.",
   "join_server": "Rejoindre le serveur",
   "password_illegal": "Pas de guillemets, points-virgules ou antislash.",
-  "confirm_type": "Tapez {0} pour confirmer.",
+  "confirm_type": "Tapez ce mot dans le champ ci-dessous pour confirmer :",
+  "confirm_hint": "Majuscules ou minuscules, peu importe. Le bouton se debloque des que cela correspond.",
   "remove_headline": "Supprimer tous les fichiers du jeu ?",
   "remove_detail": "Cela efface tout le dossier d'installation et son contenu. Irréversible.",
-  "remove_phrase": "oui vas-y",
+  "remove_phrase": "REMOVE",
   "overlay_title": "Fichiers de script",
   "overlay_changed": "Des fichiers de script ont été modifiés",
   "overlay_detail": "{0} fichier(s) officiel(s) différent et {1} fichier(s) en plus ne sont pas dans le pack.",
@@ -562,5 +563,12 @@
   "credits_tools_link": "Tous les depots R5Flowstate",
   "dedi_package_hint": "Vous hebergez sur une autre machine ?",
   "dedi_package_link": "Telecharger le pack serveur",
-  "tip_dedi_package": "Le serveur dedie seul, en un seul zip. Aucune installation du client requise."
+  "tip_dedi_package": "Le serveur dedie seul, en un seul zip. Aucune installation du client requise.",
+  "status_removing": "Suppression des fichiers du jeu...",
+  "status_removed_partial": "Certains fichiers n'ont pas pu etre supprimes. Fermez ce qui utilise le dossier et reessayez.",
+  "msg_remove_partial": "{0} fichier(s) supprime(s). {1} n'ont pas pu etre supprimes, generalement parce qu'un autre programme les garde ouverts :",
+  "tip_install_first": "Installez d'abord le jeu.",
+  "uninstall_title": "Desinstaller R5Flowstate",
+  "uninstall_prompt": "Supprimer aussi les fichiers du jeu telecharges ?\n\n{0}\n{1}\n\nOui : supprimer le lanceur et les fichiers du jeu.\nNon : supprimer seulement le lanceur et garder les fichiers du jeu.",
+  "uninstall_size_unknown": "taille inconnue"
 }

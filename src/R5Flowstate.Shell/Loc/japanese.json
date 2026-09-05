@@ -247,10 +247,11 @@
   "join_locked": "このサーバーはロックされています。参加するにはパスワードを入力してください。",
   "join_server": "サーバーに参加",
   "password_illegal": "引用符・セミコロン・バックスラッシュは使えません。",
-  "confirm_type": "確認のため {0} と入力してください。",
+  "confirm_type": "確認のため、下の欄にこの語を入力してください:",
+  "confirm_hint": "大文字と小文字は問いません。一致するとボタンが有効になります。",
   "remove_headline": "ゲームファイルをすべて削除しますか？",
   "remove_detail": "インストールフォルダーとその中身をすべて消します。元に戻せません。",
-  "remove_phrase": "さくじょする",
+  "remove_phrase": "REMOVE",
   "overlay_title": "スクリプトファイル",
   "overlay_changed": "スクリプトファイルが変更されています",
   "overlay_detail": "公式ファイル {0} 件が異なり、パックにない追加ファイルが {1} 件あります。",
@@ -562,5 +563,12 @@
   "credits_tools_link": "R5Flowstateの全リポジトリ",
   "dedi_package_hint": "別のマシンでホストしますか？",
   "dedi_package_link": "サーバーパッケージをダウンロード",
-  "tip_dedi_package": "専用サーバーのみを1つのzipで。クライアントのインストールは不要です。"
+  "tip_dedi_package": "専用サーバーのみを1つのzipで。クライアントのインストールは不要です。",
+  "status_removing": "ゲームファイルを削除しています...",
+  "status_removed_partial": "一部のファイルを削除できませんでした。フォルダーを使用しているものを閉じて、もう一度お試しください。",
+  "msg_remove_partial": "{0} 個のファイルを削除しました。{1} 個は削除できませんでした。通常は他のプログラムが開いたままです:",
+  "tip_install_first": "先にゲームをインストールしてください。",
+  "uninstall_title": "R5Flowstate をアンインストール",
+  "uninstall_prompt": "ダウンロード済みのゲームファイルも削除しますか?\n\n{0}\n{1}\n\nはい: ランチャーとゲームファイルを削除します。\nいいえ: ランチャーのみ削除し、ゲームファイルは残します。",
+  "uninstall_size_unknown": "サイズ不明"
 }

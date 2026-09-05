@@ -56,6 +56,9 @@ public partial class MainWindow
 
     private void OnSimpleTabMods(object sender, RoutedEventArgs e)
     {
+        if (TabBlockedBySetup())
+            return;
+
         ApplySimpleTab(SimpleTab.Mods);
         _ = RefreshModsPanelAsync();
     }
@@ -96,6 +99,9 @@ public partial class MainWindow
 
     private void OnSimpleTabSettings(object sender, RoutedEventArgs e)
     {
+        if (TabBlockedBySetup())
+            return;
+
         if (!_settings.SimpleMode && _simpleTab == SimpleTab.Settings)
         {
             ApplySimpleTab(SimpleTab.Play);

@@ -14,7 +14,9 @@ public partial class ConfirmPhraseWindow : Window
         TxtHeadline.Text = headline;
         TxtDetail.Text = detail;
         TxtTarget.Text = target;
-        TxtPrompt.Text = Loc.Format("confirm_type", phrase);
+        TxtPrompt.Text = Loc.Get("confirm_type");
+        TxtPhraseEcho.Text = phrase;
+        TxtPhraseHint.Text = Loc.Get("confirm_hint");
         Loaded += (_, _) => TxtPhrase.Focus();
     }
 
@@ -27,12 +29,12 @@ public partial class ConfirmPhraseWindow : Window
     private void OnPhraseChanged(object sender, RoutedEventArgs e)
     {
         if (BtnConfirm is not null)
-            BtnConfirm.IsEnabled = string.Equals(TxtPhrase.Text?.Trim(), _phrase, StringComparison.Ordinal);
+            BtnConfirm.IsEnabled = string.Equals(TxtPhrase.Text?.Trim(), _phrase, StringComparison.OrdinalIgnoreCase);
     }
 
     private void OnConfirm(object sender, RoutedEventArgs e)
     {
-        if (!string.Equals(TxtPhrase.Text?.Trim(), _phrase, StringComparison.Ordinal))
+        if (!string.Equals(TxtPhrase.Text?.Trim(), _phrase, StringComparison.OrdinalIgnoreCase))
             return;
         DialogResult = true;
         Close();

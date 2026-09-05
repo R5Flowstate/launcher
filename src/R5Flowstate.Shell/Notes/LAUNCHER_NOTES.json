@@ -4,6 +4,19 @@
   "entries": [
     {
       "date": "5 Sep 2026",
+      "title": "Launcher 0.1.43",
+      "items": [
+        "Uninstalling from Windows now asks whether to remove the game files too",
+        "Fix Remove game deleting nothing because the launcher held its own log open",
+        "Remove game now reports exactly which files it could not delete",
+        "Say REMOVE plainly on the confirmation instead of a phrase you had to guess",
+        "Show INSTALL, not PLAY, when the game folder is gone",
+        "Keep Advanced, Console, Mods and Settings closed until the game is installed",
+        "Stop browsing for a folder from leaving an empty one behind"
+      ]
+    },
+    {
+      "date": "5 Sep 2026",
       "title": "Launcher 0.1.42",
       "items": [
         "Fix join links from the website doing nothing",

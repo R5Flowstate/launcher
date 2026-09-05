@@ -22,8 +22,15 @@
     </Border>
     <TextBlock x:Name="TxtPrompt" Margin="0,18,0,6" FontSize="13"
                Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+    <Border CornerRadius="6" Padding="12,8" Margin="0,0,0,10"
+            Background="{StaticResource SurfaceSunken}">
+      <TextBlock x:Name="TxtPhraseEcho" FontFamily="Consolas" FontSize="16"
+                 FontWeight="Bold" Foreground="{StaticResource TextPrimary}"/>
+    </Border>
     <TextBox x:Name="TxtPhrase" Height="36" FontFamily="Consolas" FontSize="14"
              TextChanged="OnPhraseChanged"/>
+    <TextBlock x:Name="TxtPhraseHint" Margin="0,6,0,0" FontSize="12"
+               Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
     <DockPanel Margin="0,20,0,0" LastChildFill="False">
       <Button x:Name="BtnConfirm" DockPanel.Dock="Right" Content="{loc:T remove_game}"
               MinWidth="140" Height="36" IsEnabled="False" IsDefault="True"

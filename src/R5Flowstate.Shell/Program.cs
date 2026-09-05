@@ -15,7 +15,11 @@ public static class Program
         // on a recognised hook; if it returns we still must not open WPF.
         var hook = IsVelopackHook(args);
         if (hook || HasUpdateExe())
-            VelopackApp.Build().Run();
+        {
+            VelopackApp.Build()
+                .OnBeforeUninstallFastCallback(_ => UninstallHook.Run())
+                .Run();
+        }
         if (hook)
             return;
 

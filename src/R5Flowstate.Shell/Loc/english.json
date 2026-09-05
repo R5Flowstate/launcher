@@ -247,10 +247,11 @@
   "join_locked": "This server is locked. Enter the password to join.",
   "join_server": "Join server",
   "password_illegal": "No quotes, semicolons, or backslashes.",
-  "confirm_type": "Type {0} to confirm.",
+  "confirm_type": "Type this word in the box below to confirm:",
+  "confirm_hint": "Upper or lower case, it does not matter. The button unlocks on a match.",
   "remove_headline": "Delete all game files?",
   "remove_detail": "This erases the whole install folder and everything in it. It cannot be undone.",
-  "remove_phrase": "yep go",
+  "remove_phrase": "REMOVE",
   "overlay_title": "Script files",
   "overlay_changed": "Script files were changed",
   "overlay_detail": "{0} official file(s) differ and {1} extra file(s) are not in the pack.",
@@ -562,5 +563,12 @@
   "credits_tools_link": "All R5Flowstate repositories",
   "dedi_package_hint": "Hosting on another machine?",
   "dedi_package_link": "Download the server package",
-  "tip_dedi_package": "The dedicated server on its own, as one zip. No client install needed."
+  "tip_dedi_package": "The dedicated server on its own, as one zip. No client install needed.",
+  "status_removing": "Removing game files...",
+  "status_removed_partial": "Some files could not be removed. Close anything using the folder and try again.",
+  "msg_remove_partial": "Removed {0} file(s). {1} could not be deleted, usually because another program still has them open:",
+  "tip_install_first": "Install the game first.",
+  "uninstall_title": "Uninstall R5Flowstate",
+  "uninstall_prompt": "Remove the downloaded game files as well?\n\n{0}\n{1}\n\nYes: remove the launcher and the game files.\nNo: remove the launcher only and keep the game files.",
+  "uninstall_size_unknown": "size unknown"
 }

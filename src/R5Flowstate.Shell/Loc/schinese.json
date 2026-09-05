@@ -247,10 +247,11 @@
   "join_locked": "此服务器已锁定。输入密码才能加入。",
   "join_server": "加入服务器",
   "password_illegal": "不要引号、分号或反斜杠。",
-  "confirm_type": "输入 {0} 以确认。",
+  "confirm_type": "在下面的输入框中键入此单词以确认：",
+  "confirm_hint": "不区分大小写。匹配后按钮即可点击。",
   "remove_headline": "删除全部游戏文件？",
   "remove_detail": "会清空整个安装文件夹及其全部内容。无法撤销。",
-  "remove_phrase": "确认删除",
+  "remove_phrase": "REMOVE",
   "overlay_title": "脚本文件",
   "overlay_changed": "脚本文件已被更改",
   "overlay_detail": "{0} 个官方文件不一致，另有 {1} 个额外文件不在包里。",
@@ -562,5 +563,12 @@
   "credits_tools_link": "R5Flowstate 全部仓库",
   "dedi_package_hint": "在其他机器上开服？",
   "dedi_package_link": "下载服务器包",
-  "tip_dedi_package": "仅专用服务器，打包为一个 zip。无需安装客户端。"
+  "tip_dedi_package": "仅专用服务器，打包为一个 zip。无需安装客户端。",
+  "status_removing": "正在删除游戏文件...",
+  "status_removed_partial": "部分文件无法删除。请关闭正在使用该文件夹的程序后重试。",
+  "msg_remove_partial": "已删除 {0} 个文件。{1} 个无法删除，通常是因为其他程序仍在占用：",
+  "tip_install_first": "请先安装游戏。",
+  "uninstall_title": "卸载 R5Flowstate",
+  "uninstall_prompt": "是否同时删除已下载的游戏文件？\n\n{0}\n{1}\n\n是：删除启动器和游戏文件。\n否：仅删除启动器，保留游戏文件。",
+  "uninstall_size_unknown": "大小未知"
 }
