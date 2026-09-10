@@ -1,0 +1,36 @@
+<Window x:Class="R5Flowstate.Shell.OverlayScriptsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:R5Flowstate.Shell"
+        Title="{loc:T overlay_title}"
+        Icon="Assets/app.ico"
+        SizeToContent="Height" Width="520"
+        ResizeMode="NoResize"
+        Background="{StaticResource WindowBg}" Foreground="{StaticResource TextPrimary}"
+        FontFamily="Segoe UI"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+  <StackPanel Margin="24,22,24,20">
+    <TextBlock FontSize="19" FontWeight="SemiBold" TextWrapping="Wrap"
+               Text="{loc:T overlay_changed}"/>
+    <TextBlock x:Name="TxtDetail" Margin="0,10,0,0" FontSize="13"
+               Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+    <Border Margin="0,14,0,0" CornerRadius="8" Padding="14,11"
+            Background="{StaticResource SurfaceSunken}">
+      <TextBlock x:Name="TxtSamples" FontFamily="Consolas" FontSize="12"
+                 Foreground="{StaticResource TextCode}" TextWrapping="Wrap"/>
+    </Border>
+    <TextBlock Margin="0,16,0,0" FontSize="13"
+               Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"
+               Text="{loc:T overlay_body}"/>
+    <DockPanel Margin="0,20,0,0" LastChildFill="False">
+      <Button DockPanel.Dock="Right" Content="{loc:T overlay_restore}"
+              MinWidth="148" Height="36"
+              Style="{StaticResource DangerButtonSmall}" Click="OnRestore"/>
+      <Button DockPanel.Dock="Right" Content="{loc:T overlay_leave}"
+              MinWidth="140" Height="36" Margin="0,0,10,0"
+              IsDefault="True"
+              Style="{StaticResource AccentButton}" Click="OnLeave"/>
+    </DockPanel>
+  </StackPanel>
+</Window>

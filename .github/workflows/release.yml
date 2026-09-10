@@ -1,0 +1,50 @@
+name: release
+
+on:
+  push:
+    tags: ['launcher-v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Version from tag
+        id: ver
+        shell: pwsh
+        run: |
+          $v = '${{ github.ref_name }}' -replace '^launcher-v', ''
+          if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "tag does not carry a version: ${{ github.ref_name }}" }
+          "version=$v" | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
+
+      - name: Pack
+        shell: pwsh
+        run: .\scripts\pack_velopack.ps1 -Version ${{ steps.ver.outputs.version }}
+
+      - name: Release notes
+        shell: pwsh
+        run: python scripts/release_notes.py ${{ steps.ver.outputs.version }} | Out-File -Encoding utf8 notes.md
+
+      - name: Publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = '${{ steps.ver.outputs.version }}'
+          gh release create '${{ github.ref_name }}' `
+            --title "Launcher $v" `
+            --notes-file notes.md `
+            "artifacts/R5FlowstateSetup.exe" `
+            "artifacts/velopack/R5Flowstate-win-Setup.exe" `
+            "artifacts/velopack/R5Flowstate-$v-full.nupkg" `
+            "artifacts/velopack/R5Flowstate-win-Portable.zip" `
+            "artifacts/velopack/RELEASES" `
+            "artifacts/velopack/releases.win.json" `
+            "artifacts/velopack/assets.win.json"

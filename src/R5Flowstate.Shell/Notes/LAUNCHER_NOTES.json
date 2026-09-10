@@ -1,0 +1,354 @@
+{
+  "schema": 1,
+  "kind": "notes",
+  "entries": [
+    {
+      "date": "7 Sep 2026",
+      "title": "Launcher 0.1.44",
+      "items": [
+        "Fix picking a new game folder stranding the launcher",
+        "Add new Blogs tab, for the website posts",
+        "Add Ko-fi next to Patreon"
+      ]
+    },
+    {
+      "date": "5 Sep 2026",
+      "title": "Launcher 0.1.43",
+      "items": [
+        "Uninstalling from Windows now asks whether to remove the game files too",
+        "Fix Remove game deleting nothing because the launcher held its own log open",
+        "Remove game now reports exactly which files it could not delete",
+        "Say REMOVE plainly on the confirmation instead of a phrase you had to guess",
+        "Show INSTALL, not PLAY, when the game folder is gone",
+        "Keep Advanced, Console, Mods and Settings closed until the game is installed",
+        "Stop browsing for a folder from leaving an empty one behind"
+      ]
+    },
+    {
+      "date": "5 Sep 2026",
+      "title": "Launcher 0.1.42",
+      "items": [
+        "Fix join links from the website doing nothing",
+        "Show the server package link in Settings",
+        "Link the whole tool repository list in credits"
+      ]
+    },
+    {
+      "date": "4 Sep 2026",
+      "title": "Launcher 0.1.41",
+      "items": [
+        "Add a link to the standalone server package in Settings",
+        "Hide the mod catalog until there are mods to browse"
+      ]
+    },
+    {
+      "date": "3 Sep 2026",
+      "title": "Launcher 0.1.40",
+      "items": [
+        "Fix being stuck when the server dies",
+        "Keep custom maps and files when updating",
+        "Remove leftover download scratch files",
+        "Fix server console text in the client console",
+        "Remove navmesh entries from the map list",
+        "Remember the DirectX 12 setting"
+      ]
+    },
+    {
+      "date": "1 Sep 2026",
+      "title": "Launcher 0.1.39",
+      "items": [
+        "Show REPAIR when game files need work",
+        "Repair only missing or damaged files",
+        "Add show unlisted maps option",
+        "Keep edited files when updating",
+        "Remember the HD textures notice"
+      ]
+    },
+    {
+      "date": "31 Aug 2026",
+      "title": "Launcher 0.1.38",
+      "items": [
+        "Ask about HD textures once instead of twice"
+      ]
+    },
+    {
+      "date": "31 Aug 2026",
+      "title": "Launcher 0.1.37",
+      "items": [
+        "Fix HD textures failing to start downloading"
+      ]
+    },
+    {
+      "date": "31 Aug 2026",
+      "title": "Launcher 0.1.36",
+      "items": [
+        "Fix a long file check that looked stuck after an update",
+        "Skip re-reading the whole game when the update changed no files"
+      ]
+    },
+    {
+      "date": "31 Aug 2026",
+      "title": "Launcher 0.1.35",
+      "items": [
+        "Turn HD textures on or off while a download is running",
+        "Free up space when you turn HD textures off mid download",
+        "Tell existing players once that HD textures are available",
+        "Install launcher updates when you close it, not mid session"
+      ]
+    },
+    {
+      "date": "31 Aug 2026",
+      "title": "Launcher 0.1.34",
+      "items": [
+        "Add optional HD textures download",
+        "Show disk space needed before downloading HD textures",
+        "Free up space by turning HD textures off"
+      ]
+    },
+    {
+      "date": "31 Aug 2026",
+      "title": "Launcher 0.1.33",
+      "items": [
+        "Speed up file checks after an update",
+        "Stop re-reading the whole game to verify one file"
+      ]
+    },
+    {
+      "date": "31 Aug 2026",
+      "title": "Launcher 0.1.32",
+      "items": [
+        "Fix game files being deleted during an update",
+        "Fix local server crashing when loading a map",
+        "Restore missing game files on the next check"
+      ]
+    },
+    {
+      "date": "30 Aug 2026",
+      "title": "Launcher 0.1.31",
+      "items": [
+        "Fix files being checked twice after an update"
+      ]
+    },
+    {
+      "date": "30 Aug 2026",
+      "title": "Launcher 0.1.30",
+      "items": [
+        "Add download speed limit",
+        "Fix space needed in install box",
+        "Fix download sizes in install box",
+        "Show real time download progress per file",
+        "Add progress bar when checking installed files"
+      ]
+    },
+    {
+      "date": "30 Aug 2026",
+      "title": "Launcher 0.1.29",
+      "items": [
+        "## Downloading",
+        "Downloads now use your whole connection. Large files were being fetched one piece at a time down a single connection, which made an install far slower than it should have been.",
+        "The progress card shows how many files are done, the total speed and time left, and every file currently downloading with its own progress."
+      ]
+    },
+    {
+      "date": "30 Aug 2026",
+      "title": "Launcher 0.1.28",
+      "items": [
+        "## Installing and updating",
+        "Updates now download only the files that changed, instead of the whole game.",
+        "Installing takes far less free space, and no longer unpacks a second copy of the game onto your drive.",
+        "Downloads no longer time out on slower connections.",
+        "An interrupted download picks up where it stopped instead of starting the file over.",
+        "The launcher clears out leftover install files it no longer needs and tells you how much space it freed.",
+        "## Your files",
+        "New Verify files button checks every game file and reports what is wrong, without changing anything.",
+        "Repair now restores a file you deleted. It previously reported success and did nothing.",
+        "Changes you make under platform are detected by content, so an edit that leaves the file the same size is no longer missed.",
+        "Your keybinds and HUD layout are no longer overwritten when you update.",
+        "## Playing",
+        "Play is no longer blocked when the master server cannot be reached."
+      ]
+    },
+    {
+      "date": "29 Aug 2026",
+      "title": "Launcher 0.1.27",
+      "items": [
+        "Credit RoyalBlue1 for SERE.",
+        "Retitle the credits by project, with r-ex under RSX and RePak.",
+        "Credit IJARika for assets, formats and structs."
+      ]
+    },
+    {
+      "date": "29 Aug 2026",
+      "title": "Launcher 0.1.26",
+      "items": [
+        "## Patch notes",
+        "Group the game patch notes under headings instead of one flat list.",
+        "## Joining",
+        "Launch online when you join from the server browser, even if Play Local is set to Offline.",
+        "Hide the console mode and map pickers when you join a server from the browser.",
+        "## Install",
+        "Fix a finished install still painting the Install button."
+      ]
+    },
+    {
+      "date": "27 Aug 2026",
+      "title": "Launcher 0.1.25",
+      "items": [
+        "Clear stray server processes before Play Local starts and wait for the port, so a failed run does not block the next one.",
+        "Replace the play bar with one button that becomes STOP, CHANGE MAP or DISCONNECT.",
+        "Split the console tab into two panes so server output survives launching the game.",
+        "Make Reload on the console tab change to the live map.",
+        "Add Ctrl+F find in both console panes.",
+        "Warn on a server script crash, offer a restart, and reconnect the game you still have open.",
+        "Group Play Local modes into an Apex and a Flowstate rail.",
+        "Lead the map hero with the mode and show the launch command.",
+        "Add resolution fields to the play bar and settings, with per-aspect presets from your monitor's real modes.",
+        "Make DirectX 12 a session-only choice, marked Beta.",
+        "Add a per-side Developer switch and a host-online toggle to Advanced.",
+        "Add match cards to Leaderboards and make both cards closable.",
+        "Tuck the Beta mark up against the wordmark.",
+        "Drop the AI label from the patch notes tabs.",
+        "Move Map Editor out of Play Local; it stays in the Advanced playlist list.",
+        "Keep map picker tiles instead of redecoding them every open.",
+        "Update credits."
+      ]
+    },
+    {
+      "date": "22 Aug 2026",
+      "title": "Launcher 0.1.17",
+      "items": [
+        "If the local server hits a script error or crashes, the launcher asks to restart it and reconnects the game that is still open."
+      ]
+    },
+    {
+      "date": "19 Aug 2026",
+      "title": "Launcher 0.1.15",
+      "items": [
+        "1v1 leaderboard: search by name, season filter, All seasons, and win streaks.",
+        "Click a player for maps, weapons, best game, and recent matches (duration and host).",
+        "Match history page with paging. Live server and player counts on Play and Leaderboards."
+      ]
+    },
+    {
+      "date": "18 Aug 2026",
+      "title": "Launcher 0.1.14",
+      "items": [
+        "The launcher opens instantly: news and update checks load in the background instead of holding up the window.",
+        "Works offline and on slow networks: the last known catalog and notes show right away.",
+        "Smoother and more responsive overall, especially after sitting idle.",
+        "Faster startup on machines where it used to hang on a white screen."
+      ]
+    },
+    {
+      "date": "17 Aug 2026",
+      "title": "Launcher 0.1.13",
+      "items": [
+        "Map pictures in the launcher show again."
+      ]
+    },
+    {
+      "date": "17 Aug 2026",
+      "title": "Launcher 0.1.12",
+      "items": [
+        "Console tab redesigned: server controls sit in a bottom bar like the main page, and the tabs never collapse.",
+        "Offline is on by default for local play. Joining a public server goes online automatically.",
+        "Patch notes open at the top and version-title each update.",
+        "The launcher opens at a tighter default window size.",
+        "Advanced mode: Launch Client and Launch Dedi keep their own consoles.",
+        "Added missing translations for the close and preflight dialogs."
+      ]
+    },
+    {
+      "date": "16 Aug 2026",
+      "title": "Launcher 0.1.11",
+      "items": [
+        "The launcher speaks your language: the whole shell is localized into all game languages.",
+        "Console: one pane for local play - the client log starts from its very first line and server startup lines stay visible.",
+        "Change map applies the selected playlist.",
+        "Credits tab redesigned: tighter layout, hover highlights, short repo links, and the CafeFPS X profile.",
+        "Bigger header logo and title; footer stays visible when maximized.",
+        "Patch notes now label the current game version (v0.9.1 beta) instead of saying Current build."
+      ]
+    },
+    {
+      "date": "16 Aug 2026",
+      "title": "Launcher 0.1.10",
+      "items": [
+        "New window look: the Windows title bar is gone, replaced by the launcher's own slim caption bar with minimize, maximize, and close.",
+        "Drag the top strip to move the window; double-click it to maximize.",
+        "Closing the launcher always closes it. You can stop the game, leave it running, or cancel.",
+        "Quitting a public-server session no longer asks about a leftover local server."
+      ]
+    },
+    {
+      "date": "16 Aug 2026",
+      "title": "Launcher 0.1.9",
+      "items": [
+        "First-run welcome note for playtesters with what to expect and how to help."
+      ]
+    },
+    {
+      "date": "16 Aug 2026",
+      "title": "Launcher 0.1.8",
+      "items": [
+        "Game updates that only change scripts or game code now show as a small UPDATE instead of the full install screen.",
+        "An open launcher checks for game updates every 10 minutes; no restart needed to see them.",
+        "Launcher updates show next to the version number: Update available, then Restart to apply the update. Click it to restart."
+      ]
+    },
+    {
+      "date": "16 Aug 2026",
+      "title": "Launcher 0.1.7",
+      "items": [
+        "Fixed Play Local getting stuck on Waiting for the server: if the server is running but never reports ready, the game now starts anyway after 75 seconds."
+      ]
+    },
+    {
+      "date": "16 Aug 2026",
+      "title": "Launcher 0.1.6",
+      "items": [
+        "Patch Notes now has two pages: Game and Launcher. Every launcher version carries its own changelog."
+      ]
+    },
+    {
+      "date": "16 Aug 2026",
+      "title": "Launcher 0.1.5",
+      "items": [
+        "New installs go to Program Files. Setup asks for admin once; playing, updating, and downloading never prompt again.",
+        "Browse always applies the folder you pick, and tells you when Windows blocks a location instead of failing silently.",
+        "Download speed limit in Settings. Presets from 5 to 200 Mbps, applied immediately, even mid-download.",
+        "One install progress bar instead of three, with whole-download progress and bytes.",
+        "The install header now reads Installing / Checking while work is running.",
+        "Console command history: Up and Down recall previous commands, kept across restarts."
+      ]
+    },
+    {
+      "date": "16 Aug 2026",
+      "title": "Launcher 0.1.4",
+      "items": [
+        "Pick the map from its loading-screen art. The map dropdown is gone; the Select map button on the artwork opens the picker.",
+        "Console input caret lands where you click.",
+        "The launcher switches to the Console tab while the local server loads the map."
+      ]
+    },
+    {
+      "date": "15 Aug 2026",
+      "title": "Launcher 0.1.3",
+      "items": [
+        "Quick Play waits for the server to finish loading the map before starting the game.",
+        "1v1 ranked leaderboards tab.",
+        "Warns when the install drive is short on space.",
+        "Download shows time remaining for the whole install."
+      ]
+    },
+    {
+      "date": "Aug 2026",
+      "title": "Launcher 0.1.0 - 0.1.2",
+      "items": [
+        "First public launcher: installs and updates the game from the CDN.",
+        "Play Local with modes, server browser, hosted server and client consoles, patch notes, and credits.",
+        "Password-protected server join and EULA flow."
+      ]
+    }
+  ]
+}

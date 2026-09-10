@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>R5Flowstate.Content</RootNamespace>
+    <AssemblyName>R5Flowstate.Content</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\R5Flowstate.Contracts\R5Flowstate.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BCnEncoder.Net" Version="2.1.0" />
+  </ItemGroup>
+
+  <!-- Default: tools/oo2core (not in git; *.dll). Override with /p:OodleDll=. -->
+  <PropertyGroup>
+    <OodleDll Condition="'$(OodleDll)' == '' AND Exists('$(MSBuildThisFileDirectory)..\..\tools\oo2core\oo2core_8_win64.dll')">$(MSBuildThisFileDirectory)..\..\tools\oo2core\oo2core_8_win64.dll</OodleDll>
+  </PropertyGroup>
+  <Target Name="CopyOodleDll" AfterTargets="Build"
+          Condition="'$(OodleDll)' != '' AND Exists('$(OodleDll)')">
+    <Copy SourceFiles="$(OodleDll)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

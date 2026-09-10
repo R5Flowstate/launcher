@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://r5flowstate.local/schemas/NOTES.schema.json",
+  "title": "NOTES.json",
+  "description": "Player-facing changelog. Lives next to CHANNEL_MANIFEST on GH/CDN, or next to the launcher nupkg. Not hosted on r5fms.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "kind", "entries"],
+  "properties": {
+    "schema": { "type": "integer", "const": 1 },
+    "kind": { "type": "string", "const": "notes" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["date", "title", "items"],
+        "properties": {
+          "date": { "type": "string" },
+          "title": { "type": "string" },
+          "items": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+  }
+}

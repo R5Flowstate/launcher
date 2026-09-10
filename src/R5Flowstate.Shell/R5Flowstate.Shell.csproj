@@ -1,0 +1,112 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>R5FlowstateLauncher</AssemblyName>
+    <RootNamespace>R5Flowstate.Shell</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <StartupObject>R5Flowstate.Shell.Program</StartupObject>
+    <!-- Pack script and the UI both read this. Bump here, then vpk packVersion. -->
+    <Version>0.1.44</Version>
+    <InformationalVersion>$(Version)</InformationalVersion>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <RetainVMGarbageCollection>false</RetainVMGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Velopack" Version="1.2.0" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\logo.png" />
+    <Resource Include="Assets\install-bg.jpg" />
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Loc\english.json" />
+    <EmbeddedResource Include="Loc\french.json" />
+    <EmbeddedResource Include="Loc\german.json" />
+    <EmbeddedResource Include="Loc\italian.json" />
+    <EmbeddedResource Include="Loc\japanese.json" />
+    <EmbeddedResource Include="Loc\polish.json" />
+    <EmbeddedResource Include="Loc\russian.json" />
+    <EmbeddedResource Include="Loc\spanish.json" />
+    <EmbeddedResource Include="Loc\schinese.json" />
+    <EmbeddedResource Include="Loc\tchinese.json" />
+    <EmbeddedResource Include="Loc\korean.json" />
+    <EmbeddedResource Include="Loc\portuguese.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Notes\NOTES.json" Link="NOTES.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Notes\LAUNCHER_NOTES.json" Link="LAUNCHER_NOTES.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\tools\7za\7za-SOURCE.txt" Link="7za-SOURCE.txt"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\tools\7za\COPYING" Link="COPYING"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\tools\7za\7za.exe" Link="7za.exe"
+          CopyToOutputDirectory="PreserveNewest"
+          Condition="Exists('..\..\tools\7za\7za.exe')" />
+    <None Include="..\..\tools\oo2core\oo2core_8_win64.dll" Link="oo2core_8_win64.dll"
+          CopyToOutputDirectory="PreserveNewest"
+          Condition="Exists('..\..\tools\oo2core\oo2core_8_win64.dll')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\R5Flowstate.Contracts\R5Flowstate.Contracts.csproj" />
+    <ProjectReference Include="..\R5Flowstate.Content\R5Flowstate.Content.csproj" />
+    <ProjectReference Include="..\R5Flowstate.Spawn\R5Flowstate.Spawn.csproj" />
+  </ItemGroup>
+
+  <Target Name="CopyOodleFromContent" AfterTargets="Build"
+          Condition="Exists('$(ProjectDir)..\R5Flowstate.Content\bin\$(Configuration)\net8.0\oo2core_8_win64.dll')">
+    <Copy SourceFiles="$(ProjectDir)..\R5Flowstate.Content\bin\$(Configuration)\net8.0\oo2core_8_win64.dll"
+          DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- Stage the runtime set into the build manager's client overlay so generated
+       builds ship the launcher. R5FStageDir is machine-local (Directory.Build.props,
+       untracked); unset means no staging. PDBs stay out of shipped content. -->
+  <Target Name="StageLauncherOverlay" AfterTargets="Build"
+          Condition="'$(Configuration)' == 'Release' AND '$(R5FStageDir)' != ''">
+    <ItemGroup>
+      <R5FStageFiles Include="$(TargetDir)$(AssemblyName).exe" />
+      <R5FStageFiles Include="$(TargetDir)$(AssemblyName).dll" />
+      <R5FStageFiles Include="$(TargetDir)$(AssemblyName).deps.json" />
+      <R5FStageFiles Include="$(TargetDir)$(AssemblyName).runtimeconfig.json" />
+      <R5FStageFiles Include="$(TargetDir)R5Flowstate.Content.dll" />
+      <R5FStageFiles Include="$(TargetDir)R5Flowstate.Contracts.dll" />
+      <R5FStageFiles Include="$(TargetDir)R5Flowstate.Spawn.dll" />
+      <R5FStageFiles Include="$(TargetDir)BCnEncoder.dll" />
+      <R5FStageFiles Include="$(TargetDir)Microsoft.Toolkit.HighPerformance.dll" />
+      <R5FStageFiles Include="$(TargetDir)oo2core_8_win64.dll"
+                     Condition="Exists('$(TargetDir)oo2core_8_win64.dll')" />
+      <R5FStageFiles Include="$(TargetDir)NOTES.json"
+                     Condition="Exists('$(TargetDir)NOTES.json')" />
+      <R5FStageFiles Include="$(TargetDir)LAUNCHER_NOTES.json"
+                     Condition="Exists('$(TargetDir)LAUNCHER_NOTES.json')" />
+      <R5FStageFiles Include="$(TargetDir)7za.exe"
+                     Condition="Exists('$(TargetDir)7za.exe')" />
+      <R5FStageFiles Include="$(TargetDir)COPYING"
+                     Condition="Exists('$(TargetDir)COPYING')" />
+      <R5FStageFiles Include="$(TargetDir)7za-SOURCE.txt"
+                     Condition="Exists('$(TargetDir)7za-SOURCE.txt')" />
+      <R5FStageFiles Include="$(TargetDir)Velopack.dll"
+                     Condition="Exists('$(TargetDir)Velopack.dll')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(R5FStageFiles)" DestinationFolder="$(R5FStageDir)"
+          SkipUnchangedFiles="true" ContinueOnError="true" />
+    <Message Importance="high" Text="staged launcher -> $(R5FStageDir)" />
+  </Target>
+
+</Project>

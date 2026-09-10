@@ -1,0 +1,8 @@
+<Project>
+
+  <!-- Copy to Directory.Build.props (gitignored). Unset = no overlay staging. -->
+  <PropertyGroup>
+    <R5FStageDir></R5FStageDir>
+  </PropertyGroup>
+
+</Project>

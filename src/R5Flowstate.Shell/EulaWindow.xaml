@@ -1,0 +1,54 @@
+<Window x:Class="R5Flowstate.Shell.EulaWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:R5Flowstate.Shell"
+        Title="{loc:T eula_title}"
+        Icon="Assets/app.ico"
+        Height="560" Width="640"
+        MinHeight="360" MinWidth="480"
+        Background="#1a1a1e" Foreground="#e8e8ec"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+  <DockPanel Margin="16">
+    <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+        <Button x:Name="BtnDecline" Content="{loc:T decline}" Width="96" Height="32"
+                Margin="0,0,8,0" Click="OnDecline"
+                Foreground="#e8e8ec" Background="#2e2e36"
+                BorderBrush="#6a6a78" Cursor="Hand"/>
+        <Button x:Name="BtnAccept" Content="{loc:T accept}" Width="110" Height="32"
+                Click="OnAccept" IsEnabled="False"
+                Foreground="#9FF0C0" Background="#14281C"
+                BorderBrush="#3DDA8A" BorderThickness="2" Cursor="Hand"/>
+        <Button x:Name="BtnClose" Content="{loc:T close}" Width="96" Height="32"
+                Click="OnClose"
+                Foreground="#e8e8ec" Background="#2e2e36"
+                BorderBrush="#6a6a78" Cursor="Hand"/>
+      </StackPanel>
+      <TextBlock x:Name="TxtMeta" VerticalAlignment="Center"
+                 FontSize="12" Opacity="0.65" TextWrapping="Wrap"/>
+    </DockPanel>
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+      <ComboBox x:Name="CmbLanguage" DockPanel.Dock="Right"
+                Width="220" Style="{StaticResource DarkCombo}"
+                DisplayMemberPath="Label"
+                ToolTip="{loc:T tip_eula_lang}"
+                SelectionChanged="OnLanguageChanged"/>
+      <TextBlock x:Name="TxtTitle" Text="{loc:T legal_notice}" FontSize="18" FontWeight="SemiBold"
+                 VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"/>
+    </DockPanel>
+    <Border Background="#121216" BorderBrush="#333" BorderThickness="1" Padding="10">
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <TextBox x:Name="TxtBody" IsReadOnly="True" TextWrapping="Wrap"
+                 Style="{StaticResource PlainTextBox}"
+                 AcceptsReturn="True" Height="Auto" MinHeight="160"
+                 VerticalAlignment="Stretch"
+                 VerticalScrollBarVisibility="Disabled"
+                 HorizontalScrollBarVisibility="Disabled"
+                 Foreground="#d8d8e0" CaretBrush="#d8d8e0"
+                 FontFamily="Segoe UI" FontSize="13"
+                 Text="{loc:T loading}"/>
+      </ScrollViewer>
+    </Border>
+  </DockPanel>
+</Window>
