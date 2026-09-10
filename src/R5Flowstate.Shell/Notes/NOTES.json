@@ -3,6 +3,36 @@
   "kind": "notes",
   "entries": [
     {
+      "date": "10 Sep 2026",
+      "title": "0.9.9 RC 2",
+      "items": [
+        "## Modes",
+        "Add Free For All",
+        "Add a loadout picker in FFA",
+        "Keep your FFA kit after death",
+        "Add a champion podium between FFA rounds",
+        "Hide Valkyrie and Newcastle outside the dev playlist",
+        "Fix FFA killing the server on round change",
+        "Add 1v1 challenges without picking a legend",
+        "Add accept and deny on 1v1 challenges",
+        "Cap how many 1v1 challenges you can send",
+        "Keep the 1v1 champion card after the first round",
+        "Hide recon health bars sooner after losing sight",
+        "## Play",
+        "Fix the first bow shot feeling late",
+        "Fix some weapons not showing optics properly (autohemlok)",
+        "Fix shots going wrong right after a weapon switch",
+        "## Join",
+        "Fix a crash on join from a bad snapshot",
+        "Fix launchplaylist crashing the dedi",
+        "Fix join transfers stalling on a full server",
+        "## Menus",
+        "Keep the Lab tab when you reopen inventory",
+        "Toggle the dev HUD from the Lab",
+        "Ask you to accept an updated notice"
+      ]
+    },
+    {
       "date": "6 Sep 2026",
       "title": "0.9.8 Beta RC - patch 1",
       "items": [

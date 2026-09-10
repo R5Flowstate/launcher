@@ -44,18 +44,47 @@ static class ShellSelfUpdate
 
         try
         {
-            var mgr = Manager();
-            if (mgr is null)
+            if (!HasUpdateExe())
                 return;
 
-            var pending = mgr.UpdatePendingRestart;
-            if (pending is not null)
+            var mgr = ManagerOrNull();
+            if (mgr is not null)
             {
-                onState?.Invoke(State.PendingRestart, pending.Version.ToString());
-                return;
+                var pending = mgr.UpdatePendingRestart;
+                if (pending is not null)
+                {
+                    onState?.Invoke(State.PendingRestart, pending.Version.ToString());
+                    return;
+                }
             }
 
-            var info = await mgr.CheckForUpdatesAsync().ConfigureAwait(false);
+            var downloader = new R5fWebDownloader();
+            UpdateInfo? info = null;
+            try
+            {
+                mgr = InstalledManager(
+                    new GithubSource(ProductConstants.GitHubUrl, null, false, downloader));
+                if (mgr is not null)
+                    info = await mgr.CheckForUpdatesAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                log("GitHub update check failed, trying CDN: " + ex.Message);
+                mgr = null;
+                info = null;
+            }
+            if (mgr is null)
+            {
+                mgr = InstalledManager(
+                    new SimpleWebSource(ProductConstants.DefaultLauncherFeedUrl, downloader));
+                if (mgr is null)
+                    return;
+                info = await mgr.CheckForUpdatesAsync().ConfigureAwait(false);
+            }
+
+            lock (Gate)
+                s_mgr = mgr;
+
             if (info?.TargetFullRelease is null)
             {
                 onState?.Invoke(State.None, null);
@@ -133,27 +162,29 @@ static class ShellSelfUpdate
         return true;
     }
 
-    static UpdateManager? Manager()
+    static UpdateManager? ManagerOrNull()
     {
         lock (Gate)
-        {
-            if (s_mgr is not null)
-                return s_mgr;
+            return s_mgr;
+    }
 
-            var dir = AppContext.BaseDirectory;
-            if (!File.Exists(Path.Combine(dir, "Update.exe")) &&
-                !File.Exists(Path.GetFullPath(Path.Combine(dir, "..", "Update.exe"))))
-                return null;
+    static bool HasUpdateExe()
+    {
+        var dir = AppContext.BaseDirectory;
+        return File.Exists(Path.Combine(dir, "Update.exe")) ||
+            File.Exists(Path.GetFullPath(Path.Combine(dir, "..", "Update.exe")));
+    }
 
-            var source = new SimpleWebSource(
-                ProductConstants.DefaultLauncherFeedUrl,
-                new R5fWebDownloader());
-            var mgr = new UpdateManager(source);
-            if (!mgr.IsInstalled)
-                return null;
-            s_mgr = mgr;
-            return mgr;
-        }
+    static UpdateManager? InstalledManager(GithubSource source)
+    {
+        var mgr = new UpdateManager(source);
+        return mgr.IsInstalled ? mgr : null;
+    }
+
+    static UpdateManager? InstalledManager(SimpleWebSource source)
+    {
+        var mgr = new UpdateManager(source);
+        return mgr.IsInstalled ? mgr : null;
     }
 
     sealed class R5fWebDownloader : HttpClientFileDownloader

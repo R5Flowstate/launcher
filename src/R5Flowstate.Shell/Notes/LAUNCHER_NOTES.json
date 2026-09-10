@@ -3,12 +3,14 @@
   "kind": "notes",
   "entries": [
     {
-      "date": "7 Sep 2026",
+      "date": "10 Sep 2026",
       "title": "Launcher 0.1.44",
       "items": [
-        "Fix picking a new game folder stranding the launcher",
-        "Add new Blogs tab, for the website posts",
-        "Add Ko-fi next to Patreon"
+        "Fix picking a new game folder freezing the launcher",
+        "Add a Blogs tab for website posts",
+        "Show a popup when the local server hangs",
+        "Show a popup when the local server dies on a script error",
+        "Get launcher updates from GitHub"
       ]
     },
     {
