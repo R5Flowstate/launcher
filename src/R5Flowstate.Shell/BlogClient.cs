@@ -17,6 +17,7 @@ public sealed class SitePost
     public string Date { get; init; } = string.Empty;
     public string UpdatedAt { get; init; } = string.Empty;
     public string Body { get; init; } = string.Empty;
+    public string Lang { get; init; } = string.Empty;
 }
 
 public sealed class BlogListResult
@@ -78,9 +79,13 @@ public static class BlogClient
 {
     public static async Task<BlogListResult> ListPostsAsync(
         string? baseUrl,
+        string? language = null,
         CancellationToken cancel = default)
     {
-        var got = await MasterServerClient.GetPublicAsync(baseUrl, "/site/posts?limit=50", cancel)
+        var got = await MasterServerClient.GetPublicAsync(
+                baseUrl,
+                "/site/posts?limit=50&" + LanguageQuery(language),
+                cancel)
             .ConfigureAwait(false);
         if (!got.Ok)
             return BlogListResult.Fail(got.Error ?? Loc.Get("blog_failed"));
@@ -90,6 +95,7 @@ public static class BlogClient
     public static async Task<BlogPostResult> GetPostAsync(
         string? baseUrl,
         string slug,
+        string? language = null,
         CancellationToken cancel = default)
     {
         if (!IsValidSlug(slug))
@@ -97,12 +103,19 @@ public static class BlogClient
 
         var got = await MasterServerClient.GetPublicAsync(
                 baseUrl,
-                "/site/posts/" + Uri.EscapeDataString(slug),
+                "/site/posts/" + Uri.EscapeDataString(slug) + "?" + LanguageQuery(language),
                 cancel)
             .ConfigureAwait(false);
         if (!got.Ok)
             return BlogPostResult.Fail(got.Error ?? Loc.Get("blog_failed"));
         return ParsePost(got.Body);
+    }
+
+    public static string LanguageQuery(string? language = null)
+    {
+        var lang = NoticeLanguages.ForUi(
+            string.IsNullOrWhiteSpace(language) ? Loc.Code : language);
+        return "language=" + Uri.EscapeDataString(lang);
     }
 
     public static BlogListResult ParseList(string json)
@@ -174,7 +187,9 @@ public static class BlogClient
             Date = FormatDate(post.Date),
             UpdatedAt = (post.UpdatedAt ?? string.Empty).Trim(),
             CoverUri = cover,
-            SiteUrl = ProductConstants.WebsiteUrl + "/blog/view/?slug=" + Uri.EscapeDataString(slug),
+            SiteUrl = ProductConstants.WebsiteUrl
+                + "/blog/view/?slug=" + Uri.EscapeDataString(slug)
+                + "&language=" + Uri.EscapeDataString(NoticeLanguages.ForUi(Loc.Code)),
         };
     }
 
@@ -235,6 +250,7 @@ public static class BlogClient
             Cover = ReadString(el, "cover"),
             Date = ReadString(el, "date"),
             UpdatedAt = ReadString(el, "updatedAt"),
+            Lang = ReadString(el, "lang"),
             Body = body,
         };
     }

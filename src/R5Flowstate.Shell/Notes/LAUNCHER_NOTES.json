@@ -3,6 +3,16 @@
   "kind": "notes",
   "entries": [
     {
+      "date": "11 Sep 2026",
+      "title": "Launcher 0.1.45",
+      "items": [
+        "Show blog posts in the selected language",
+        "Reload posts when the language changes",
+        "Make website addresses in posts clickable",
+        "Open the site in the same language"
+      ]
+    },
+    {
       "date": "10 Sep 2026",
       "title": "Launcher 0.1.44",
       "items": [

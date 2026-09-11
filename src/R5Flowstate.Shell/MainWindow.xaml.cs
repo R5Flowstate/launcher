@@ -350,8 +350,12 @@ public partial class MainWindow : Window
             BtnWinMaximize.ToolTip = Loc.Get(maximized ? "restore" : "maximize");
     }
 
-    void OnLocLanguageChanged(object? sender, EventArgs e) =>
+    void OnLocLanguageChanged(object? sender, EventArgs e)
+    {
         RefreshLocalizedChrome();
+        _blogBodies.Clear();
+        _ = RefreshBlogAsync();
+    }
 
     void InitLanguageCombos()
     {

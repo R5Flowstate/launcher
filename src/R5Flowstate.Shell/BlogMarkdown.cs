@@ -45,7 +45,7 @@ public static class BlogMarkdown
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     static readonly Regex s_inline = new(
-        @"\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*|`([^`]+)`",
+        @"\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*|`([^`]+)`|(https://[^\s<>""]+)",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     public static IReadOnlyList<BlogBlock> Parse(string source)
@@ -250,9 +250,28 @@ public static class BlogMarkdown
             {
                 outSpans.Add(new InlineSpan { Kind = InlineKind.Bold, Text = m.Groups[3].Value });
             }
-            else
+            else if (m.Groups[4].Success)
             {
                 outSpans.Add(new InlineSpan { Kind = InlineKind.Code, Text = m.Groups[4].Value });
+            }
+            else
+            {
+                var raw = m.Groups[5].Value;
+                var hrefRaw = StripTrailingUrlPunct(raw);
+                var href = ResolveHref(hrefRaw);
+                if (!string.IsNullOrEmpty(href))
+                {
+                    outSpans.Add(new InlineSpan
+                    {
+                        Kind = InlineKind.Link,
+                        Text = hrefRaw,
+                        Href = href,
+                    });
+                    if (hrefRaw.Length < raw.Length)
+                        outSpans.Add(InlineSpan.Plain(raw[hrefRaw.Length..]));
+                }
+                else
+                    outSpans.Add(InlineSpan.Plain(raw));
             }
             last = m.Index + m.Length;
         }
@@ -278,6 +297,14 @@ public static class BlogMarkdown
     public static string? ResolveHref(string raw)
     {
         return TryResolveUrl(raw, out var url) ? url : null;
+    }
+
+    static string StripTrailingUrlPunct(string raw)
+    {
+        var end = raw.Length;
+        while (end > 8 && ".,;:!?)]}'".Contains(raw[end - 1]))
+            end--;
+        return raw[..end];
     }
 
     public static bool TryResolveUrl(string raw, out string url)

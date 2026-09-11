@@ -38,7 +38,7 @@ public partial class MainWindow
         BlogListResult result;
         try
         {
-            result = await BlogClient.ListPostsAsync(CurrentMasterServerUrl(), cts.Token)
+            result = await BlogClient.ListPostsAsync(CurrentMasterServerUrl(), Loc.Code, cts.Token)
                 .ConfigureAwait(true);
         }
         catch (OperationCanceledException)
@@ -62,6 +62,7 @@ public partial class MainWindow
         }
 
         _blogPosts = result.Posts.ToList();
+        _blogBodies.Clear();
         BindBlogList();
         SyncBlogUnreadDot(markSeen: _simpleTab == SimpleTab.Blog);
 
@@ -70,9 +71,13 @@ public partial class MainWindow
         else
             SetBlogStatus(null);
 
-        if (_blogOpenSlug.Length > 0
-            && _blogPosts.All(p => !string.Equals(p.Slug, _blogOpenSlug, StringComparison.Ordinal)))
-            ShowBlogList();
+        if (_blogOpenSlug.Length > 0)
+        {
+            if (_blogPosts.All(p => !string.Equals(p.Slug, _blogOpenSlug, StringComparison.Ordinal)))
+                ShowBlogList();
+            else
+                await OpenBlogPostAsync(_blogOpenSlug);
+        }
     }
 
     void BindBlogList()
@@ -154,7 +159,7 @@ public partial class MainWindow
             BlogPostResult got;
             try
             {
-                got = await BlogClient.GetPostAsync(CurrentMasterServerUrl(), slug)
+                got = await BlogClient.GetPostAsync(CurrentMasterServerUrl(), slug, Loc.Code)
                     .ConfigureAwait(true);
             }
             catch (Exception ex)
