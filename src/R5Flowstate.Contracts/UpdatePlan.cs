@@ -100,6 +100,7 @@ public static class UpdatePlanner
     /// 2. installed == tip (and hash matches when known) → [].
     /// 3. installed is some patch's <c>from</c> (or base) → that patch and every later one.
     /// 4. installed is unknown to the chain → full rebuild, as case 1.
+    /// Content-manifest tracks use 1 and 2 only (one SyncFiles step, or none).
     /// </remarks>
     public static UpdatePlan Resolve(
         ChannelTrackTip track,
@@ -110,10 +111,14 @@ public static class UpdatePlanner
         ArgumentNullException.ThrowIfNull(track);
 
         // A content manifest describes the whole track at its tip, so there
-        // is no chain to walk and nothing to validate the ordering of. The
-        // reconciler works out what is missing by looking at the disk.
+        // is no chain to walk. Already-at-tip must still be a no-op or every
+        // platform bump re-scans the 40 GB client tree.
         if (track.UsesContentManifest)
+        {
+            if (IsInstalledAtTip(track, installedVersion, installedHash))
+                return EmptyPlan(track);
             return ContentPlan(track, baseUrl);
+        }
 
         // Refuse non-contiguous / tip-mismatch chains before any fetch.
         ValidateChain(track);
@@ -142,7 +147,7 @@ public static class UpdatePlanner
         }
 
         // Case 2: already at tip.
-        if (string.Equals(installedVersion, track.CatalogVersion, StringComparison.Ordinal))
+        if (IsInstalledAtTip(track, installedVersion, installedHash))
             return plan;
 
         // Case 3: installed is base or some patch's from (contiguous chain position).
@@ -178,21 +183,43 @@ public static class UpdatePlanner
     }
 
     /// <summary>
-    /// Validates base/patch contiguity and tip == last <c>to</c>.
-    /// Legacy single-tip (no base, no patches) is always valid.
+    /// True when INSTALL_STATE already names this tip. Volume tracks treat a
+    /// missing hash as a match (version is the identity); CAS does not -- an
+    /// empty hash is "we have not verified this payload."
     /// </summary>
+    public static bool IsInstalledAtTip(
+        ChannelTrackTip track,
+        string? installedVersion,
+        string? installedHash)
+    {
+        ArgumentNullException.ThrowIfNull(track);
+        if (string.IsNullOrWhiteSpace(installedVersion))
+            return false;
+        if (!string.Equals(installedVersion, track.CatalogVersion, StringComparison.Ordinal))
+            return false;
+        if (string.IsNullOrWhiteSpace(track.ContentHash))
+            return true;
+        if (track.UsesContentManifest && string.IsNullOrWhiteSpace(installedHash))
+            return false;
+        if (string.IsNullOrWhiteSpace(installedHash))
+            return true;
+        return string.Equals(installedHash, track.ContentHash, StringComparison.OrdinalIgnoreCase);
+    }
+
+    static UpdatePlan EmptyPlan(ChannelTrackTip track) => new()
+    {
+        Preset = track.Preset ?? string.Empty,
+        TipCatalogVersion = track.CatalogVersion ?? string.Empty,
+        TipContentHash = track.ContentHash ?? string.Empty,
+    };
+
     /// <summary>
-    /// One step for the whole track. Install, update and repair are the same
-    /// operation against the same document, so there is nothing to sequence.
+    /// One SyncFiles step. Repair with no installed version still lands here.
+    /// Already-at-tip is filtered in <see cref="Resolve"/>.
     /// </summary>
     static UpdatePlan ContentPlan(ChannelTrackTip track, string? baseUrl)
     {
-        var plan = new UpdatePlan
-        {
-            Preset = track.Preset ?? string.Empty,
-            TipCatalogVersion = track.CatalogVersion ?? string.Empty,
-            TipContentHash = track.ContentHash ?? string.Empty,
-        };
+        var plan = EmptyPlan(track);
 
         plan.Steps.Add(new UpdateStep
         {
@@ -210,6 +237,10 @@ public static class UpdatePlanner
         return plan;
     }
 
+    /// <summary>
+    /// Validates base/patch contiguity and tip == last <c>to</c>.
+    /// Legacy single-tip (no base, no patches) is always valid.
+    /// </summary>
     public static void ValidateChain(ChannelTrackTip track)
     {
         ArgumentNullException.ThrowIfNull(track);

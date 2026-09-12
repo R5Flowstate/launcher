@@ -4,6 +4,15 @@
   "entries": [
     {
       "date": "11 Sep 2026",
+      "title": "Launcher 0.1.46",
+      "items": [
+        "Skip a full file check when only scripts change",
+        "Show the real update size not the whole game",
+        "Stop asking for 44 GB free on a small update"
+      ]
+    },
+    {
+      "date": "11 Sep 2026",
       "title": "Launcher 0.1.45",
       "items": [
         "Show blog posts in the selected language",

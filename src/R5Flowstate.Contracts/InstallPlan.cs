@@ -88,6 +88,138 @@ public static class InstallPlanner
         return plan;
     }
 
+    /// <summary>
+    /// Drop tracks INSTALL_STATE already has at the CHANNEL tip. The size box
+    /// otherwise quotes the whole client payload on a scripts/DLL bump.
+    /// </summary>
+    public static void ExcludeCurrentTracks(
+        InstallPlan plan,
+        ChannelManifest channel,
+        string installPath)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(channel);
+        if (string.IsNullOrWhiteSpace(installPath))
+            return;
+
+        var statePath = Path.Combine(installPath, ProductConstants.InstallStateFileName);
+        if (!File.Exists(statePath))
+            return;
+
+        InstallState state;
+        try
+        {
+            state = InstallStateIO.Load(statePath);
+        }
+        catch
+        {
+            return;
+        }
+
+        plan.Tracks.RemoveAll(t =>
+        {
+            var tip = TipFor(channel, t.Preset);
+            if (tip is null)
+                return false;
+            if (!ReadyFor(state, t.Preset))
+                return false;
+            return UpdatePlanner.IsInstalledAtTip(
+                tip,
+                CatalogFor(state, t.Preset),
+                HashFor(state, t.Preset));
+        });
+    }
+
+    /// <summary>
+    /// Remaining work after skipping current tracks. CAS-only leftover uses
+    /// in-place headroom (no archive extract copy).
+    /// </summary>
+    public static void MeasureWork(
+        InstallPlan plan,
+        ChannelManifest channel,
+        out long planned,
+        out long need)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(channel);
+
+        planned = 0;
+        long largestArchive = 0;
+        var casOnly = true;
+        foreach (var t in plan.Tracks)
+        {
+            planned += t.TotalBytes;
+            var inPlace = TipFor(channel, t.Preset)?.UsesContentManifest ?? false;
+            if (inPlace)
+                continue;
+            casOnly = false;
+            if (t.TotalBytes > largestArchive)
+                largestArchive = t.TotalBytes;
+        }
+
+        if (planned <= 0)
+        {
+            need = 0;
+            return;
+        }
+
+        need = casOnly
+            ? InstallPathPolicy.RequiredFreeBytesInPlace(planned)
+            : InstallPathPolicy.RequiredFreeBytes(planned, largestArchive);
+    }
+
+    public static ChannelTrackTip? TipFor(ChannelManifest channel, string preset)
+    {
+        if (string.Equals(preset, "client", StringComparison.OrdinalIgnoreCase))
+            return channel.Client;
+        if (string.Equals(preset, "server", StringComparison.OrdinalIgnoreCase))
+            return channel.Server;
+        if (string.Equals(preset, "platform", StringComparison.OrdinalIgnoreCase))
+            return channel.Platform;
+        if (string.Equals(preset, "hd", StringComparison.OrdinalIgnoreCase))
+            return channel.Hd;
+        return null;
+    }
+
+    static bool ReadyFor(InstallState state, string preset)
+    {
+        if (string.Equals(preset, "client", StringComparison.OrdinalIgnoreCase))
+            return state.ClientReady;
+        if (string.Equals(preset, "server", StringComparison.OrdinalIgnoreCase))
+            return state.ServerReady;
+        if (string.Equals(preset, "platform", StringComparison.OrdinalIgnoreCase))
+            return state.PlatformReady;
+        if (string.Equals(preset, "hd", StringComparison.OrdinalIgnoreCase))
+            return state.HdReady;
+        return false;
+    }
+
+    static string? CatalogFor(InstallState state, string preset)
+    {
+        if (string.Equals(preset, "client", StringComparison.OrdinalIgnoreCase))
+            return state.ClientCatalogVersion;
+        if (string.Equals(preset, "server", StringComparison.OrdinalIgnoreCase))
+            return state.ServerCatalogVersion;
+        if (string.Equals(preset, "platform", StringComparison.OrdinalIgnoreCase))
+            return state.PlatformCatalogVersion;
+        if (string.Equals(preset, "hd", StringComparison.OrdinalIgnoreCase))
+            return state.HdCatalogVersion;
+        return null;
+    }
+
+    static string? HashFor(InstallState state, string preset)
+    {
+        if (string.Equals(preset, "client", StringComparison.OrdinalIgnoreCase))
+            return state.ClientContentHash;
+        if (string.Equals(preset, "server", StringComparison.OrdinalIgnoreCase))
+            return state.ServerContentHash;
+        if (string.Equals(preset, "platform", StringComparison.OrdinalIgnoreCase))
+            return state.PlatformContentHash;
+        if (string.Equals(preset, "hd", StringComparison.OrdinalIgnoreCase))
+            return state.HdContentHash;
+        return null;
+    }
+
     public static void FilterDownloadLanes(InstallPlan plan, bool content, bool platform)
     {
         ArgumentNullException.ThrowIfNull(plan);

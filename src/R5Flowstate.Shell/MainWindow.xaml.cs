@@ -5116,21 +5116,8 @@ public partial class MainWindow : Window
             var plan = InstallPlanner.Build(_manifest, mode, path);
             var gate = CachedDownloadGate();
             InstallPlanner.FilterDownloadLanes(plan, gate.Content, gate.Platform);
-
-            // Only an archive track needs room for a second copy of itself while
-            // it extracts. Counting content tracks in that term asked for close
-            // to twice the disk the install actually occupies.
-            long largestArchive = 0;
-            foreach (var t in plan.Tracks)
-            {
-                planned += t.TotalBytes;
-                var inPlace =
-                    ContentInstallService.TipFor(_manifest, t.Preset)?.UsesContentManifest ?? false;
-                if (!inPlace && t.TotalBytes > largestArchive)
-                    largestArchive = t.TotalBytes;
-            }
-
-            need = InstallPathPolicy.RequiredFreeBytes(planned, largestArchive);
+            InstallPlanner.ExcludeCurrentTracks(plan, _manifest, path);
+            InstallPlanner.MeasureWork(plan, _manifest, out planned, out need);
             free = InstallPathPolicy.FreeBytes(path);
             return true;
         }
@@ -5708,9 +5695,8 @@ public partial class MainWindow : Window
                 return;
             var plan = InstallPlanner.Build(_manifest, InstallMode.Full, root);
             InstallPlanner.FilterDownloadLanes(plan, gate.Content, gate.Platform);
-            long planned = 0;
-            foreach (var t in plan.Tracks)
-                planned += t.TotalBytes;
+            InstallPlanner.ExcludeCurrentTracks(plan, _manifest, root);
+            InstallPlanner.MeasureWork(plan, _manifest, out var planned, out _);
             if (planned <= 0 || planned > 512L * 1024 * 1024)
                 return;
             Log($"Auto-applying small update ({planned} bytes).");

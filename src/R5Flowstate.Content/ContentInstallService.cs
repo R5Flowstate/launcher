@@ -439,14 +439,14 @@ public static class ContentInstallService
                     Message = $"install {track.Preset}",
                 });
 
-                // Resolve from prior ready state only. Incomplete / not-ready → full chain
-                // (case 1); last_completed_step still resumes mid-chain after a crash.
+                // Ready identity is enough to skip a CAS track. Incomplete is the
+                // whole job; using it here re-scanned the client after a platform miss.
                 string? resolveVer;
                 string? resolveHash;
                 string? lastCompleted;
                 if (IsClient(track.Preset))
                 {
-                    var ready = !forceReinstall && priorClientReady && !priorClientIncomplete;
+                    var ready = !forceReinstall && priorClientReady;
                     resolveVer = ready ? priorClientCatalog : null;
                     resolveHash = ready ? priorClientHash : null;
                     lastCompleted = ready ? null : priorClientLastStep;
