@@ -3,6 +3,29 @@
   "kind": "notes",
   "entries": [
     {
+      "date": "12 Sep 2026",
+      "title": "1.0.1 Hotfix",
+      "items": [
+        "Fix 1v1 teleports sending you to the wrong pad",
+        "Fix movement on the 1v1 waiting pad",
+        "Record FFA round results at round end",
+        "Show opponent tracers in 1v1",
+        "Fix the controller holster button sticking",
+        "Fix DX12 dropping to 720p on unlisted resolutions",
+        "Fix the server console crashing on status and ping",
+        "Give the RE-45 Fusion a blue tracer"
+      ]
+    },
+    {
+      "date": "11 Sep 2026",
+      "title": "1.0.0 RC 3",
+      "items": [
+        "Restore missing loot rollers on Olympus",
+        "Translate the Lab, Mantle Boost and mods menus",
+        "Show each language in its own name"
+      ]
+    },
+    {
       "date": "10 Sep 2026",
       "title": "0.9.9 RC 2",
       "items": [
@@ -13,7 +36,6 @@
         "Add a champion podium between FFA rounds",
         "Hide Valkyrie and Newcastle outside the dev playlist",
         "Fix FFA killing the server on round change",
-        "Add 1v1 challenges without picking a legend",
         "Add accept and deny on 1v1 challenges",
         "Cap how many 1v1 challenges you can send",
         "Keep the 1v1 champion card after the first round",

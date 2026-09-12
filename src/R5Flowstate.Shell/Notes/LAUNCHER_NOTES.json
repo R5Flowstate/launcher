@@ -3,6 +3,13 @@
   "kind": "notes",
   "entries": [
     {
+      "date": "12 Sep 2026",
+      "title": "Launcher 0.1.47",
+      "items": [
+        "Turn offline-no-auth off by default"
+      ]
+    },
+    {
       "date": "11 Sep 2026",
       "title": "Launcher 0.1.46",
       "items": [

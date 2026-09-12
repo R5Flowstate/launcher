@@ -12,7 +12,7 @@
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <StartupObject>R5Flowstate.Shell.Program</StartupObject>
     <!-- Pack script and the UI both read this. Bump here, then vpk packVersion. -->
-    <Version>0.1.46</Version>
+    <Version>0.1.47</Version>
     <InformationalVersion>$(Version)</InformationalVersion>
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>

@@ -82,7 +82,7 @@ public static class SettingsStore
             InstallPath = DefaultInstallPath,
             ClientLaunchArguments = string.Empty,
             DediLaunchArguments = string.Empty,
-            OfflineNoAuth = true,
+            OfflineNoAuth = false,
             DediHostOnline = false,
             DevProfile = false,
             Cheats = true,
@@ -136,7 +136,7 @@ public static class SettingsStore
                 s.DediLaunchArguments = legacy;
             }
 
-            s.OfflineNoAuth = ReadBool(key, "OfflineNoAuth", defaultValue: true);
+            s.OfflineNoAuth = ReadBool(key, "OfflineNoAuth", defaultValue: false);
             s.DediHostOnline = ReadBool(key, "DediHostOnline", defaultValue: false);
             s.DevProfile = ReadBool(key, "DevProfile", defaultValue: false);
             // Settings written before the split carry only DevProfile.
