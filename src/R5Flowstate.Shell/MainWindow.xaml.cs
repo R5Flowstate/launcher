@@ -1450,6 +1450,7 @@ public partial class MainWindow : Window
         _settings.DediPort = SelectedPort();
         _settings.DediPasswordEnabled = IsPasswordProtectOn();
         _settings.DediPassword = StoredPasswordText();
+        CaptureResolutionFromUi();
         CaptureModeSettingsFromUi();
 
         try
@@ -2706,6 +2707,37 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnLaunchArgsClick(object sender, RoutedEventArgs e)
+    {
+        PersistSettingsFromUi();
+        var dlg = new LaunchArgsWindow { Owner = this };
+        dlg.ExtrasChanged += (clientExtra, dediExtra) =>
+        {
+            var restore = _suppressArgsPersist;
+            _suppressArgsPersist = true;
+            try
+            {
+                if (TxtClientArgs is not null)
+                    TxtClientArgs.Text = clientExtra;
+                if (TxtDediArgs is not null)
+                    TxtDediArgs.Text = dediExtra;
+            }
+            finally
+            {
+                _suppressArgsPersist = restore;
+            }
+
+            PersistSettingsFromUi();
+            dlg.SetApplied(TxtClientPreview?.Text ?? string.Empty, TxtDediPreview?.Text ?? string.Empty);
+        };
+        dlg.Load(
+            TxtClientArgs?.Text ?? _settings.ClientLaunchArguments ?? string.Empty,
+            TxtDediArgs?.Text ?? _settings.DediLaunchArguments ?? string.Empty,
+            TxtClientPreview?.Text ?? string.Empty,
+            TxtDediPreview?.Text ?? string.Empty);
+        dlg.ShowDialog();
+    }
+
     private void OnResolutionPresetPicked(object sender, RoutedEventArgs e)
     {
         if (sender is not MenuItem { Tag: ResolutionCatalog.Preset preset })
@@ -2752,10 +2784,10 @@ public partial class MainWindow : Window
         var h = _settings.ClientHeight;
         if (LaunchArgs.IsListedDisplayMode(w, h))
             Log($"Fullscreen {w}x{h}: exclusive (GPU lists this mode)");
-        else if (LaunchArgs.IsStretchAspect(w, h))
-            Log($"Fullscreen {w}x{h}: exclusive (stretch aspect, GPU will scale)");
+        else if (LaunchArgs.WantsExclusiveFullscreen(w, h))
+            Log($"Fullscreen {w}x{h}: exclusive (fits desktop, GPU will scale)");
         else
-            Log($"Fullscreen {w}x{h}: GPU has no exclusive mode, launching borderless {w}x{h}");
+            Log($"Fullscreen {w}x{h}: larger than desktop, launching borderless {w}x{h}");
     }
 
     private void ApplyResolutionFields()
@@ -2783,6 +2815,87 @@ public partial class MainWindow : Window
             return fallback;
         return ResolutionCatalog.ClampDimension(value, fallback);
     }
+
+    /// <summary>
+    /// Play / persist used to read only the last LostFocus commit. Typing
+    /// 1720x1440 and hitting Play left the boxes uncommitted.
+    /// </summary>
+    private void CaptureResolutionFromUi()
+    {
+        if (!TryReadLiveResolution(out var width, out var height))
+            return;
+        _settings.ClientWidth = ResolutionCatalog.ClampDimension(width, _settings.ClientWidth);
+        _settings.ClientHeight = ResolutionCatalog.ClampDimension(height, _settings.ClientHeight);
+    }
+
+    private bool TryReadLiveResolution(out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        var clientOk = TryReadResolutionPair(TxtClientWidth, TxtClientHeight, out var cw, out var ch);
+        var serversOk = TryReadResolutionPair(TxtServersWidth, TxtServersHeight, out var sw, out var sh);
+        var clientFocus = TxtClientWidth?.IsKeyboardFocusWithin == true
+            || TxtClientHeight?.IsKeyboardFocusWithin == true;
+        var serversFocus = TxtServersWidth?.IsKeyboardFocusWithin == true
+            || TxtServersHeight?.IsKeyboardFocusWithin == true;
+
+        if (clientFocus && clientOk)
+        {
+            width = cw;
+            height = ch;
+            return true;
+        }
+
+        if (serversFocus && serversOk)
+        {
+            width = sw;
+            height = sh;
+            return true;
+        }
+
+        var settingsW = _settings.ClientWidth;
+        var settingsH = _settings.ClientHeight;
+        if (clientOk && (cw != settingsW || ch != settingsH))
+        {
+            width = cw;
+            height = ch;
+            return true;
+        }
+
+        if (serversOk && (sw != settingsW || sh != settingsH))
+        {
+            width = sw;
+            height = sh;
+            return true;
+        }
+
+        if (clientOk)
+        {
+            width = cw;
+            height = ch;
+            return true;
+        }
+
+        if (!serversOk)
+            return false;
+        width = sw;
+        height = sh;
+        return true;
+    }
+
+    private static bool TryReadResolutionPair(TextBox? widthBox, TextBox? heightBox, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        if (widthBox is null || heightBox is null)
+            return false;
+        if (!int.TryParse(widthBox.Text?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out width))
+            return false;
+        if (!int.TryParse(heightBox.Text?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out height))
+            return false;
+        return width >= ResolutionCatalog.MinDimension && height >= ResolutionCatalog.MinDimension
+            && width <= ResolutionCatalog.MaxDimension && height <= ResolutionCatalog.MaxDimension;
+    }
     private IReadOnlyList<string> BuildClientArgs(
         bool includeConnect,
         string connectHost = "localhost",
@@ -2797,6 +2910,7 @@ public partial class MainWindow : Window
         if (!LaunchArgs.IsSafeServerPassword(password))
             password = string.Empty;
 
+        CaptureResolutionFromUi();
         return LaunchArgs.BuildClientArgs(ClientProfile(), new ClientArgOptions
         {
             OfflineNoAuth = !forceOnline && IsOfflineOn(),

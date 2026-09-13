@@ -4,6 +4,15 @@
   "entries": [
     {
       "date": "12 Sep 2026",
+      "title": "Launcher 0.1.49",
+      "items": [
+        "Add Launch Args on Play Local",
+        "Fix a bug with resolutions not applying",
+        "Keep fullscreen for custom sizes that fit the screen"
+      ]
+    },
+    {
+      "date": "12 Sep 2026",
       "title": "Launcher 0.1.48",
       "items": [
         "Stop the script-changed popup on unedited files",

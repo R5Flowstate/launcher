@@ -28,7 +28,7 @@ public enum ClientWindowMode
     /// <summary>-windowed -noborder. Window with the frame stripped.</summary>
     Borderless,
 
-    /// <summary>Exclusive -fullscreen when the GPU lists this WxH, or the size is 4:3 / 5:4 / 16:10 (GPU scaler). Unlisted 16:9 stays -windowed -noborder.</summary>
+    /// <summary>Exclusive -fullscreen when the GPU lists this WxH, or the size fits the desktop (GPU scaler). Larger-than-desktop stays -windowed -noborder.</summary>
     Fullscreen,
 }
 
@@ -195,10 +195,10 @@ public static class LaunchArgs
                     Append(tokens, "-noborder");
                     break;
                 case ClientWindowMode.Fullscreen:
-                    // Listed modes stay exclusive. Stretch aspects (4:3 / 5:4 /
-                    // 16:10) also take -fullscreen so the GPU scaler can run
-                    // even when DXGI never lists them. Unlisted 16:9 stays
-                    // borderless -- exclusive-miss on those used to snap 720p.
+                    // Listed, or any size that fits the desktop. Exclusive-miss
+                    // keeps WxH so the GPU can scale 1720x1440 / 1600x900 / 4:3
+                    // alike. Larger-than-desktop stays borderless; the engine
+                    // windowed clamp would just snap it to the desktop anyway.
                     if (WantsExclusiveFullscreen(options.Width, options.Height))
                         Append(tokens, "-fullscreen");
                     else
@@ -210,10 +210,11 @@ public static class LaunchArgs
             }
         }
 
-        // After extras so a hand-typed -width/-height in the box still wins.
-        if (options.Width > 0 && options.Height > 0 &&
-            !ContainsToken(tokens, "-width") && !ContainsToken(tokens, "-height"))
+        // Res fields win over a leftover -width/-height in extras.
+        if (options.Width > 0 && options.Height > 0)
         {
+            StripPairedToken(tokens, "-width");
+            StripPairedToken(tokens, "-height");
             AppendPair(tokens, "-width", options.Width.ToString(CultureInfo.InvariantCulture));
             AppendPair(tokens, "-height", options.Height.ToString(CultureInfo.InvariantCulture));
         }
@@ -535,10 +536,16 @@ public static class LaunchArgs
     /// <summary>Test seam. Null queries the primary adapter via EnumDisplaySettings.</summary>
     public static Func<IReadOnlyList<DisplayMode>>? DisplayModesOverride { get; set; }
 
+    /// <summary>Test seam. Null uses SM_CXSCREEN / SM_CYSCREEN.</summary>
+    public static Func<(int Width, int Height)>? DesktopSizeOverride { get; set; }
+
     private static IReadOnlyList<DisplayMode>? s_cachedWin32Modes;
 
     public static IReadOnlyList<DisplayMode> GetDisplayModes()
         => DisplayModesOverride?.Invoke() ?? (s_cachedWin32Modes ??= QueryWin32DisplayModes());
+
+    public static (int Width, int Height) GetDesktopSize()
+        => DesktopSizeOverride?.Invoke() ?? (GetSystemMetrics(0), GetSystemMetrics(1));
 
     public static bool IsListedDisplayMode(int width, int height)
     {
@@ -557,15 +564,28 @@ public static class LaunchArgs
     public static bool SameIntegerAspect(int w1, int h1, int w2, int h2)
         => w1 > 0 && h1 > 0 && w2 > 0 && h2 > 0 && (long)w1 * h2 == (long)w2 * h1;
 
-    /// <summary>4:3, 5:4, or 16:10. These need exclusive so the GPU can stretch.</summary>
+    /// <summary>4:3, 5:4, or 16:10. Grouping / log only; exclusive no longer keys off this.</summary>
     public static bool IsStretchAspect(int width, int height)
         => SameIntegerAspect(width, height, 4, 3)
         || SameIntegerAspect(width, height, 5, 4)
         || SameIntegerAspect(width, height, 16, 10);
 
-    /// <summary>GPU-listed, or a stretch aspect the adapter will not enumerate.</summary>
+    /// <summary>
+    /// GPU-listed, or any size that fits the desktop. Aspect is not consulted --
+    /// 1720x1440 on a 2560x1440 panel is a stretch request the same as 1920x1440.
+    /// </summary>
     public static bool WantsExclusiveFullscreen(int width, int height)
-        => IsListedDisplayMode(width, height) || IsStretchAspect(width, height);
+    {
+        if (width <= 0 || height <= 0)
+            return false;
+        if (IsListedDisplayMode(width, height))
+            return true;
+
+        var (deskW, deskH) = GetDesktopSize();
+        if (deskW <= 0 || deskH <= 0)
+            return true;
+        return width <= deskW && height <= deskH;
+    }
 
     public readonly record struct ModeGroup(string Caption, IReadOnlyList<DisplayMode> Modes);
 
@@ -833,6 +853,22 @@ public static class LaunchArgs
                 return true;
         }
         return false;
+    }
+
+    private static void StripPairedToken(List<string> tokens, string key)
+    {
+        for (var i = 0; i < tokens.Count; )
+        {
+            if (!string.Equals(tokens[i], key, StringComparison.OrdinalIgnoreCase))
+            {
+                i++;
+                continue;
+            }
+
+            tokens.RemoveAt(i);
+            if (i < tokens.Count)
+                tokens.RemoveAt(i);
+        }
     }
 
     private static bool NeedsQuote(string s) =>

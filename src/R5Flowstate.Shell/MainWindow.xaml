@@ -1079,6 +1079,16 @@
                            LostFocus="OnClientResolutionLostFocus"/>
                   <Border Width="1" Height="16" Margin="16,0,16,0" VerticalAlignment="Center"
                           Background="{StaticResource BorderSoft}"/>
+                  <Button x:Name="BtnLaunchArgs"
+                          Style="{StaticResource GhostButton}"
+                          Content="{loc:T label_launch_args}"
+                          MinWidth="0" Height="30" Padding="10,0"
+                          FontSize="13"
+                          VerticalAlignment="Center"
+                          ToolTip="{loc:T tip_launch_args}"
+                          Click="OnLaunchArgsClick"/>
+                  <Border Width="1" Height="16" Margin="16,0,16,0" VerticalAlignment="Center"
+                          Background="{StaticResource BorderSoft}"/>
                   <CheckBox x:Name="ChkSimpleOffline" Content="{loc:T offline}"
                             Style="{StaticResource QuietCheck}"
                             ToolTip="{loc:T tip_offline}"
