@@ -240,9 +240,10 @@ public static class ContentExecutor
 
             if (!entry.IsChunked)
             {
+                var part = dest + PartSuffix;
                 var whole = new FileJob
                 {
-                    Entry = entry, Dest = dest, Target = dest, InPlace = true, Remaining = 1,
+                    Entry = entry, Dest = dest, Target = part, InPlace = false, Remaining = 1,
                 };
                 jobs.Add(whole);
                 objects.Add(new ObjectWork

@@ -4,6 +4,17 @@
   "entries": [
     {
       "date": "12 Sep 2026",
+      "title": "Launcher 0.1.48",
+      "items": [
+        "Stop the script-changed popup on unedited files",
+        "Restore official scripts on Repair",
+        "Keep extra player scripts on update",
+        "Stop a crash from cutting script files",
+        "Fix accuracy on the 1v1 leaderboard"
+      ]
+    },
+    {
+      "date": "12 Sep 2026",
       "title": "Launcher 0.1.47",
       "items": [
         "Turn offline-no-auth off by default"

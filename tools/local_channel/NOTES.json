@@ -4,6 +4,36 @@
   "entries": [
     {
       "date": "12 Sep 2026",
+      "title": "1.0.3",
+      "items": [
+        "Fix an issue that was causing cycle weapon to not work properly",
+        "Add \"Visual Clutter\" setting menu, it disables muzzle flash, body armor and body shield break effects",
+        "Fix some localization strings still showing in English",
+        "Fix a bug with RE-45 Burst shooting earlier than min charge",
+        "Fix an issue that was causing stretched and widescreen layouts to not work properly",
+        "Fix the FOV box not going up to 120",
+        "Fix strafe anim wrong",
+        "Fix an issue that was causing players to spawn crouched in 1v1",
+        "Fix missing audio on first launch",
+        "Hide the audio language picker",
+        "Fix accuracy not working in the leaderboard"
+      ]
+    },
+    {
+      "date": "12 Sep 2026",
+      "title": "1.0.2",
+      "items": [
+        "Raise the max field of view to 120 (new fov_deg setting, video slider follows)",
+        "Fix and enable aim assist for 1v1 duelists and training dummies",
+        "Fix aim-trainer sliders sending clamped values",
+        "Fix controller weapon-select edge cases",
+        "Close server crash paths on teleports and knockback checks",
+        "Make 1v1 tracer realms more robust",
+        "Expose the holstered weapon slot to scripts"
+      ]
+    },
+    {
+      "date": "12 Sep 2026",
       "title": "1.0.1 Hotfix",
       "items": [
         "Fix 1v1 teleports sending you to the wrong pad",

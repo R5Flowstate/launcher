@@ -63,6 +63,7 @@ public sealed class InstallFileState
     [JsonPropertyName("m")]
     public long MTimeUtcTicks { get; set; }
 
+    /// <summary>Official manifest sha256, including when PlayerEdited is set.</summary>
     [JsonPropertyName("h")]
     public string? Sha256 { get; set; }
 

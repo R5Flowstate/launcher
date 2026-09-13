@@ -2752,6 +2752,8 @@ public partial class MainWindow : Window
         var h = _settings.ClientHeight;
         if (LaunchArgs.IsListedDisplayMode(w, h))
             Log($"Fullscreen {w}x{h}: exclusive (GPU lists this mode)");
+        else if (LaunchArgs.IsStretchAspect(w, h))
+            Log($"Fullscreen {w}x{h}: exclusive (stretch aspect, GPU will scale)");
         else
             Log($"Fullscreen {w}x{h}: GPU has no exclusive mode, launching borderless {w}x{h}");
     }

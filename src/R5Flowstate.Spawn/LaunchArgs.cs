@@ -28,7 +28,7 @@ public enum ClientWindowMode
     /// <summary>-windowed -noborder. Window with the frame stripped.</summary>
     Borderless,
 
-    /// <summary>Exclusive -fullscreen when the GPU lists this WxH; otherwise -windowed -noborder at that size.</summary>
+    /// <summary>Exclusive -fullscreen when the GPU lists this WxH, or the size is 4:3 / 5:4 / 16:10 (GPU scaler). Unlisted 16:9 stays -windowed -noborder.</summary>
     Fullscreen,
 }
 
@@ -175,6 +175,8 @@ public static class LaunchArgs
             AppendPair(tokens, "+cl_onlineAuthEnable", "1");
         }
 
+        ForceMilesLanguageEnglish(tokens);
+
         // After extras so a hand-typed window flag in the box still wins.
         // -forceborder is not emitted for Windowed: this engine treats it as a
         // second spelling of -noborder, so it would strip the frame instead.
@@ -193,10 +195,11 @@ public static class LaunchArgs
                     Append(tokens, "-noborder");
                     break;
                 case ClientWindowMode.Fullscreen:
-                    // Exclusive only at a GPU-listed mode. A miss used to rewrite
-                    // WxH (720p / 1024x768). Unlisted Fullscreen is borderless at
-                    // the size the user picked.
-                    if (IsListedDisplayMode(options.Width, options.Height))
+                    // Listed modes stay exclusive. Stretch aspects (4:3 / 5:4 /
+                    // 16:10) also take -fullscreen so the GPU scaler can run
+                    // even when DXGI never lists them. Unlisted 16:9 stays
+                    // borderless -- exclusive-miss on those used to snap 720p.
+                    if (WantsExclusiveFullscreen(options.Width, options.Height))
                         Append(tokens, "-fullscreen");
                     else
                     {
@@ -554,6 +557,16 @@ public static class LaunchArgs
     public static bool SameIntegerAspect(int w1, int h1, int w2, int h2)
         => w1 > 0 && h1 > 0 && w2 > 0 && h2 > 0 && (long)w1 * h2 == (long)w2 * h1;
 
+    /// <summary>4:3, 5:4, or 16:10. These need exclusive so the GPU can stretch.</summary>
+    public static bool IsStretchAspect(int width, int height)
+        => SameIntegerAspect(width, height, 4, 3)
+        || SameIntegerAspect(width, height, 5, 4)
+        || SameIntegerAspect(width, height, 16, 10);
+
+    /// <summary>GPU-listed, or a stretch aspect the adapter will not enumerate.</summary>
+    public static bool WantsExclusiveFullscreen(int width, int height)
+        => IsListedDisplayMode(width, height) || IsStretchAspect(width, height);
+
     public readonly record struct ModeGroup(string Caption, IReadOnlyList<DisplayMode> Modes);
 
     public const int MinListedWidth = 640;
@@ -677,6 +690,25 @@ public static class LaunchArgs
         }
 
         return list;
+    }
+
+    /// <summary>Miles banks are English-only. Last write wins after extras.</summary>
+    private static void ForceMilesLanguageEnglish(List<string> tokens)
+    {
+        for (var i = 0; i < tokens.Count; )
+        {
+            if (string.Equals(tokens[i], "+miles_language", StringComparison.OrdinalIgnoreCase))
+            {
+                tokens.RemoveAt(i);
+                if (i < tokens.Count)
+                    tokens.RemoveAt(i);
+                continue;
+            }
+
+            i++;
+        }
+
+        AppendPair(tokens, "+miles_language", "english");
     }
 
     /// <summary>Drop -offline / -noorigin / +cl_onlineAuthEnable 0 from a client argv.</summary>

@@ -446,7 +446,10 @@ public static class ContentReconciler
                 {
                     if (overlay == OverlayExtractPolicy.KeepEdits)
                     {
-                        plan.Actions.Add(new FileAction(rel, null, FileActionKind.KeepPlayerEdit));
+                        if (WasOfficial(index, rel))
+                            plan.Actions.Add(new FileAction(rel, null, FileActionKind.Delete));
+                        else
+                            plan.Actions.Add(new FileAction(rel, null, FileActionKind.KeepPlayerEdit));
                         continue;
                     }
                 }
@@ -475,6 +478,14 @@ public static class ContentReconciler
         if (!index.Files.TryGetValue(OverlayPaths.Norm(rel), out var state))
             return true;
         return state.PlayerEdited;
+    }
+
+    static bool WasOfficial(InstallFilesIndex? index, string rel)
+    {
+        if (index is null || index.Files.Count == 0)
+            return false;
+        return index.Files.TryGetValue(OverlayPaths.Norm(rel), out var state) &&
+               !state.PlayerEdited;
     }
 
     static bool IsLauncherPrivate(string rel) =>

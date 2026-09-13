@@ -268,9 +268,7 @@ public static class ContentTrackInstaller
             {
                 Size = info.Length,
                 MTimeUtcTicks = info.LastWriteTimeUtc.Ticks,
-                // A kept edit is deliberately not the manifest hash; recording it
-                // as such would make the next launch call it corruption.
-                Sha256 = isEdit ? null : f.Sha256,
+                Sha256 = f.Sha256,
                 VerifiedUtcTicks = now,
                 PlayerEdited = isEdit,
             };

@@ -100,18 +100,14 @@ public static class OverlayEditProbe
                 continue;
 
             var state = kv.Value;
-            if (state.PlayerEdited)
-            {
-                report.Changed.Add(rel);
-                continue;
-            }
             if (string.IsNullOrEmpty(state.Sha256))
                 continue;
 
             try
             {
                 var info = new FileInfo(full);
-                if (state.StatMatches(info.Length, info.LastWriteTimeUtc.Ticks))
+                if (!state.PlayerEdited &&
+                    state.StatMatches(info.Length, info.LastWriteTimeUtc.Ticks))
                     continue;
                 if (!string.Equals(
                         ContentReconciler.HashFile(full), state.Sha256,
@@ -191,11 +187,11 @@ public static class OverlayEditProbe
 
         var baseVer = channel?.Client?.Base?.CatalogVersion;
         var tipVer = channel?.Client?.CatalogVersion;
+        Offer(InstallHealthAssessor.FindCachedShareManifest(installPath, "platform", null));
         Offer(InstallHealthAssessor.FindCachedShareManifest(installPath, "client", baseVer));
         if (!string.Equals(tipVer, baseVer, StringComparison.Ordinal))
             Offer(InstallHealthAssessor.FindCachedShareManifest(installPath, "client", tipVer));
         Offer(InstallHealthAssessor.FindCachedShareManifest(installPath, "client", null));
-        Offer(InstallHealthAssessor.FindCachedShareManifest(installPath, "platform", null));
         return list;
     }
 }

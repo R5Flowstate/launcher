@@ -22,7 +22,7 @@ public sealed class LeaderboardRowViewModel : INotifyPropertyChanged
         DeathsLabel = player.Deaths.ToString(CultureInfo.InvariantCulture);
         KdLabel = player.Kd.ToString("0.00", CultureInfo.InvariantCulture);
         DamageLabel = player.Damage.ToString("N0", CultureInfo.InvariantCulture);
-        AccLabel = FormatRate(player.Accuracy);
+        AccLabel = FormatAccuracy(player.Hits, player.Shots);
         WeaponLabel = FormatWeapon(player.MostUsedWeapon);
         InputLabel = FormatInput(player.MostUsedInput);
         HsLabel = player.Headshots.ToString(CultureInfo.InvariantCulture);
@@ -77,6 +77,13 @@ public sealed class LeaderboardRowViewModel : INotifyPropertyChanged
             return "--";
         var pct = value <= 1.0 ? value * 100.0 : value;
         return pct.ToString("0.0", CultureInfo.InvariantCulture) + "%";
+    }
+
+    internal static string FormatAccuracy(int hits, int shots)
+    {
+        if (shots <= 0)
+            return "--";
+        return FormatRate((double)hits / shots);
     }
 
     internal static string FormatInput(string? raw)
@@ -212,7 +219,7 @@ public sealed class MatchPlayerViewModel
         ShotsLabel = player.Shots.ToString(CultureInfo.InvariantCulture);
         HitsLabel = player.Hits.ToString(CultureInfo.InvariantCulture);
         HsLabel = player.Headshots.ToString(CultureInfo.InvariantCulture);
-        AccLabel = LeaderboardRowViewModel.FormatRate(player.Accuracy);
+        AccLabel = LeaderboardRowViewModel.FormatAccuracy(player.Hits, player.Shots);
         WeaponLabel = LeaderboardRowViewModel.FormatWeapon(player.Weapon);
         InputLabel = LeaderboardRowViewModel.FormatInput(player.Input);
         IsWinner = isWinner;

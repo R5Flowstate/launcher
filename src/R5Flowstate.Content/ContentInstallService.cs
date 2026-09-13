@@ -602,7 +602,7 @@ public static class ContentInstallService
                         });
                     }
 
-                    var overlay = overlayPolicy ?? OverlayExtractPolicy.KeepEdits;
+                    var overlay = overlayPolicy ?? OverlayExtractPolicy.WriteOfficial;
                     TrackInstallResult stepResult;
                     if (step.Kind == UpdateStepKind.SyncFiles)
                     {
