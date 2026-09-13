@@ -27,6 +27,10 @@ public sealed class ExecuteResult
     public int ObjectsFetched { get; set; }
     public long BytesFetched { get; set; }
     public int Deleted { get; set; }
+
+    /// <summary>Files hashed and renamed into place this run. Size on disk is not a hash.</summary>
+    public Dictionary<string, InstallFileState> Committed { get; } =
+        new(StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>
@@ -60,9 +64,7 @@ public static class ContentExecutor
         public required ContentFile Entry { get; init; }
         public required string Dest { get; init; }
         public required string Target { get; init; }
-        public required bool InPlace { get; init; }
         public int Remaining;
-        public bool IsPart => !InPlace && Target.EndsWith(PartSuffix, StringComparison.Ordinal);
     }
 
     sealed class ObjectWork
@@ -91,12 +93,14 @@ public static class ContentExecutor
 
         var result = new ExecuteResult();
         var failures = new ConcurrentQueue<(string Path, Exception Ex)>();
+        var committed = new ConcurrentDictionary<string, InstallFileState>(
+            StringComparer.OrdinalIgnoreCase);
 
         List<ObjectWork> objects;
         List<FileJob> jobs;
         try
         {
-            (jobs, objects) = BuildWork(plan, installPath);
+            (jobs, objects) = BuildWork(plan, installPath, cancel);
         }
         catch (Exception ex)
         {
@@ -116,6 +120,26 @@ public static class ContentExecutor
             concurrency = DefaultConcurrency;
 
         using var abort = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+
+        try
+        {
+            foreach (var job in jobs)
+            {
+                if (job.Remaining != 0)
+                    continue;
+                abort.Token.ThrowIfCancellationRequested();
+                committed[job.Entry.Path] = FinalizeFile(job, abort.Token);
+                Interlocked.Increment(ref doneFiles);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            result.Reason = Classify(ex);
+            result.Error = ex.Message;
+            CopyCommitted(committed, result);
+            return result;
+        }
+
         var gate = new SemaphoreSlim(concurrency);
 
         var tasks = objects.Select(async work =>
@@ -168,7 +192,7 @@ public static class ContentExecutor
                 // overlaps with downloading the next.
                 if (Interlocked.Decrement(ref work.Job.Remaining) == 0)
                 {
-                    FinalizeFile(work.Job, abort.Token);
+                    committed[work.Job.Entry.Path] = FinalizeFile(work.Job, abort.Token);
                     Interlocked.Increment(ref doneFiles);
                     active.TryRemove(rel, out _);
                 }
@@ -200,6 +224,7 @@ public static class ContentExecutor
         result.ObjectsFetched = fetched;
         result.BytesFetched = Interlocked.Read(ref doneBytes);
         result.FilesWritten = doneFiles;
+        CopyCommitted(committed, result);
 
         if (cancel.IsCancellationRequested)
         {
@@ -217,6 +242,7 @@ public static class ContentExecutor
         }
 
         result.Deleted = ApplyDeletions(plan, installPath, progress, cancel);
+        SweepCommittedParts(plan, installPath);
         result.Success = true;
         return result;
     }
@@ -225,25 +251,32 @@ public static class ContentExecutor
     /// Resolve every destination and size it once, up front, then expose the
     /// individual objects. Preparing a file inside the parallel loop would race
     /// two chunks of the same file both trying to create it.
+    ///
+    /// The live dest name is never a work file. Bytes go to a sibling part;
+    /// dest is only created (or replaced) after the whole-file hash matches.
+    /// A killed run can leave a part. It cannot leave a full-size dest the
+    /// game will load as if it were installed.
     /// </summary>
-    static (List<FileJob>, List<ObjectWork>) BuildWork(ReconcilePlan plan, string installPath)
+    static (List<FileJob>, List<ObjectWork>) BuildWork(
+        ReconcilePlan plan, string installPath, CancellationToken cancel)
     {
         var jobs = new List<FileJob>();
         var objects = new List<ObjectWork>();
 
         foreach (var action in plan.Work)
         {
+            cancel.ThrowIfCancellationRequested();
             var entry = action.Entry
                 ?? throw new InvalidOperationException($"No manifest entry for {action.Path}");
             var dest = SafePath.Join(installPath, entry.Path);
             Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+            var part = dest + PartSuffix;
 
             if (!entry.IsChunked)
             {
-                var part = dest + PartSuffix;
                 var whole = new FileJob
                 {
-                    Entry = entry, Dest = dest, Target = part, InPlace = false, Remaining = 1,
+                    Entry = entry, Dest = dest, Target = part, Remaining = 1,
                 };
                 jobs.Add(whole);
                 objects.Add(new ObjectWork
@@ -253,20 +286,13 @@ public static class ContentExecutor
                 continue;
             }
 
-            var missing = action.Chunks ?? Enumerable.Range(0, entry.Chunks!.Count).ToList();
-            var exists = File.Exists(dest);
-
-            // A file that is only partly wrong is already invalid, so repairing
-            // it in place risks nothing and avoids copying gigabytes. A file
-            // being replaced wholesale stays good until the new one lands.
-            var inPlace = exists && missing.Count < entry.Chunks!.Count;
-            var target = inPlace ? dest : (exists ? dest + PartSuffix : dest);
-            Prepare(target, entry.Size, inPlace);
+            var planned = action.Chunks?.ToList()
+                          ?? Enumerable.Range(0, entry.Chunks!.Count).ToList();
+            var missing = StageChunkedPart(entry, dest, part, planned, cancel);
 
             var job = new FileJob
             {
-                Entry = entry, Dest = dest, Target = target, InPlace = inPlace,
-                Remaining = missing.Count,
+                Entry = entry, Dest = dest, Target = part, Remaining = missing.Count,
             };
             jobs.Add(job);
 
@@ -286,6 +312,41 @@ public static class ContentExecutor
         return (jobs, objects);
     }
 
+    /// <summary>
+    /// Make <paramref name="part"/> the work file and return the chunks it still
+    /// needs. Dest is moved aside when it is the only copy of a partial file,
+    /// then the live name is empty until FinalizeFile renames the part back.
+    /// </summary>
+    static List<int> StageChunkedPart(
+        ContentFile entry, string dest, string part, List<int> planned,
+        CancellationToken cancel)
+    {
+        var destExists = File.Exists(dest);
+        var partUsable = File.Exists(part) && new FileInfo(part).Length == entry.Size;
+
+        if (!destExists && partUsable)
+        {
+            if (planned.Count == entry.Chunks!.Count)
+                return ContentReconciler.FindMissingChunks(entry, part, cancel);
+            return planned;
+        }
+
+        if (destExists)
+        {
+            // The plan hashed dest. Move it to the part name so a kill cannot
+            // leave the live path holding a mix of old and new chunks.
+            if (partUsable)
+                TryDelete(part);
+            File.Move(dest, part, overwrite: true);
+            partUsable = File.Exists(part) && new FileInfo(part).Length == entry.Size;
+        }
+
+        if (!partUsable)
+            Prepare(part, entry.Size);
+
+        return planned;
+    }
+
     static void WriteAt(string target, long offset, byte[] bytes, bool wholeFile)
     {
         if (wholeFile)
@@ -303,20 +364,26 @@ public static class ContentExecutor
         fs.Write(bytes, 0, bytes.Length);
     }
 
-    static void FinalizeFile(FileJob job, CancellationToken cancel)
+    static InstallFileState FinalizeFile(FileJob job, CancellationToken cancel)
     {
         // Per-chunk hashes cannot catch a correct chunk written to the wrong
         // offset. This is the only check that does.
         var whole = ContentReconciler.HashFile(job.Target, cancel);
         if (!string.Equals(whole, job.Entry.Sha256, StringComparison.OrdinalIgnoreCase))
         {
-            if (job.IsPart)
-                TryDelete(job.Target);
+            TryDelete(job.Target);
             throw new IOException($"Assembled file does not match the manifest: {job.Entry.Path}");
         }
 
-        if (job.IsPart)
-            File.Move(job.Target, job.Dest, overwrite: true);
+        File.Move(job.Target, job.Dest, overwrite: true);
+        var info = new FileInfo(job.Dest);
+        return new InstallFileState
+        {
+            Size = info.Length,
+            MTimeUtcTicks = info.LastWriteTimeUtc.Ticks,
+            Sha256 = job.Entry.Sha256,
+            VerifiedUtcTicks = DateTime.UtcNow.Ticks,
+        };
     }
 
     /// <summary>
@@ -324,11 +391,8 @@ public static class ContentExecutor
     /// offset makes NTFS synchronously zero-fill everything before it, which on a
     /// 10 GB file is a multi-minute stall that looks like a hang.
     /// </summary>
-    static void Prepare(string target, long size, bool inPlace)
+    static void Prepare(string target, long size)
     {
-        if (inPlace && File.Exists(target))
-            return;
-
         using var fs = new FileStream(
             target, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.None);
         TrySetSparse(fs);
@@ -436,5 +500,30 @@ public static class ContentExecutor
     {
         try { if (File.Exists(path)) File.Delete(path); }
         catch { /* best-effort */ }
+    }
+
+    static void CopyCommitted(
+        ConcurrentDictionary<string, InstallFileState> src, ExecuteResult dest)
+    {
+        foreach (var kv in src)
+            dest.Committed[kv.Key] = kv.Value;
+    }
+
+    /// <summary>
+    /// After dest has the verified bytes, a leftover sibling part is scratch.
+    /// Leaving it lets the next health pass treat the install as in-flight.
+    /// </summary>
+    static void SweepCommittedParts(ReconcilePlan plan, string installPath)
+    {
+        foreach (var action in plan.Actions)
+        {
+            if (action.Entry is null)
+                continue;
+            if (!SafePath.TryJoin(installPath, action.Path, out var dest))
+                continue;
+            var part = dest + PartSuffix;
+            if (File.Exists(dest) && File.Exists(part))
+                TryDelete(part);
+        }
     }
 }

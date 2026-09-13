@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -77,41 +78,26 @@ public partial class MainWindow
         RefreshSimplePlayButton();
     }
 
-    sealed record DownloadLimitOption(int Mbps, string Label)
-    {
-        public override string ToString() => Label;
-    }
-
-    static DownloadLimitOption[] BuildDownloadLimits() =>
-    [
-        new(0, Loc.Get("unlimited")),
-        new(200, Loc.Format("mbps_fmt", 200)),
-        new(100, Loc.Format("mbps_fmt", 100)),
-        new(50, Loc.Format("mbps_fmt", 50)),
-        new(25, Loc.Format("mbps_fmt", 25)),
-        new(10, Loc.Format("mbps_fmt", 10)),
-        new(5, Loc.Format("mbps_fmt", 5)),
-    ];
+    const int DownloadLimitMbpsMax = 10000;
 
     bool _suppressLimitSync;
 
+    TextBox?[] DownloadLimitBoxes() =>
+        [TxtDownloadLimit, TxtDownloadLimitInstall];
+
     void InitDownloadLimit()
     {
-        // The same setting is offered in Settings and on the install card; both
-        // are filled from one list so a change on either reads back on the other.
         _suppressLimitSync = true;
         try
         {
-            foreach (var box in new[] { CmbDownloadLimit, CmbDownloadLimitInstall })
+            foreach (var box in DownloadLimitBoxes())
             {
                 if (box is null)
                     continue;
-                var limits = BuildDownloadLimits();
-                box.ItemsSource = limits;
-                box.SelectedItem =
-                    limits.FirstOrDefault(o => o.Mbps == _settings.DownloadLimitMbps)
-                    ?? limits[0];
+                DataObject.RemovePastingHandler(box, OnDownloadLimitPaste);
+                DataObject.AddPastingHandler(box, OnDownloadLimitPaste);
             }
+            WriteDownloadLimitBoxes(_settings.DownloadLimitMbps);
         }
         finally
         {
@@ -120,23 +106,14 @@ public partial class MainWindow
         ApplyDownloadLimit();
     }
 
-    void SyncDownloadLimitBoxes(int mbps)
+    void WriteDownloadLimitBoxes(int mbps)
     {
-        _suppressLimitSync = true;
-        try
+        var text = Math.Max(0, mbps).ToString(CultureInfo.InvariantCulture);
+        foreach (var box in DownloadLimitBoxes())
         {
-            foreach (var box in new[] { CmbDownloadLimit, CmbDownloadLimitInstall })
-            {
-                if (box?.ItemsSource is not IEnumerable<DownloadLimitOption> opts)
-                    continue;
-                var match = opts.FirstOrDefault(o => o.Mbps == mbps);
-                if (match is not null && !ReferenceEquals(box.SelectedItem, match))
-                    box.SelectedItem = match;
-            }
-        }
-        finally
-        {
-            _suppressLimitSync = false;
+            if (box is null || box.Text == text)
+                continue;
+            box.Text = text;
         }
     }
 
@@ -146,20 +123,103 @@ public partial class MainWindow
         ContentExecutor.GlobalConcurrency = _settings.DownloadConcurrency;
     }
 
-    private void OnDownloadLimitChanged(object sender, SelectionChangedEventArgs e)
+    void CaptureDownloadLimitFromUi()
+    {
+        var text = TxtDownloadLimit?.IsKeyboardFocusWithin == true
+            ? TxtDownloadLimit.Text
+            : TxtDownloadLimitInstall?.IsKeyboardFocusWithin == true
+                ? TxtDownloadLimitInstall.Text
+                : TxtDownloadLimit?.Text ?? TxtDownloadLimitInstall?.Text;
+        if (!TryParseDownloadLimitMbps(text, out var mbps))
+            return;
+        CommitDownloadLimit(mbps, persist: false);
+    }
+
+    void CommitDownloadLimit(int mbps, bool persist)
+    {
+        mbps = Math.Clamp(mbps, 0, DownloadLimitMbpsMax);
+        var changed = mbps != _settings.DownloadLimitMbps;
+        _settings.DownloadLimitMbps = mbps;
+        _suppressLimitSync = true;
+        try { WriteDownloadLimitBoxes(mbps); }
+        finally { _suppressLimitSync = false; }
+        ApplyDownloadLimit();
+        if (!persist)
+            return;
+        try { SettingsStore.Save(_settings); }
+        catch (Exception ex) { Log($"Settings save failed: {ex.Message}"); }
+        if (changed)
+        {
+            Log(mbps > 0
+                ? $"Download limit: {mbps} Mbps"
+                : "Download limit: unlimited");
+        }
+    }
+
+    static bool TryParseDownloadLimitMbps(string? text, out int mbps)
+    {
+        mbps = 0;
+        if (string.IsNullOrWhiteSpace(text))
+            return true;
+        if (!int.TryParse(text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+            || value < 0)
+            return false;
+        mbps = Math.Min(value, DownloadLimitMbpsMax);
+        return true;
+    }
+
+    private void OnDownloadLimitLostFocus(object sender, RoutedEventArgs e)
     {
         if (!IsLoaded || _suppressArgsPersist || _suppressLimitSync)
             return;
-        if (sender is not ComboBox box || box.SelectedItem is not DownloadLimitOption opt)
+        if (sender is not TextBox box)
             return;
-        _settings.DownloadLimitMbps = opt.Mbps;
-        SyncDownloadLimitBoxes(opt.Mbps);
-        ApplyDownloadLimit();
-        try { SettingsStore.Save(_settings); }
-        catch (Exception ex) { Log($"Settings save failed: {ex.Message}"); }
-        Log(opt.Mbps > 0
-            ? $"Download limit: {opt.Mbps} Mbps"
-            : "Download limit: unlimited");
+        if (!TryParseDownloadLimitMbps(box.Text, out var mbps))
+        {
+            WriteDownloadLimitBoxes(_settings.DownloadLimitMbps);
+            return;
+        }
+        CommitDownloadLimit(mbps, persist: true);
+    }
+
+    private void OnDownloadLimitKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+            return;
+        OnDownloadLimitLostFocus(sender, e);
+        e.Handled = true;
+    }
+
+    private void OnDownloadLimitPreviewText(object sender, TextCompositionEventArgs e)
+    {
+        foreach (var ch in e.Text)
+        {
+            if (!char.IsDigit(ch))
+            {
+                e.Handled = true;
+                return;
+            }
+        }
+    }
+
+    private void OnDownloadLimitPaste(object sender, DataObjectPastingEventArgs e)
+    {
+        if (!e.SourceDataObject.GetDataPresent(DataFormats.UnicodeText)
+            && !e.SourceDataObject.GetDataPresent(DataFormats.Text))
+        {
+            e.CancelCommand();
+            return;
+        }
+        var raw = (e.SourceDataObject.GetData(DataFormats.UnicodeText)
+            ?? e.SourceDataObject.GetData(DataFormats.Text)) as string ?? string.Empty;
+        foreach (var ch in raw)
+        {
+            if (!char.IsDigit(ch))
+            {
+                e.CancelCommand();
+                return;
+            }
+        }
     }
 
     /// <summary>

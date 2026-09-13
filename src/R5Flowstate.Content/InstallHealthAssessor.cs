@@ -341,6 +341,14 @@ public static class InstallHealthAssessor
                                 if (samples.Count < 4)
                                     samples.Add($"{f.Path} size {len} expected {f.Size}");
                             }
+                            // A sibling part means the last write never renamed
+                            // into place. Size on dest is not a commit.
+                            else if (File.Exists(full + ContentExecutor.PartSuffix))
+                            {
+                                sizeMismatch++;
+                                if (samples.Count < 4)
+                                    samples.Add(f.Path + " (uncommitted)");
+                            }
                         }
 
                         h.MissingFileCount = missing;

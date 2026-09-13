@@ -4,6 +4,18 @@
   "entries": [
     {
       "date": "13 Sep 2026",
+      "title": "Launcher 0.1.51",
+      "items": [
+        "Stop a killed download leaving broken files",
+        "Resume a stopped download instead of restarting",
+        "Recheck files after a stopped download",
+        "Type any download speed in Mbps",
+        "Add drop developer mode on join",
+        "Hide unknown weapons on the leaderboard"
+      ]
+    },
+    {
+      "date": "13 Sep 2026",
       "title": "Launcher 0.1.50",
       "items": [
         "Keep PLAY when only scripts differ",

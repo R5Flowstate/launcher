@@ -45,10 +45,15 @@ public sealed class ClientArgOptions
     public bool OfflineNoAuth { get; init; }
 
     /// <summary>
-    /// Public join: never emit -offline, and drop it from extras even if the
-    /// Play Local checkbox (or a typed extra) still has it.
+    /// Public join: drop -offline from extras even if the Play Local checkbox
+    /// (or a typed extra) still has it.
     /// </summary>
     public bool ForceOnline { get; init; }
+
+    /// <summary>
+    /// Public join: drop developer flags from extras. Independent of ForceOnline.
+    /// </summary>
+    public bool DropDev { get; init; }
 
     /// <summary>+bridge_connect_password. Omitted when empty. Same charset as dedi.</summary>
     public string? Password { get; init; }
@@ -174,6 +179,9 @@ public static class LaunchArgs
             StripOfflineClientTokens(tokens);
             AppendPair(tokens, "+cl_onlineAuthEnable", "1");
         }
+
+        if (options.DropDev)
+            StripDevClientTokens(tokens);
 
         ForceMilesLanguageEnglish(tokens);
 
@@ -729,6 +737,40 @@ public static class LaunchArgs
         }
 
         AppendPair(tokens, "+miles_language", "english");
+    }
+
+    /// <summary>True when the client argv still carries a developer-mode flag.</summary>
+    public static bool HasDevClientToken(IReadOnlyList<string> args)
+    {
+        if (args is null)
+            return false;
+        for (var i = 0; i < args.Count; i++)
+        {
+            var t = args[i];
+            if (string.Equals(t, "-dev", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t, "-developer", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t, "-devsdk", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>Drop -dev / -developer / -devsdk from a client argv.</summary>
+    public static void StripDevClientTokens(List<string> tokens)
+    {
+        for (var i = 0; i < tokens.Count; )
+        {
+            var t = tokens[i];
+            if (string.Equals(t, "-dev", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t, "-developer", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t, "-devsdk", StringComparison.OrdinalIgnoreCase))
+            {
+                tokens.RemoveAt(i);
+                continue;
+            }
+
+            i++;
+        }
     }
 
     /// <summary>Drop -offline / -noorigin / +cl_onlineAuthEnable 0 from a client argv.</summary>

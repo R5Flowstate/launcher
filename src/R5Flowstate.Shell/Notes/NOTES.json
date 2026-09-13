@@ -3,6 +3,16 @@
   "kind": "notes",
   "entries": [
     {
+      "date": "13 Sep 2026",
+      "title": "1.0.4",
+      "items": [
+        "Add \"FPS Max\" slider to video settings menu",
+        "Fix a bug that was causing some PC accounts to show as PlayStation and erroring on connect",
+        "Disable prints by default on dedicated servers",
+        "Harden potential crashes"
+      ]
+    },
+    {
       "date": "12 Sep 2026",
       "title": "1.0.3",
       "items": [

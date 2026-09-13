@@ -111,6 +111,9 @@ public sealed class LeaderboardRowViewModel : INotifyPropertyChanged
         var s = Dash(raw);
         if (s == "--")
             return s;
+        if (s.Equals("unknown", StringComparison.OrdinalIgnoreCase) ||
+            s.Equals("na", StringComparison.OrdinalIgnoreCase))
+            return "--";
         if (s.StartsWith("mp_weapon_", StringComparison.OrdinalIgnoreCase))
             s = s[10..];
         return s.Replace('_', ' ');

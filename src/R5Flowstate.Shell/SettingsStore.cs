@@ -93,6 +93,7 @@ public static class SettingsStore
             DediPasswordEnabled = false,
             FilterMapsByPlaylist = false,
             ShowUnlistedMaps = false,
+            JoinWithoutDev = true,
             SimpleMode = true,
             LastModePlaylist = string.Empty,
             EulaVersionAccepted = 0,
@@ -145,6 +146,7 @@ public static class SettingsStore
             s.Cheats = ReadBool(key, "Cheats", defaultValue: true);
             s.FilterMapsByPlaylist = ReadBool(key, "FilterMapsByPlaylist", defaultValue: false);
             s.ShowUnlistedMaps = ReadBool(key, "ShowUnlistedMaps", defaultValue: false);
+            s.JoinWithoutDev = ReadBool(key, "JoinWithoutDev", defaultValue: true);
             s.SimpleMode = ReadBool(key, "SimpleMode", defaultValue: true);
 
             if (key.GetValue("DediPlaylist") is string pl && !string.IsNullOrWhiteSpace(pl))
@@ -242,6 +244,7 @@ public static class SettingsStore
         key.SetValue("Cheats", settings.Cheats ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("FilterMapsByPlaylist", settings.FilterMapsByPlaylist ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("ShowUnlistedMaps", settings.ShowUnlistedMaps ? 1 : 0, RegistryValueKind.DWord);
+        key.SetValue("JoinWithoutDev", settings.JoinWithoutDev ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("SimpleMode", settings.SimpleMode ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("DediPlaylist", settings.DediPlaylist ?? string.Empty);
         key.SetValue("DediMap", settings.DediMap ?? string.Empty);
@@ -398,6 +401,12 @@ public sealed class LauncherSettings
     /// platform/r5f_wip_maps.txt still adds named extras with this off.
     /// </summary>
     public bool ShowUnlistedMaps { get; set; }
+
+    /// <summary>
+    /// Public Join drops -dev / -developer / -devsdk even if Developer is on.
+    /// Off keeps the Play Local developer flags on a joined client.
+    /// </summary>
+    public bool JoinWithoutDev { get; set; } = true;
 
     /// <summary>True = Simple player shell (default for new installs).</summary>
     public bool SimpleMode { get; set; } = true;

@@ -1453,12 +1453,19 @@
                               <TextBlock Text="{loc:T label_download_limit}" FontSize="12"
                                          VerticalAlignment="Center" Margin="0,0,8,0"
                                          Foreground="{StaticResource TextSecondary}"/>
-                              <ComboBox x:Name="CmbDownloadLimitInstall"
-                                        Width="130" Height="30"
-                                        VerticalAlignment="Center"
-                                        Style="{StaticResource DarkCombo}"
-                                        ToolTip="{loc:T tip_download_limit}"
-                                        SelectionChanged="OnDownloadLimitChanged"/>
+                              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBox x:Name="TxtDownloadLimitInstall"
+                                         Width="64" Height="30"
+                                         MaxLength="5"
+                                         VerticalAlignment="Center"
+                                         ToolTip="{loc:T tip_download_limit}"
+                                         PreviewTextInput="OnDownloadLimitPreviewText"
+                                         LostFocus="OnDownloadLimitLostFocus"
+                                         KeyDown="OnDownloadLimitKeyDown"/>
+                                <TextBlock Text="{loc:T mbps_unit}" Margin="6,0,0,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondary}"/>
+                              </StackPanel>
                             </DockPanel>
                           </StackPanel>
                         </Border>
@@ -2258,14 +2265,26 @@
                         ToolTip="{loc:T tip_show_unlisted_maps}"
                         Checked="OnShowUnlistedMapsChanged"
                         Unchecked="OnShowUnlistedMapsChanged"/>
+              <CheckBox x:Name="ChkJoinWithoutDev" Margin="0,12,0,0"
+                        Content="{loc:T join_without_dev}"
+                        ToolTip="{loc:T tip_join_without_dev}"
+                        Checked="OnJoinWithoutDevChanged"
+                        Unchecked="OnJoinWithoutDevChanged"/>
               <DockPanel Margin="0,12,0,0" LastChildFill="False">
                 <TextBlock Text="{loc:T label_download_limit}" VerticalAlignment="Center"
                            Foreground="{StaticResource TextSecondary}"/>
-                <ComboBox x:Name="CmbDownloadLimit" DockPanel.Dock="Right"
-                          Width="150" Height="30"
-                          Style="{StaticResource DarkCombo}"
-                          ToolTip="{loc:T tip_download_limit}"
-                          SelectionChanged="OnDownloadLimitChanged"/>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right"
+                            VerticalAlignment="Center">
+                  <TextBox x:Name="TxtDownloadLimit" Width="64" Height="30"
+                           MaxLength="5"
+                           ToolTip="{loc:T tip_download_limit}"
+                           PreviewTextInput="OnDownloadLimitPreviewText"
+                           LostFocus="OnDownloadLimitLostFocus"
+                           KeyDown="OnDownloadLimitKeyDown"/>
+                  <TextBlock Text="{loc:T mbps_unit}" Margin="6,0,0,0"
+                             VerticalAlignment="Center"
+                             Foreground="{StaticResource TextSecondary}"/>
+                </StackPanel>
               </DockPanel>
               <TextBlock x:Name="TxtIdentity" Visibility="Collapsed"/>
 

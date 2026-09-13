@@ -27,7 +27,8 @@ public static class ContentTrackInstaller
         OverlayExtractPolicy overlay = OverlayExtractPolicy.WriteOfficial,
         int concurrency = 0,
         bool contentUnchanged = false,
-        bool restoreMapPayloads = false)
+        bool restoreMapPayloads = false,
+        bool ignoreIndex = false)
     {
         var result = new TrackInstallResult
         {
@@ -54,7 +55,9 @@ public static class ContentTrackInstaller
                 {
                     cancel.ThrowIfCancellationRequested();
 
-                    var index = InstallFilesIndexIO.TryLoad(indexPath);
+                    var index = (ignoreIndex && pass == 1)
+                        ? null
+                        : InstallFilesIndexIO.TryLoad(indexPath);
 
                     progress?.Report(new ContentInstallProgress
                     {
@@ -156,7 +159,7 @@ public static class ContentTrackInstaller
                         return result;
                     }
 
-                    RecordApplied(indexPath, manifest, installPath, plan);
+                    RecordApplied(indexPath, manifest, installPath, plan, exec);
                 }
 
                 result.Error =
@@ -255,24 +258,46 @@ public static class ContentTrackInstaller
         index.InstallPath = installPath;
         index.VerifiedUtc = DateTime.UtcNow.ToString("O");
 
-        var now = DateTime.UtcNow.Ticks;
         foreach (var f in manifest.Files)
         {
+            var norm = OverlayPaths.Norm(f.Path);
             if (!SafePath.TryJoin(installPath, f.Path, out var full))
                 continue;
             var info = new FileInfo(full);
             if (!info.Exists)
+            {
+                index.Files.Remove(norm);
                 continue;
+            }
 
             var isEdit = edited.Contains(f.Path);
-            index.Files[OverlayPaths.Norm(f.Path)] = new InstallFileState
+            if (plan.Verified.TryGetValue(norm, out var hashed))
             {
-                Size = info.Length,
-                MTimeUtcTicks = info.LastWriteTimeUtc.Ticks,
-                Sha256 = f.Sha256,
-                VerifiedUtcTicks = now,
-                PlayerEdited = isEdit,
-            };
+                hashed.PlayerEdited = isEdit;
+                index.Files[norm] = hashed;
+                continue;
+            }
+
+            if (index.Files.TryGetValue(norm, out var prev) &&
+                prev.StatMatches(info.Length, info.LastWriteTimeUtc.Ticks))
+            {
+                prev.PlayerEdited = isEdit;
+                continue;
+            }
+
+            // Kept by size or as a player edit. Do not write the official
+            // hash -- the next scan would treat that as a confirmed read.
+            if (isEdit)
+            {
+                index.Files[norm] = new InstallFileState
+                {
+                    Size = info.Length,
+                    MTimeUtcTicks = info.LastWriteTimeUtc.Ticks,
+                    Sha256 = f.Sha256,
+                    VerifiedUtcTicks = DateTime.UtcNow.Ticks,
+                    PlayerEdited = true,
+                };
+            }
         }
 
         InstallFilesIndexIO.Save(path, index);
@@ -283,7 +308,8 @@ public static class ContentTrackInstaller
     /// mtime is what lets the next pass skip them instead of hashing the tree.
     /// </summary>
     static void RecordApplied(
-        string path, ContentManifest manifest, string installPath, ReconcilePlan plan)
+        string path, ContentManifest manifest, string installPath, ReconcilePlan plan,
+        ExecuteResult exec)
     {
         try
         {
@@ -298,24 +324,8 @@ public static class ContentTrackInstaller
             foreach (var kv in plan.Verified)
                 index.Files[kv.Key] = kv.Value;
 
-            var now = DateTime.UtcNow.Ticks;
-            foreach (var action in plan.Work)
-            {
-                if (action.Entry is null)
-                    continue;
-                if (!SafePath.TryJoin(installPath, action.Path, out var full))
-                    continue;
-                var info = new FileInfo(full);
-                if (!info.Exists || info.Length != action.Entry.Size)
-                    continue;
-                index.Files[OverlayPaths.Norm(action.Path)] = new InstallFileState
-                {
-                    Size = info.Length,
-                    MTimeUtcTicks = info.LastWriteTimeUtc.Ticks,
-                    Sha256 = action.Entry.Sha256,
-                    VerifiedUtcTicks = now,
-                };
-            }
+            foreach (var kv in exec.Committed)
+                index.Files[OverlayPaths.Norm(kv.Key)] = kv.Value;
 
             foreach (var action in plan.Deletions)
                 index.Files.Remove(OverlayPaths.Norm(action.Path));

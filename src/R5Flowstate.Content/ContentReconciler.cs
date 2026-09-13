@@ -263,7 +263,7 @@ public static class ContentReconciler
     {
         var info = new FileInfo(full);
         if (!info.Exists)
-            return WholeFetch(entry);
+            return AdoptPartOrFetch(entry, full, plan, reporter, cancel);
 
         if (info.Length != entry.Size)
             return Differs(entry, full, overlay, plan, reporter, cancel, restoreMapPayloads);
@@ -288,13 +288,13 @@ public static class ContentReconciler
                 if (!known.PlayerEdited)
                     return Differs(entry, full, overlay, plan, reporter, cancel, restoreMapPayloads);
             }
-            // The index was written by an older launcher that replaced it per
-            // track rather than merging, so a whole track can have no records at
-            // all. Re-hashing tens of GB to rediscover what the manifest already
-            // says is not worth it when the tip's content is byte-identical to
-            // what was installed: right size at the right path is enough, and a
-            // file that is absent or truncated still gets fetched.
+            // Size-only keep is for an untouched file we have no record of
+            // (old-launcher adoption) or a record that still matches. A changed
+            // mtime means the bytes may have changed -- hash them. Trusting
+            // size after a killed in-place write is how a full-size sparse
+            // dest becomes "installed".
             if (trustSize && !isOverlay &&
+                (known is null || known.StatMatches(info.Length, mtime)) &&
                 (known is null ||
                  !known.PlayerEdited ||
                  KeepRecordedEdit(known, entry.Path, overlay, restoreMapPayloads)))
@@ -382,11 +382,60 @@ public static class ContentReconciler
             entry.IsChunked ? Enumerable.Range(0, entry.Chunks!.Count).ToList() : null,
             entry.Size);
 
+    /// <summary>
+    /// Dest is missing. A sibling part from a killed write is resume material,
+    /// not a reason to refetch the whole file -- and not a Keep, because the
+    /// live name is still empty.
+    /// </summary>
+    static FileAction AdoptPartOrFetch(
+        ContentFile entry, string dest, ReconcilePlan plan, ScanReporter reporter,
+        CancellationToken cancel)
+    {
+        if (!entry.IsChunked)
+            return WholeFetch(entry);
+
+        var part = dest + ContentExecutor.PartSuffix;
+        try
+        {
+            var info = new FileInfo(part);
+            if (!info.Exists || info.Length != entry.Size)
+                return WholeFetch(entry);
+
+            var missing = FindMissingChunks(entry, part, cancel, n =>
+            {
+                plan.HashedBytes += n;
+                reporter.Tick(n);
+            });
+            var bytes = missing.Sum(entry.ChunkLength);
+            return new FileAction(
+                entry.Path, entry, FileActionKind.FetchChunks, missing, bytes);
+        }
+        catch (IOException)
+        {
+            return WholeFetch(entry);
+        }
+    }
+
     static List<int> MissingChunks(
         ContentFile entry, string full, ReconcilePlan plan, ScanReporter reporter,
         CancellationToken cancel)
     {
+        return FindMissingChunks(entry, full, cancel, n =>
+        {
+            plan.HashedBytes += n;
+            reporter.Tick(n);
+        });
+    }
+
+    /// <summary>Which chunks of <paramref name="full"/> do not match the manifest.</summary>
+    public static List<int> FindMissingChunks(
+        ContentFile entry, string full, CancellationToken cancel = default,
+        Action<long>? read = null)
+    {
         var missing = new List<int>();
+        if (!entry.IsChunked)
+            return missing;
+
         using var fs = new FileStream(
             full, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024,
             FileOptions.SequentialScan);
@@ -403,15 +452,14 @@ public static class ContentReconciler
             while (left > 0)
             {
                 var want = (int)Math.Min(buffer.Length, left);
-                var read = fs.Read(buffer, 0, want);
-                if (read <= 0)
+                var n = fs.Read(buffer, 0, want);
+                if (n <= 0)
                     break;
-                hash.AppendData(buffer, 0, read);
-                left -= read;
-                reporter.Tick(read);
+                hash.AppendData(buffer, 0, n);
+                left -= n;
+                read?.Invoke(n);
             }
 
-            plan.HashedBytes += len - left;
             var actual = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
             if (left > 0 || !string.Equals(actual, entry.Chunks[i], StringComparison.OrdinalIgnoreCase))
                 missing.Add(i);
@@ -515,7 +563,7 @@ public static class ContentReconciler
 
     static bool IsLauncherPrivate(string rel) =>
         rel.StartsWith(ProductConstants.ContentCacheDirName + "/", StringComparison.OrdinalIgnoreCase) ||
-        rel.EndsWith(".r5fpart", StringComparison.OrdinalIgnoreCase) ||
+        rel.EndsWith(ContentExecutor.PartSuffix, StringComparison.OrdinalIgnoreCase) ||
         rel.Equals(ProductConstants.ModsDirName, StringComparison.OrdinalIgnoreCase) ||
         rel.StartsWith(ProductConstants.ModsDirName + "/", StringComparison.OrdinalIgnoreCase);
 

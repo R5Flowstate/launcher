@@ -643,7 +643,8 @@ public static class ContentInstallService
                             cancel,
                             overlay,
                             contentUnchanged: contentUnchanged && !forceReinstall,
-                            restoreMapPayloads: restoreMapPayloads).ConfigureAwait(false);
+                            restoreMapPayloads: restoreMapPayloads,
+                            ignoreIndex: forceReinstall).ConfigureAwait(false);
                     }
                     else if (step.Kind == UpdateStepKind.InstallBase)
                     {

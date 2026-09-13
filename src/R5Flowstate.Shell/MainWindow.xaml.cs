@@ -255,6 +255,8 @@ public partial class MainWindow : Window
                 ChkOpenConsoleOnLaunch.IsChecked = _settings.OpenConsoleOnLaunch;
             if (ChkShowUnlistedMaps is not null)
                 ChkShowUnlistedMaps.IsChecked = _settings.ShowUnlistedMaps;
+            if (ChkJoinWithoutDev is not null)
+                ChkJoinWithoutDev.IsChecked = _settings.JoinWithoutDev;
             if (ChkUseDx12 is not null)
                 ChkUseDx12.IsChecked = _settings.UseDx12;
             if (ChkClientDx12 is not null)
@@ -1309,6 +1311,18 @@ public partial class MainWindow : Window
         ReloadPlaylistsAndMaps(selectSaved: true);
     }
 
+    private void OnJoinWithoutDevChanged(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded || _suppressArgsPersist)
+            return;
+        _settings.JoinWithoutDev = ChkJoinWithoutDev?.IsChecked == true;
+        try { SettingsStore.Save(_settings); }
+        catch (Exception ex) { Log($"Settings save failed: {ex.Message}"); }
+        Log(_settings.JoinWithoutDev
+            ? "Join: drop developer mode"
+            : "Join: keep developer mode");
+    }
+
     private void OnDediSelectionChanged(object sender, RoutedEventArgs e)
     {
         if (!IsLoaded || _suppressDediUi || _suppressArgsPersist)
@@ -1444,6 +1458,8 @@ public partial class MainWindow : Window
         _settings.FilterMapsByPlaylist = ChkFilterMaps.IsChecked == true;
         if (ChkShowUnlistedMaps is not null)
             _settings.ShowUnlistedMaps = ChkShowUnlistedMaps.IsChecked == true;
+        if (ChkJoinWithoutDev is not null)
+            _settings.JoinWithoutDev = ChkJoinWithoutDev.IsChecked == true;
         if (ChkOpenConsoleOnLaunch is not null)
             _settings.OpenConsoleOnLaunch = ChkOpenConsoleOnLaunch.IsChecked == true;
         _settings.DediPlaylist = SelectedPlaylistId();
@@ -1452,6 +1468,7 @@ public partial class MainWindow : Window
         _settings.DediPasswordEnabled = IsPasswordProtectOn();
         _settings.DediPassword = StoredPasswordText();
         CaptureResolutionFromUi();
+        CaptureDownloadLimitFromUi();
         CaptureModeSettingsFromUi();
 
         try
@@ -2611,6 +2628,8 @@ public partial class MainWindow : Window
     private bool IsDeveloperOn() =>
         ChkSimpleDeveloper?.IsChecked == true;
 
+    private bool IsJoinWithoutDevOn() => _settings.JoinWithoutDev;
+
     private bool IsOfflineOn() =>
         ChkSimpleOffline?.IsChecked == true;
 
@@ -2666,6 +2685,7 @@ public partial class MainWindow : Window
 
     /// <summary>Offline state of the most recently spawned client.</summary>
     private bool _lastClientOfflineAuth;
+    private bool _lastClientDevLaunch;
 
     /// <summary>The play bar and the server browser each own a copy of the picker.</summary>
     private IEnumerable<Button> ResolutionButtons()
@@ -2979,10 +2999,13 @@ public partial class MainWindow : Window
             password = string.Empty;
 
         CaptureResolutionFromUi();
-        return LaunchArgs.BuildClientArgs(ClientProfile(), new ClientArgOptions
+        var dropDev = forceOnline && IsJoinWithoutDevOn();
+        var profile = dropDev ? LaunchProfile.ShippingPlayer : ClientProfile();
+        return LaunchArgs.BuildClientArgs(profile, new ClientArgOptions
         {
             OfflineNoAuth = !forceOnline && IsOfflineOn(),
             ForceOnline = forceOnline,
+            DropDev = dropDev,
             Extra = TxtClientArgs.Text ?? string.Empty,
             IncludeConnect = includeConnect,
             ConnectHost = connectHost,
@@ -3260,6 +3283,7 @@ public partial class MainWindow : Window
             {
                 _launcherOwnsClient = true;
                 _lastClientOfflineAuth = ContainsArgToken(args, "-offline");
+                _lastClientDevLaunch = LaunchArgs.HasDevClientToken(args);
             }
             Log($"[{role}] pid={result.ProcessId} {LaunchArgs.RedactSensitiveArgs(result.CommandLine ?? string.Empty)}");
         }

@@ -905,10 +905,14 @@ public partial class MainWindow
             // offline-auth client cannot pass server auth, so it relaunches.
             // Session mod filters and newly installed mods only take effect on
             // a fresh boot (the engine reads mods.vdf once).
+            var dropDev = IsJoinWithoutDevOn();
             if (!forceRelaunch && !modsRelaunch && !_lastClientOfflineAuth &&
+                !(dropDev && _lastClientDevLaunch) &&
                 TryHopToServer(listing, root, target, listing.HasPassword ? joinPw : null))
                 return;
 
+            if (dropDev && _lastClientDevLaunch)
+                Log("Join: relaunching without developer mode");
             Log($"Join: {listing.Name} -> +connect {target}");
             SetBrowserStatus("Joining " + listing.Name + "…");
 

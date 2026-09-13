@@ -5238,6 +5238,12 @@ add("lb_match_winner",
 add("show_unlisted_maps",
     english="Show unlisted maps")
 
+add("join_without_dev",
+    english="Drop developer mode when joining a server")
+
+add("tip_join_without_dev",
+    english="Join launches without -dev / -devsdk. Turn this off to keep Developer on a public server.")
+
 add("tip_client_settings",
     english="Renderer and resolution for the client this browser launches", french="Moteur de rendu et résolution du client lancé depuis cette liste", german="Renderer und Auflösung des Clients, den diese Liste startet", italian="Renderer e risoluzione del client avviato da questo elenco", japanese="このサーバー一覧から起動するクライアントの描画APIと解像度", polish="Renderer i rozdzielczość klienta uruchamianego z tej listy", russian="Рендерер и разрешение клиента, запускаемого из этого списка", spanish="Renderizador y resolución del cliente que lanza esta lista", schinese="从该服务器列表启动的客户端的渲染器与分辨率", tchinese="從該伺服器清單啟動的用戶端的算繪器與解析度", korean="이 서버 목록에서 실행하는 클라이언트의 렌더러와 해상도", portuguese="Renderizador e resolução do cliente iniciado por esta lista")
 
