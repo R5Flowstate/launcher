@@ -3,6 +3,16 @@
   "kind": "notes",
   "entries": [
     {
+      "date": "13 Sep 2026",
+      "title": "Launcher 0.1.50",
+      "items": [
+        "Keep PLAY when only scripts differ",
+        "Show DOWNLOAD MISSING for broken files",
+        "Keep custom maps on update",
+        "Restore official files from Advanced"
+      ]
+    },
+    {
       "date": "12 Sep 2026",
       "title": "Launcher 0.1.49",
       "items": [

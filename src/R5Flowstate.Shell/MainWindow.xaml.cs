@@ -41,6 +41,7 @@ public partial class MainWindow : Window
     private bool _quickPlayBusy;
     private bool _installBusy;
     private bool _contentRepair;
+    private bool _contentRestore;
     private CancellationTokenSource? _installCts;
     private InstallRunControl? _installRun;
     private bool _verifyBusy;
@@ -1613,9 +1614,11 @@ public partial class MainWindow : Window
     }
 
     private void OnRepair(object sender, RoutedEventArgs e) =>
-        _ = RunRepairAsync();
+        _ = RunRepairAsync(restoreOfficial: true);
 
-    private async Task RunRepairAsync(bool resumeIncomplete = false)
+    private async Task RunRepairAsync(
+        bool resumeIncomplete = false,
+        bool restoreOfficial = false)
     {
         if (_installBusy)
             return;
@@ -1639,34 +1642,74 @@ public partial class MainWindow : Window
             return;
         }
 
-        _contentRepair = true;
+        if (restoreOfficial)
+        {
+            var ans = MessageBox.Show(
+                this,
+                Loc.Get("restore_official_confirm"),
+                Loc.Get("restore_official_title"),
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning);
+            if (ans != MessageBoxResult.OK)
+                return;
+        }
+
+        _contentRestore = restoreOfficial;
+        _contentRepair = !restoreOfficial;
         _installBusy = true;
         SetInstallButtonsEnabled(false);
         RefreshSimplePlayButton();
         try
         {
-            Log(resumeIncomplete
-                ? "Content repair: fetch missing and replace damaged files."
-                : "Content health check + auto-repair (corrupt only; updates need Check for updates)…");
+            Log(restoreOfficial
+                ? "Restore official files (scripts included)."
+                : resumeIncomplete
+                    ? "Download missing and replace damaged files."
+                    : "Content health check + download missing…");
             if (TxtInstallStatus is not null)
                 TxtInstallStatus.Text = Loc.Get("status_checking_health");
             BarInstall.Value = 0;
             ShowSimpleInstallBar(true);
-            SetSimpleStatus(Loc.Get("status_repairing"));
+            SetSimpleStatus(Loc.Get(restoreOfficial ? "status_restoring" : "status_repairing"));
 
             var progress = CreateInstallProgress();
             var gate = await RefreshDownloadGateAsync().ConfigureAwait(true);
-            var health = await ContentInstallService.EnsureReadyAsync(
-                _manifest,
-                installPath,
-                requireClient: true,
-                requireServer: true,
-                autoRepairCorrupt: true,
-                autoApplyUpdates: resumeIncomplete,
-                progress: progress,
-                decideOverlay: DecideOverlayEdits,
-                allowContent: gate.Content,
-                allowPlatform: gate.Platform).ConfigureAwait(true);
+            InstallHealthReport health;
+            if (restoreOfficial)
+            {
+                await ContentInstallService.InstallAsync(
+                    _manifest,
+                    InstallMode.Full,
+                    installPath,
+                    fetcher: null,
+                    progress: progress,
+                    decideOverlay: null,
+                    allowContent: gate.Content,
+                    allowPlatform: gate.Platform,
+                    forceReinstall: true,
+                    forcedOverlay: OverlayExtractPolicy.WriteOfficial)
+                    .ConfigureAwait(true);
+                health = await Task.Run(() => ContentInstallService.Assess(
+                    _manifest, installPath, requireClient: true, requireServer: true))
+                    .ConfigureAwait(true);
+                _healthMemo = health;
+                _healthMemoRoot = installPath;
+                _healthMemoUtc = DateTime.UtcNow;
+            }
+            else
+            {
+                health = await ContentInstallService.EnsureReadyAsync(
+                    _manifest,
+                    installPath,
+                    requireClient: true,
+                    requireServer: true,
+                    autoRepairCorrupt: true,
+                    autoApplyUpdates: resumeIncomplete,
+                    progress: progress,
+                    decideOverlay: DecideOverlayEdits,
+                    allowContent: gate.Content,
+                    allowPlatform: gate.Platform).ConfigureAwait(true);
+            }
 
             RefreshInstallStateLabels();
             if (health.NeedsUpdate)
@@ -1690,19 +1733,21 @@ public partial class MainWindow : Window
                 if (TxtInstallStatus is not null)
                     TxtInstallStatus.Text = Loc.Format("status_health_ok", health.Summary);
                 UpdateStatus(Loc.Get("status_content_healthy"));
-                SetSimpleStatus(Loc.Get("ready_to_play"));
+                SetSimpleStatus(health.HasOverlayEdits
+                    ? Loc.Format("status_scripts_differ", health.OverlayEditCount)
+                    : Loc.Get("ready_to_play"));
             }
             else
             {
                 if (TxtInstallStatus is not null)
                     TxtInstallStatus.Text = Loc.Format("status_still_blocked", health.Summary);
                 UpdateStatus(Loc.Get("status_content_not_ready_short"));
-                SetSimpleStatus(Loc.Get("status_files_need_work"));
+                SetSimpleStatus(MissingFilesStatus(health));
             }
         }
         catch (Exception ex)
         {
-            Log("Repair error: " + ex.Message);
+            Log((restoreOfficial ? "Restore official" : "Download missing") + " error: " + ex.Message);
             TxtInstallStatus.Text = Loc.Format("status_error", ex.Message);
             SetError(ex.Message);
             SetSimpleStatus(Loc.Get("status_check_failed"));
@@ -1711,10 +1756,19 @@ public partial class MainWindow : Window
         {
             _installBusy = false;
             _contentRepair = false;
+            _contentRestore = false;
             SetInstallButtonsEnabled(true);
             ShowSimpleInstallBar(false);
             RefreshInstallStateLabels();
         }
+    }
+
+    static string MissingFilesStatus(InstallHealthReport health)
+    {
+        var n = health.BrokenFileCount;
+        return n > 0
+            ? Loc.Format("status_files_need_repair", n)
+            : Loc.Get("status_files_need_work");
     }
 
     private async Task RunInstallAsync(InstallMode mode)
@@ -1778,6 +1832,7 @@ public partial class MainWindow : Window
         _installCts = new CancellationTokenSource();
         _installRun = new InstallRunControl();
         _contentRepair = false;
+        _contentRestore = false;
         _installBusy = true;
         SetInstallButtonsEnabled(false);
         RefreshSimplePlayButton();
@@ -1882,14 +1937,18 @@ public partial class MainWindow : Window
         if (TxtHealth is not null)
         {
             TxtHealth.Text = HealthLine(health);
-            TxtHealth.Foreground = health.Overall switch
-            {
-                InstallHealthStatus.Ready => System.Windows.Media.Brushes.LightGreen,
-                InstallHealthStatus.UpdateAvailable => System.Windows.Media.Brushes.Gold,
-                InstallHealthStatus.Corrupted => System.Windows.Media.Brushes.OrangeRed,
-                InstallHealthStatus.Incomplete => System.Windows.Media.Brushes.Orange,
-                _ => System.Windows.Media.Brushes.Gray,
-            };
+            TxtHealth.Foreground =
+                health.Overall == InstallHealthStatus.Corrupted
+                    ? System.Windows.Media.Brushes.OrangeRed
+                    : health.HasOverlayEdits
+                        ? System.Windows.Media.Brushes.Gold
+                        : health.Overall switch
+                        {
+                            InstallHealthStatus.Ready => System.Windows.Media.Brushes.LightGreen,
+                            InstallHealthStatus.UpdateAvailable => System.Windows.Media.Brushes.Gold,
+                            InstallHealthStatus.Incomplete => System.Windows.Media.Brushes.Orange,
+                            _ => System.Windows.Media.Brushes.Gray,
+                        };
         }
 
         RefreshHdTextures();
@@ -1901,13 +1960,20 @@ public partial class MainWindow : Window
 
     static string HealthLine(InstallHealthReport health)
     {
+        if (health.Overall == InstallHealthStatus.Corrupted)
+        {
+            return health.BrokenFileCount > 0
+                ? Loc.Format("health_missing_n", health.BrokenFileCount)
+                : Loc.Get("health_corrupt");
+        }
         if (!health.Enforced)
             return Loc.Get("health_local");
+        if (health.Overall == InstallHealthStatus.Ready && health.HasOverlayEdits)
+            return Loc.Format("health_scripts_differ", health.OverlayEditCount);
         return health.Overall switch
         {
             InstallHealthStatus.Ready => Loc.Get("health_ready"),
             InstallHealthStatus.UpdateAvailable => Loc.Get("health_update"),
-            InstallHealthStatus.Corrupted => Loc.Get("health_corrupt"),
             InstallHealthStatus.Incomplete => Loc.Get("health_incomplete"),
             InstallHealthStatus.Missing => Loc.Get("health_missing"),
             _ => health.Summary,
@@ -2468,7 +2534,9 @@ public partial class MainWindow : Window
             reason.Contains("newer", StringComparison.OrdinalIgnoreCase))
             return Loc.Get("plain_update");
         if (reason.Contains("corrupt", StringComparison.OrdinalIgnoreCase) ||
-            reason.Contains("repair", StringComparison.OrdinalIgnoreCase))
+            reason.Contains("repair", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("DOWNLOAD MISSING", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("missing", StringComparison.OrdinalIgnoreCase))
             return Loc.Get("plain_repair");
         return Loc.Get("plain_install");
     }
@@ -4175,8 +4243,11 @@ public partial class MainWindow : Window
                 else if (_installBusy)
                 {
                     _simplePlayKind = SimplePlayKind.Installing;
-                    PaintPlayButton(Loc.Get(_contentRepair ? "repairing" : "installing"), enabled: false, stop: false);
-                    ShowSimpleSetupLayout(!confirmed || _contentRepair);
+                    PaintPlayButton(Loc.Get(
+                        _contentRestore ? "restoring"
+                        : _contentRepair ? "repairing"
+                        : "installing"), enabled: false, stop: false);
+                    ShowSimpleSetupLayout(!confirmed || _contentRepair || _contentRestore);
                 }
                 else if (_quickPlayBusy && (_hostedLocalMatch ||
                     ProcessSpawner.IsRoleAlive(LaunchRole.Dedicated, root)))
@@ -4207,7 +4278,7 @@ public partial class MainWindow : Window
                 PaintInstallControls();
                 ApplyInstallDiskStatus();
                 if (repair && !_installDiskBlocked)
-                    SetSimpleStatus(Loc.Get("status_files_need_repair"));
+                    SetSimpleStatus(MissingFilesStatus(health));
                 return;
             }
 
@@ -4251,6 +4322,8 @@ public partial class MainWindow : Window
                     var repair = !NeedsSetup(root);
                     _simplePlayKind = repair ? SimplePlayKind.Repair : SimplePlayKind.Install;
                     PaintPlayButton(Loc.Get(repair ? "repair_action" : "install"), enabled: true, stop: false);
+                    if (repair)
+                        SetSimpleStatus(MissingFilesStatus(health));
                     return;
                 }
             }
@@ -4258,6 +4331,8 @@ public partial class MainWindow : Window
             _simplePlayKind = SimplePlayKind.Play;
             PaintPlayButton(Loc.Get("play"), enabled: _selectedMode is not null, stop: false);
             BtnPlay.Visibility = _simpleTab == SimpleTab.Play ? Visibility.Visible : Visibility.Collapsed;
+            if (health.HasOverlayEdits)
+                SetSimpleStatus(Loc.Format("status_scripts_differ", health.OverlayEditCount));
         }
         finally
         {
@@ -4293,7 +4368,9 @@ public partial class MainWindow : Window
             BtnPlay.Content = caption;
             BtnPlay.IsEnabled = enabled;
             BtnPlay.Visibility = Visibility.Visible;
-            BtnPlay.ToolTip = null;
+            BtnPlay.ToolTip = _simplePlayKind == SimplePlayKind.Repair
+                ? Loc.Get("tip_download_missing")
+                : null;
             var styleKey = _simplePlayKind switch
             {
                 SimplePlayKind.ChangeMap => "PlayBarChange",
@@ -4458,7 +4535,9 @@ public partial class MainWindow : Window
         var paused = _installRun?.IsPaused == true;
         if (TxtSimpleSetupTitle is not null)
             TxtSimpleSetupTitle.Text = busy
-                ? Loc.Get(_contentRepair ? "repairing_the_game" : "installing_the_game")
+                ? Loc.Get(_contentRestore ? "restoring_the_game"
+                    : _contentRepair ? "repairing_the_game"
+                    : "installing_the_game")
                 : _verifyBusy ? Loc.Get("checking_the_game")
                 : Loc.Get(_simplePlayKind == SimplePlayKind.Repair ? "repair_the_game" : "install_the_game");
         if (TxtSimpleSetupKicker is not null)
@@ -5363,7 +5442,7 @@ public partial class MainWindow : Window
             }
             else
             {
-                SetSimpleStatus(Loc.Get("status_files_need_repair"));
+                SetSimpleStatus(MissingFilesStatus(health));
                 Log("Folder check blocked: " + health.Summary);
             }
 

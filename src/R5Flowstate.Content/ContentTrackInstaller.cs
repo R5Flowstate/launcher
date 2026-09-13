@@ -26,7 +26,8 @@ public static class ContentTrackInstaller
         CancellationToken cancel = default,
         OverlayExtractPolicy overlay = OverlayExtractPolicy.WriteOfficial,
         int concurrency = 0,
-        bool contentUnchanged = false)
+        bool contentUnchanged = false,
+        bool restoreMapPayloads = false)
     {
         var result = new TrackInstallResult
         {
@@ -76,7 +77,7 @@ public static class ContentTrackInstaller
                             manifest, index, installPath, overlay, VerifyDepth.Overlay,
                             progress, cancel,
                             p => Checkpoint(indexPath, manifest, installPath, p),
-                            preset, contentUnchanged),
+                            preset, contentUnchanged, restoreMapPayloads),
                         cancel).ConfigureAwait(false);
 
                     result.LastScanHashed = plan.Hashed;

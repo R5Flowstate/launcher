@@ -118,7 +118,7 @@ public static class ContentInstallService
                     man,
                     skipRelativePath: ownsNonFat ? null : OverlayPaths.SkipFatVerify,
                     progress: fileProgress,
-                    sizeOptionalRelativePath: ownsNonFat ? OverlayPaths.SkipFatVerify : null);
+                    sizeOptionalRelativePath: OverlayPaths.IgnoreSizeMismatch);
             }
             catch (Exception ex)
             {
@@ -266,7 +266,8 @@ public static class ContentInstallService
         Func<OverlayEditReport, OverlayExtractPolicy>? decideOverlay = null,
         bool allowContent = true,
         bool allowPlatform = true,
-        bool forceReinstall = false)
+        bool forceReinstall = false,
+        OverlayExtractPolicy? forcedOverlay = null)
     {
         ArgumentNullException.ThrowIfNull(channel);
         if (string.IsNullOrWhiteSpace(installPath))
@@ -370,8 +371,13 @@ public static class ContentInstallService
         var overlayRemembered =
             overlayKeepKey is not null &&
             string.Equals(state.OverlayKeepKey, overlayKeepKey, StringComparison.Ordinal);
-        OverlayExtractPolicy? overlayPolicy =
-            overlayRemembered ? OverlayExtractPolicy.KeepEdits : null;
+        // Restore official must ignore OverlayKeepKey; remembered KeepEdits
+        // would otherwise no-op that button.
+        OverlayExtractPolicy? overlayPolicy = forcedOverlay
+            ?? (overlayRemembered ? OverlayExtractPolicy.KeepEdits : null);
+        if (overlayPolicy == OverlayExtractPolicy.WriteOfficial)
+            state.OverlayKeepKey = null;
+        var restoreMapPayloads = forcedOverlay == OverlayExtractPolicy.WriteOfficial;
 
         state.InstallPath = installPath;
         state.SdkVersionExpected = channel.EffectiveGateName;
@@ -636,7 +642,8 @@ public static class ContentInstallService
                             progress,
                             cancel,
                             overlay,
-                            contentUnchanged: contentUnchanged).ConfigureAwait(false);
+                            contentUnchanged: contentUnchanged && !forceReinstall,
+                            restoreMapPayloads: restoreMapPayloads).ConfigureAwait(false);
                     }
                     else if (step.Kind == UpdateStepKind.InstallBase)
                     {
@@ -648,7 +655,8 @@ public static class ContentInstallService
                             fetcher,
                             progress,
                             cancel,
-                            overlay).ConfigureAwait(false);
+                            overlay,
+                            restoreMapPayloads).ConfigureAwait(false);
                     }
                     else
                     {
@@ -660,7 +668,8 @@ public static class ContentInstallService
                             fetcher,
                             progress,
                             cancel,
-                            overlay).ConfigureAwait(false);
+                            overlay,
+                            restoreMapPayloads).ConfigureAwait(false);
                     }
 
                     if (!stepResult.Success)
@@ -842,7 +851,8 @@ public static class ContentInstallService
         IHttpFetcher fetcher,
         IProgress<ContentInstallProgress>? progress,
         CancellationToken cancel,
-        OverlayExtractPolicy overlay)
+        OverlayExtractPolicy overlay,
+        bool restoreMapPayloads)
     {
         var trackPlan = new TrackPlan
         {
@@ -861,7 +871,8 @@ public static class ContentInstallService
             fetcher,
             progress,
             cancel,
-            overlay).ConfigureAwait(false);
+            overlay,
+            restoreMapPayloads).ConfigureAwait(false);
 
         if (result.Success)
         {

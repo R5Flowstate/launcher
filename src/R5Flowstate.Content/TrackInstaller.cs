@@ -31,7 +31,8 @@ public static class TrackInstaller
         IHttpFetcher fetcher,
         IProgress<ContentInstallProgress>? progress = null,
         CancellationToken cancel = default,
-        OverlayExtractPolicy overlay = OverlayExtractPolicy.WriteOfficial)
+        OverlayExtractPolicy overlay = OverlayExtractPolicy.WriteOfficial,
+        bool restoreMapPayloads = false)
     {
         ArgumentNullException.ThrowIfNull(track);
         ArgumentNullException.ThrowIfNull(fetcher);
@@ -115,13 +116,17 @@ public static class TrackInstaller
                     password: null,
                     progress: WrapProgress(progress, track.Preset, "unpack"),
                     cancel: cancel,
-                    overlay: overlay);
+                    overlay: overlay,
+                    restoreMapPayloads: restoreMapPayloads);
 
-                // Post-unpack file verify; reget whole track if broken.
                 Func<string, bool>? skip = IsFatPreset(track.Preset)
                     ? OverlayPaths.SkipFatVerify
                     : null;
-                var vr = ShareFileVerifier.VerifyInstallFiles(installPath, manifest, skipRelativePath: skip);
+                var vr = ShareFileVerifier.VerifyInstallFiles(
+                    installPath,
+                    manifest,
+                    skipRelativePath: skip,
+                    sizeOptionalRelativePath: OverlayPaths.IgnoreSizeMismatch);
                 if (!vr.Ok)
                 {
                     progress?.Report(new ContentInstallProgress

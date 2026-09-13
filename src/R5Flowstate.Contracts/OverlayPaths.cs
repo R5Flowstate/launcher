@@ -55,6 +55,7 @@ public static class OverlayPaths
     static readonly string[] PlayerMapPrefixes =
     {
         "platform/maps/",
+        "maps/navmesh/",
     };
 
     public enum Class
@@ -122,6 +123,32 @@ public static class OverlayPaths
         var c = Classify(rel);
         return c is Class.OverlayOwned or Class.OverlayOptional or Class.OptOwned;
     }
+
+    /// <summary>
+    /// Map payload a player may replace or add. common.rpak is not this:
+    /// only mp_rr_* names plus disk maps and navmesh.
+    /// </summary>
+    public static bool IsMapPayload(string? rel)
+    {
+        var r = Norm(rel).ToLowerInvariant();
+        if (r.Length == 0)
+            return false;
+        if (r.EndsWith(OptOwnedSuffix, StringComparison.Ordinal))
+            return false;
+        if (IsPlayerMap(r))
+            return true;
+        var slash = r.LastIndexOf('/');
+        var name = slash >= 0 ? r[(slash + 1)..] : r;
+        return name.StartsWith("mp_rr_", StringComparison.Ordinal)
+               || name.Contains("_mp_rr_", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Size drift here is a player edit, not a truncated official file.
+    /// Presence is still required for files the pack lists.
+    /// </summary>
+    public static bool IgnoreSizeMismatch(string? rel) =>
+        SkipFatVerify(rel) || IsMapPayload(rel);
 
     public static bool IsOptOwned(string? rel) =>
         Classify(rel) == Class.OptOwned;

@@ -20,7 +20,8 @@ public static class PatchApplier
         IHttpFetcher fetcher,
         IProgress<ContentInstallProgress>? progress = null,
         CancellationToken cancel = default,
-        OverlayExtractPolicy overlay = OverlayExtractPolicy.WriteOfficial)
+        OverlayExtractPolicy overlay = OverlayExtractPolicy.WriteOfficial,
+        bool restoreMapPayloads = false)
     {
         ArgumentNullException.ThrowIfNull(step);
         ArgumentNullException.ThrowIfNull(fetcher);
@@ -77,7 +78,8 @@ public static class PatchApplier
                 fetcher,
                 progress,
                 cancel,
-                overlay).ConfigureAwait(false);
+                overlay,
+                restoreMapPayloads).ConfigureAwait(false);
 
             if (!unpack.Success)
             {

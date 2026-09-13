@@ -14,7 +14,8 @@ public static class ShareUnpacker
         string? password = null,
         IProgress<ContentInstallProgress>? progress = null,
         CancellationToken cancel = default,
-        OverlayExtractPolicy overlay = OverlayExtractPolicy.WriteOfficial)
+        OverlayExtractPolicy overlay = OverlayExtractPolicy.WriteOfficial,
+        bool restoreMapPayloads = false)
     {
         if (string.IsNullOrWhiteSpace(shareDir))
             throw new ArgumentException("Share directory is required.", nameof(shareDir));
@@ -30,9 +31,12 @@ public static class ShareUnpacker
 
         var engine = (man.Engine ?? string.Empty).Trim();
         if (man.Schema >= 2 || string.Equals(engine, "7z", StringComparison.OrdinalIgnoreCase))
-            return Unpack7z(shareDir, destInstallPath, man, password, progress, cancel, overlay);
+            return Unpack7z(
+                shareDir, destInstallPath, man, password, progress, cancel, overlay,
+                restoreMapPayloads);
 
-        return UnpackZip(shareDir, destInstallPath, man, password, progress, cancel);
+        return UnpackZip(
+            shareDir, destInstallPath, man, password, progress, cancel, restoreMapPayloads);
     }
 
     static int Unpack7z(
@@ -42,7 +46,8 @@ public static class ShareUnpacker
         string? password,
         IProgress<ContentInstallProgress>? progress,
         CancellationToken cancel,
-        OverlayExtractPolicy overlay)
+        OverlayExtractPolicy overlay,
+        bool restoreMapPayloads)
     {
         var seven = SevenZipLocator.Find7z();
         var archives = man.Archives;
@@ -115,7 +120,7 @@ public static class ShareUnpacker
             var label = string.IsNullOrWhiteSpace(arch.Group)
                 ? Path.GetFileName(first)
                 : arch.Group;
-            if (ArchiveAlreadyExtracted(destInstallPath, arch, overlay))
+            if (ArchiveAlreadyExtracted(destInstallPath, arch, overlay, restoreMapPayloads))
             {
                 ReportUnpack(progress, ai, archives.Count, label, 100, arch.PayloadBytes);
                 count += arch.FileCount;
@@ -127,6 +132,7 @@ public static class ShareUnpacker
             var args = $"x \"{first}\" -o\"{destInstallPath}\" -y -aoa -bsp1 -bb0 -bso0 -mmt=1";
             if (overlay == OverlayExtractPolicy.KeepEdits)
                 args += OverlayExcludeArgs();
+            args += ExistingMapExcludeArgs(destInstallPath, arch, restoreMapPayloads);
             if (!string.IsNullOrEmpty(password))
                 args += $" -p{password}";
 
@@ -164,10 +170,28 @@ public static class ShareUnpacker
         return sb.ToString();
     }
 
+    static string ExistingMapExcludeArgs(
+        string destRoot, ShareArchive arch, bool restoreMapPayloads)
+    {
+        if (restoreMapPayloads || arch.Files is null || arch.Files.Count == 0)
+            return string.Empty;
+        var sb = new StringBuilder();
+        foreach (var f in arch.Files)
+        {
+            if (string.IsNullOrWhiteSpace(f.Path) || !OverlayPaths.IsMapPayload(f.Path))
+                continue;
+            if (!SafePath.TryJoin(destRoot, f.Path, out var full) || !File.Exists(full))
+                continue;
+            sb.Append(" -x!\"").Append(f.Path.Replace('/', '\\')).Append('"');
+        }
+        return sb.ToString();
+    }
+
     static bool ArchiveAlreadyExtracted(
         string destRoot,
         ShareArchive arch,
-        OverlayExtractPolicy overlay)
+        OverlayExtractPolicy overlay,
+        bool restoreMapPayloads)
     {
         var files = arch.Files;
         if (files is null || files.Count == 0)
@@ -177,6 +201,8 @@ public static class ShareUnpacker
             if (string.IsNullOrWhiteSpace(f.Path))
                 continue;
             if (overlay == OverlayExtractPolicy.KeepEdits && OverlayPaths.IsOverlayOwned(f.Path))
+                continue;
+            if (!restoreMapPayloads && OverlayPaths.IsMapPayload(f.Path))
                 continue;
             var rel = f.Path.Replace('/', Path.DirectorySeparatorChar);
             var full = Path.Combine(destRoot, rel);
@@ -410,7 +436,8 @@ public static class ShareUnpacker
         ShareManifest man,
         string? password,
         IProgress<ContentInstallProgress>? progress,
-        CancellationToken cancel)
+        CancellationToken cancel,
+        bool restoreMapPayloads)
     {
         // Schema 1 legacy: zip volumes. Password-protected zip is not implemented
         // (shipping path is schema 2 / 7z); empty password only.
@@ -442,6 +469,10 @@ public static class ShareUnpacker
                 cancel.ThrowIfCancellationRequested();
                 var entry = entries[i];
                 var target = Path.Combine(destInstallPath, entry.FullName.Replace('/', Path.DirectorySeparatorChar));
+                if (!restoreMapPayloads &&
+                    OverlayPaths.IsMapPayload(entry.FullName) &&
+                    File.Exists(target))
+                    continue;
                 var parent = Path.GetDirectoryName(target);
                 if (!string.IsNullOrEmpty(parent))
                     Directory.CreateDirectory(parent);

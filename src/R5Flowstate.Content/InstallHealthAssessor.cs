@@ -53,7 +53,7 @@ public static class InstallHealthAssessor
         // No channel + no state → not enforced (local master preflight only).
         if (channel is null && state is null)
         {
-            return MasterTreeReady(report, installPath, requireClient, requireServer,
+            return MasterTreeReady(report, installPath, requireClient, requireServer, channel,
                 "No CHANNEL / INSTALL_STATE — preflight only.");
         }
 
@@ -66,7 +66,7 @@ public static class InstallHealthAssessor
 
         if (channel is not null && !channelHasDownloadableAssets && state is null)
         {
-            return MasterTreeReady(report, installPath, requireClient, requireServer,
+            return MasterTreeReady(report, installPath, requireClient, requireServer, channel,
                 "Local CHANNEL tip (no share assets) — preflight only.");
         }
 
@@ -74,7 +74,7 @@ public static class InstallHealthAssessor
         // Do not report Missing just because a pack CHANNEL is loaded for smoke/tools.
         if (state is null && IsMasterTree(installPath, requireClient, requireServer, channel))
         {
-            return MasterTreeReady(report, installPath, requireClient, requireServer,
+            return MasterTreeReady(report, installPath, requireClient, requireServer, channel,
                 "Master install tree (no INSTALL_STATE) — pack not required.");
         }
 
@@ -160,6 +160,7 @@ public static class InstallHealthAssessor
 
         report.Overall = Worst(statuses);
         CollectReasons(report);
+        AttachOverlay(report, installPath, channel);
         return report;
     }
 
@@ -270,7 +271,7 @@ public static class InstallHealthAssessor
                     installPath,
                     man,
                     skipRelativePath: isPlatform ? null : OverlayPaths.SkipFatVerify,
-                    sizeOptionalRelativePath: isPlatform ? OverlayPaths.SkipFatVerify : null);
+                    sizeOptionalRelativePath: OverlayPaths.IgnoreSizeMismatch);
                 h.MissingFileCount = vr.Missing;
                 h.SizeMismatchCount = vr.SizeMismatch;
                 h.SampleIssues = vr.Samples;
@@ -334,7 +335,7 @@ public static class InstallHealthAssessor
                                 continue;
                             }
                             var len = new FileInfo(full).Length;
-                            if (len != f.Size)
+                            if (len != f.Size && !OverlayPaths.IgnoreSizeMismatch(f.Path))
                             {
                                 sizeMismatch++;
                                 if (samples.Count < 4)
@@ -396,6 +397,7 @@ public static class InstallHealthAssessor
         string installPath,
         bool requireClient,
         bool requireServer,
+        ChannelManifest? channel,
         string reason)
     {
         report.Overall = InstallHealthStatus.Ready;
@@ -435,6 +437,7 @@ public static class InstallHealthAssessor
         if (report.Overall != InstallHealthStatus.Ready)
             report.Enforced = true;
         CollectReasons(report);
+        AttachOverlay(report, installPath, channel);
         return report;
     }
 
@@ -623,6 +626,23 @@ public static class InstallHealthAssessor
         if (list.Contains(InstallHealthStatus.Missing))
             return InstallHealthStatus.Missing;
         return InstallHealthStatus.Ready;
+    }
+
+    static void AttachOverlay(
+        InstallHealthReport report,
+        string installPath,
+        ChannelManifest? channel)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(installPath) || !Directory.Exists(installPath))
+                return;
+            report.Overlay = OverlayEditProbe.Scan(installPath, channel);
+        }
+        catch
+        {
+            // Probe failure is not a health fault; track status still stands.
+        }
     }
 
     static void CollectReasons(InstallHealthReport report)

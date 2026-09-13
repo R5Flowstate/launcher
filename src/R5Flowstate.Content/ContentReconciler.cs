@@ -112,7 +112,8 @@ public static class ContentReconciler
         CancellationToken cancel = default,
         Action<ReconcilePlan>? checkpoint = null,
         string track = "",
-        bool trustSize = false)
+        bool trustSize = false,
+        bool restoreMapPayloads = false)
     {
         ArgumentNullException.ThrowIfNull(manifest);
         if (string.IsNullOrWhiteSpace(installPath))
@@ -144,7 +145,9 @@ public static class ContentReconciler
             wanted.Add(OverlayPaths.Norm(entry.Path));
 
             reporter.Begin(entry.Path);
-            plan.Actions.Add(Decide(entry, full, index, overlay, depth, plan, reporter, cancel, trustSize));
+            plan.Actions.Add(Decide(
+                entry, full, index, overlay, depth, plan, reporter, cancel, trustSize,
+                restoreMapPayloads));
             reporter.Finish(entry.Size);
 
             if (checkpoint is not null && plan.Hashed > 0 &&
@@ -255,14 +258,15 @@ public static class ContentReconciler
         ReconcilePlan plan,
         ScanReporter reporter,
         CancellationToken cancel,
-        bool trustSize = false)
+        bool trustSize = false,
+        bool restoreMapPayloads = false)
     {
         var info = new FileInfo(full);
         if (!info.Exists)
             return WholeFetch(entry);
 
         if (info.Length != entry.Size)
-            return Differs(entry, full, overlay, plan, reporter, cancel);
+            return Differs(entry, full, overlay, plan, reporter, cancel, restoreMapPayloads);
 
         var isOverlay = OverlayPaths.IsOverlayOwned(entry.Path);
         var mtime = info.LastWriteTimeUtc.Ticks;
@@ -276,11 +280,13 @@ public static class ContentReconciler
             var known = Lookup(index, entry.Path);
             if (known is not null && known.StatMatches(info.Length, mtime))
             {
-                if (known.PlayerEdited)
+                if (KeepRecordedEdit(known, entry.Path, overlay, restoreMapPayloads))
                     return new FileAction(entry.Path, entry, FileActionKind.KeepPlayerEdit);
-                if (string.Equals(known.Sha256, entry.Sha256, StringComparison.OrdinalIgnoreCase))
+                if (!known.PlayerEdited &&
+                    string.Equals(known.Sha256, entry.Sha256, StringComparison.OrdinalIgnoreCase))
                     return new FileAction(entry.Path, entry, FileActionKind.Keep);
-                return Differs(entry, full, overlay, plan, reporter, cancel);
+                if (!known.PlayerEdited)
+                    return Differs(entry, full, overlay, plan, reporter, cancel, restoreMapPayloads);
             }
             // The index was written by an older launcher that replaced it per
             // track rather than merging, so a whole track can have no records at
@@ -288,7 +294,10 @@ public static class ContentReconciler
             // says is not worth it when the tip's content is byte-identical to
             // what was installed: right size at the right path is enough, and a
             // file that is absent or truncated still gets fetched.
-            if (trustSize && !isOverlay)
+            if (trustSize && !isOverlay &&
+                (known is null ||
+                 !known.PlayerEdited ||
+                 KeepRecordedEdit(known, entry.Path, overlay, restoreMapPayloads)))
                 return new FileAction(entry.Path, entry, FileActionKind.Keep);
             // No trustworthy record, so fall through and hash rather than guess.
         }
@@ -309,7 +318,20 @@ public static class ContentReconciler
             return new FileAction(entry.Path, entry, FileActionKind.Keep);
         }
 
-        return Differs(entry, full, overlay, plan, reporter, cancel);
+        return Differs(entry, full, overlay, plan, reporter, cancel, restoreMapPayloads);
+    }
+
+    static bool KeepRecordedEdit(
+        InstallFileState known,
+        string path,
+        OverlayExtractPolicy overlay,
+        bool restoreMapPayloads)
+    {
+        if (!known.PlayerEdited)
+            return false;
+        if (overlay == OverlayExtractPolicy.KeepEdits)
+            return true;
+        return OverlayPaths.IsMapPayload(path) && !restoreMapPayloads;
     }
 
     static FileAction Differs(
@@ -318,8 +340,11 @@ public static class ContentReconciler
         OverlayExtractPolicy overlay,
         ReconcilePlan plan,
         ScanReporter reporter,
-        CancellationToken cancel)
+        CancellationToken cancel,
+        bool restoreMapPayloads)
     {
+        if (OverlayPaths.IsMapPayload(entry.Path) && !restoreMapPayloads)
+            return new FileAction(entry.Path, entry, FileActionKind.KeepPlayerEdit);
         if (overlay == OverlayExtractPolicy.KeepEdits && OverlayPaths.IsOverlayOwned(entry.Path))
             return new FileAction(entry.Path, entry, FileActionKind.KeepPlayerEdit);
 

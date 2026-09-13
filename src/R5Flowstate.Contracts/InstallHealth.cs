@@ -45,7 +45,28 @@ public sealed class InstallHealthReport
 
     /// <summary>Null unless the player opted into HD; opting out is not a fault.</summary>
     public TrackHealth? Hd { get; set; }
+
+    /// <summary>
+    /// Overlay hashes that differ from the pack. Not corruption: PLAY still
+    /// works, and Restore official is how the player puts the pack back.
+    /// </summary>
+    public OverlayEditReport? Overlay { get; set; }
+
     public List<string> Reasons { get; set; } = new();
+
+    public bool HasOverlayEdits => Overlay?.HasEdits == true;
+
+    public int OverlayEditCount => Overlay?.Total ?? 0;
+
+    public int BrokenFileCount
+    {
+        get
+        {
+            static int N(TrackHealth? t) =>
+                t is null ? 0 : t.MissingFileCount + t.SizeMismatchCount;
+            return N(Client) + N(Server) + N(Platform) + N(Hd);
+        }
+    }
 
     public bool BlocksPlay =>
         Overall is InstallHealthStatus.Missing
