@@ -93,6 +93,7 @@ public static class ContentInstallService
             var plan = ContentReconciler.Plan(
                 man, index, installPath, OverlayExtractPolicy.KeepEdits, VerifyDepth.Full,
                 progress, cancel, track: preset);
+            var officialStems = OverlayPaths.OfficialMapStems(man.Files.Select(f => f.Path));
 
             foreach (var a in plan.Work)
             {
@@ -102,24 +103,23 @@ public static class ContentInstallService
             }
             foreach (var a in plan.Deletions)
             {
+                if (!OverlayPaths.IsShadowLeftover(a.Path, officialStems))
+                    continue;
                 shadowCount++;
                 if (samples.Count < 8)
                     samples.Add("leftover: " + a.Path);
             }
 
-            if (!plan.Work.Any() && !plan.Deletions.Any())
+            if (!plan.Work.Any())
                 ContentTrackInstaller.WriteIndex(indexPath, man, installPath, plan);
         }
 
         Step("Finishing check…");
         var report = Assess(channel, installPath, requireClient: true, requireServer: true);
-        if (hashedAny && fetchCount == 0 && shadowCount == 0)
-        {
-            report = Assess(channel, installPath, requireClient: true, requireServer: true);
+        if (hashedAny && fetchCount == 0)
             return report;
-        }
 
-        if (hashedAny && (fetchCount > 0 || shadowCount > 0))
+        if (hashedAny && fetchCount > 0)
         {
             report.Overall = InstallHealthStatus.Corrupted;
             report.Enforced = true;

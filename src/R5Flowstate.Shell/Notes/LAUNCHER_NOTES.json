@@ -4,6 +4,15 @@
   "entries": [
     {
       "date": "14 Sep 2026",
+      "title": "Launcher 0.1.53",
+      "items": [
+        "Stop leftover extras blocking Play",
+        "Skip a full file hash when the install is already ready",
+        "Keep game logs and extra scripts out of the missing-file count"
+      ]
+    },
+    {
+      "date": "14 Sep 2026",
       "title": "Launcher 0.1.52",
       "items": [
         "Hash every official file on Verify",

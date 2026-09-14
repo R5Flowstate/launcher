@@ -502,6 +502,12 @@ public static class ContentReconciler
                     continue;
                 }
 
+                if (OverlayPaths.IsRuntimeWritten(rel) || OverlayPaths.IsStageExtra(rel))
+                {
+                    plan.Actions.Add(new FileAction(rel, null, FileActionKind.KeepPlayerEdit));
+                    continue;
+                }
+
                 // Files the game itself writes, and edits the player is allowed
                 // to make, are not leftovers.
                 if (OverlayPaths.IsOverlayOwned(rel) || OverlayPaths.IsOverlayOptional(rel))

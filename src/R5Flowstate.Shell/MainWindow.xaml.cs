@@ -1997,9 +1997,9 @@ public partial class MainWindow : Window
             SetInstallButtonsEnabled(true);
             ShowSimpleInstallBar(false);
             InvalidateHealthMemo();
+            ApplyPendingHdAction();
             RefreshInstallStateLabels();
             PaintInstallControls();
-            ApplyPendingHdAction();
         }
     }
 
@@ -2039,9 +2039,8 @@ public partial class MainWindow : Window
         }
 
         RefreshHdTextures();
-        MaybeAnnounceHdTextures();
-
         RefreshSimplePlayButton(health);
+        MaybeAnnounceHdTextures();
         RefreshDx12Chrome();
     }
 
@@ -4500,6 +4499,8 @@ public partial class MainWindow : Window
             BtnPlay.Visibility = _simpleTab == SimpleTab.Play ? Visibility.Visible : Visibility.Collapsed;
             if (health.HasOverlayEdits)
                 SetSimpleStatus(Loc.Format("status_scripts_differ", health.OverlayEditCount));
+            else
+                SyncReadyFooter();
         }
         finally
         {
@@ -5241,6 +5242,60 @@ public partial class MainWindow : Window
             DotSimpleStatus.Fill = BrushForStatus(text);
     }
 
+    /// <summary>
+    /// Play is not a status owner. Only retire a leftover health-gate line.
+    /// </summary>
+    void SyncReadyFooter()
+    {
+        var text = TxtSimpleStatus?.Text;
+        if (string.IsNullOrEmpty(text) || !FooterIsBlockingHealthStatus(text))
+            return;
+        SetSimpleStatus(Loc.Get("ready_to_play"));
+    }
+
+    static bool FooterIsBlockingHealthStatus(string text)
+    {
+        foreach (var key in new[]
+                 {
+                     "status_files_need_work",
+                     "status_files_need_verify",
+                     "status_files_need_install",
+                     "status_install_first",
+                     "status_install_incomplete",
+                     "health_corrupt",
+                 })
+        {
+            if (string.Equals(text, Loc.Get(key), StringComparison.Ordinal))
+                return true;
+        }
+
+        foreach (var key in new[]
+                 {
+                     "status_files_need_repair",
+                     "health_missing_n",
+                     "status_still_blocked",
+                     "verify_problems",
+                 })
+        {
+            if (FooterMatchesFormat(text, Loc.Get(key)))
+                return true;
+        }
+
+        return false;
+    }
+
+    static bool FooterMatchesFormat(string text, string template)
+    {
+        var hole = template.IndexOf("{0}", StringComparison.Ordinal);
+        if (hole < 0)
+            return string.Equals(text, template, StringComparison.Ordinal);
+        var prefix = template[..hole];
+        var suffix = template[(hole + 3)..];
+        return (prefix.Length == 0 || text.StartsWith(prefix, StringComparison.Ordinal))
+               && (suffix.Length == 0 || text.EndsWith(suffix, StringComparison.Ordinal))
+               && text.Length >= prefix.Length + suffix.Length;
+    }
+
     private Brush BrushForStatus(string text)
     {
         if (text.Contains("crash", StringComparison.OrdinalIgnoreCase) ||
@@ -5578,12 +5633,21 @@ public partial class MainWindow : Window
                 await LoadChannelAsync().ConfigureAwait(true);
 
             var quick = ContentInstallService.Assess(_manifest, dir, true, true);
-            if (!quick.Enforced && GameConfirmed(dir, quick))
+            if (GameConfirmed(dir, quick))
             {
                 ReloadPlaylistsAndMaps(selectSaved: true);
-                InvalidateHealthMemo();
+                _healthMemo = quick;
+                _healthMemoRoot = dir;
+                _healthMemoUtc = DateTime.UtcNow;
                 RefreshInstallStateLabels();
-                SetSimpleStatus(Loc.Get("ready_to_play"));
+                RefreshSimpleInstallCopy();
+                var updateForced = quick.NeedsUpdate &&
+                    LaneBlocksPlay(quick, CachedDownloadGate(), requireClient: true, requireServer: true);
+                SetSimpleStatus(updateForced
+                    ? Loc.Get("status_update_available")
+                    : quick.NeedsUpdate
+                        ? Loc.Get("status_play_downloads_off")
+                        : Loc.Get("ready_to_play"));
                 Log("Folder check ok: " + quick.Summary);
                 return;
             }
@@ -5597,6 +5661,9 @@ public partial class MainWindow : Window
 
             var health = await ContentInstallService.VerifyExistingAsync(
                 _manifest, dir, CreateVerifyProgress()).ConfigureAwait(true);
+            _healthMemo = health;
+            _healthMemoRoot = dir;
+            _healthMemoUtc = DateTime.UtcNow;
 
             ReloadPlaylistsAndMaps(selectSaved: true);
             RefreshInstallStateLabels(known: null);
@@ -5640,7 +5707,6 @@ public partial class MainWindow : Window
         {
             _verifyBusy = false;
             ShowSimpleInstallBar(false);
-            InvalidateHealthMemo();
             RefreshInstallStateLabels();
         }
     }

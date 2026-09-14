@@ -243,6 +243,41 @@ public static class OverlayPaths
                || r == "maps/navmesh";
     }
 
+    /// <summary>
+    /// Files the game writes under platform/. Not pack payload.
+    /// </summary>
+    public static bool IsRuntimeWritten(string? rel)
+    {
+        var r = Norm(rel).ToLowerInvariant();
+        if (r.Length == 0)
+            return false;
+        if (r.StartsWith("platform/logs/", StringComparison.Ordinal) || r == "platform/logs")
+            return true;
+        if (r.StartsWith("platform/playerprefs/", StringComparison.Ordinal) ||
+            r == "platform/playerprefs")
+            return true;
+        var name = FileName(r);
+        return name is "veh_crash.log" or "apex_crash.txt"
+               || name.EndsWith(".dmp", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Git metadata and *_og.txt copies that ride along in a platform stage.
+    /// KeepEdits must not leftover-wipe them just because an older tip listed them.
+    /// </summary>
+    public static bool IsStageExtra(string? rel)
+    {
+        var r = Norm(rel).ToLowerInvariant();
+        if (r.Length == 0)
+            return false;
+        if (r.Contains("/.git/", StringComparison.Ordinal) || r.StartsWith(".git/", StringComparison.Ordinal))
+            return true;
+        var name = FileName(r);
+        return name is ".gitignore" or ".gitattributes" or ".gitkeep"
+               || name.EndsWith("_og.txt", StringComparison.Ordinal)
+               || name.EndsWith(".py", StringComparison.Ordinal);
+    }
+
     static string FileName(string r)
     {
         var slash = r.LastIndexOf('/');
