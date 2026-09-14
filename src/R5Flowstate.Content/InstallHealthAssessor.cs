@@ -159,6 +159,7 @@ public static class InstallHealthAssessor
         }
 
         report.Overall = Worst(statuses);
+        AttachShadowsAndProof(report, installPath, state);
         CollectReasons(report);
         AttachOverlay(report, installPath, channel);
         return report;
@@ -502,6 +503,12 @@ public static class InstallHealthAssessor
         return true;
     }
 
+    public static string? FindCachedContentManifest(
+        string installPath,
+        string preset,
+        string? catalogVersion) =>
+        ContentManifestCachePath(installPath, preset, catalogVersion);
+
     public static string? FindCachedShareManifest(
         string installPath,
         string preset,
@@ -633,7 +640,149 @@ public static class InstallHealthAssessor
             return InstallHealthStatus.Incomplete;
         if (list.Contains(InstallHealthStatus.Missing))
             return InstallHealthStatus.Missing;
+        if (list.Contains(InstallHealthStatus.Unverified))
+            return InstallHealthStatus.Unverified;
         return InstallHealthStatus.Ready;
+    }
+
+    static void AttachShadowsAndProof(
+        InstallHealthReport report,
+        string installPath,
+        InstallState? state)
+    {
+        if (string.IsNullOrWhiteSpace(installPath) || !Directory.Exists(installPath))
+            return;
+
+        var stems = CollectOfficialStems(installPath, state);
+        if (stems.Count > 0)
+        {
+            var shadows = ContentReconciler.FindShadowLeftovers(installPath, stems);
+            if (shadows.Count > 0)
+            {
+                var sample = shadows[0];
+                if (report.Client is not null &&
+                    report.Client.Status is InstallHealthStatus.Ready or InstallHealthStatus.Unverified)
+                {
+                    report.Client.Status = InstallHealthStatus.Corrupted;
+                    report.Client.Reason = $"leftover disk map shadows official files: {sample}";
+                    report.Client.SampleIssues.Add(sample);
+                }
+                else
+                {
+                    report.Reasons.Add("leftover disk map shadows official files: " + sample);
+                }
+            }
+        }
+
+        var statuses = new List<InstallHealthStatus>();
+        if (report.Client is not null)
+            statuses.Add(report.Client.Status);
+        if (report.Server is not null)
+            statuses.Add(report.Server.Status);
+        if (report.Platform is not null)
+            statuses.Add(report.Platform.Status);
+        if (report.Hd is not null)
+            statuses.Add(report.Hd.Status);
+        report.Overall = Worst(statuses);
+
+        if (report.Overall is not InstallHealthStatus.Ready)
+            return;
+        if (!HasContentManifestCache(installPath, state))
+            return;
+
+        var indexPath = Path.Combine(installPath, ProductConstants.InstallFilesFileName);
+        var index = InstallFilesIndexIO.TryLoad(indexPath);
+        var serial = InstallFilesIndexIO.ReadVolumeSerial(installPath);
+        if (index is null ||
+            index.Files.Count == 0 ||
+            !index.DescribesSameTarget(installPath, serial))
+        {
+            if (report.Client is not null)
+            {
+                report.Client.Status = InstallHealthStatus.Unverified;
+                report.Client.Reason = "install has not been hashed against the official list";
+            }
+            report.Overall = InstallHealthStatus.Unverified;
+            report.Reasons.Add("install has not been hashed against the official list");
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(index.ProofMismatch))
+        {
+            var sample = index.ProofMismatch;
+            if (report.Client is not null)
+            {
+                report.Client.Status = InstallHealthStatus.Corrupted;
+                report.Client.Reason = "official file hash mismatch: " + sample;
+                report.Client.SampleIssues.Add(sample);
+            }
+            report.Overall = InstallHealthStatus.Corrupted;
+            report.Reasons.Add("official file hash mismatch: " + sample);
+        }
+    }
+
+    static HashSet<string> CollectOfficialStems(string installPath, InstallState? state)
+    {
+        var stems = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (preset, ver) in new[]
+                 {
+                     ("client", state?.ClientCatalogVersion),
+                     ("server", state?.ServerCatalogVersion),
+                     ("platform", state?.PlatformCatalogVersion),
+                     ("hd", state?.HdCatalogVersion),
+                 })
+        {
+            var content = ContentManifestCachePath(installPath, preset, ver);
+            if (content is not null && File.Exists(content))
+            {
+                try
+                {
+                    var man = ContentManifestIO.Load(content);
+                    foreach (var s in OverlayPaths.OfficialMapStems(man.Files.Select(f => f.Path)))
+                        stems.Add(s);
+                }
+                catch
+                {
+                    // A bad cache is not a stem source.
+                }
+            }
+
+            var share = FindCachedShareManifest(installPath, preset, ver);
+            if (share is not null && File.Exists(share))
+            {
+                try
+                {
+                    var man = ShareManifestIO.Load(share);
+                    foreach (var f in ShareFileVerifier.EnumerateFiles(man))
+                    {
+                        if (!OverlayPaths.IsOfficialMapPayload(f.Path))
+                            continue;
+                        var stem = OverlayPaths.OfficialMapStem(f.Path);
+                        if (!string.IsNullOrEmpty(stem))
+                            stems.Add(stem);
+                    }
+                }
+                catch
+                {
+                }
+            }
+        }
+        return stems;
+    }
+
+    static bool HasContentManifestCache(string installPath, InstallState? state)
+    {
+        foreach (var (preset, ver) in new[]
+                 {
+                     ("client", state?.ClientCatalogVersion),
+                     ("platform", state?.PlatformCatalogVersion),
+                 })
+        {
+            var path = ContentManifestCachePath(installPath, preset, ver);
+            if (path is not null && File.Exists(path))
+                return true;
+        }
+        return false;
     }
 
     static void AttachOverlay(

@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -10,7 +12,7 @@ namespace R5Flowstate.Contracts;
 /// </summary>
 public sealed class InstallFilesIndex
 {
-    public const int CurrentSchema = 1;
+    public const int CurrentSchema = 2;
 
     [JsonPropertyName("schema")]
     public int Schema { get; set; } = CurrentSchema;
@@ -39,16 +41,29 @@ public sealed class InstallFilesIndex
     [JsonPropertyName("sweep_cursor")]
     public int SweepCursor { get; set; }
 
+    /// <summary>
+    /// Last official fat path the idle sweep hashed and found wrong.
+    /// Assess treats this as Corrupted until repair or a clean Verify.
+    /// </summary>
+    [JsonPropertyName("proof_mismatch")]
+    public string? ProofMismatch { get; set; }
+
     [JsonPropertyName("files")]
     public Dictionary<string, InstallFileState> Files { get; set; } =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public bool DescribesSameTarget(string installPath, uint volumeSerial) =>
-        VolumeSerial == volumeSerial &&
-        string.Equals(
+    public bool DescribesSameTarget(string installPath, uint volumeSerial)
+    {
+        var pathOk = string.Equals(
             System.IO.Path.TrimEndingDirectorySeparator(InstallPath ?? string.Empty),
             System.IO.Path.TrimEndingDirectorySeparator(installPath ?? string.Empty),
             StringComparison.OrdinalIgnoreCase);
+        if (!pathOk)
+            return false;
+        if (VolumeSerial == 0 || volumeSerial == 0)
+            return true;
+        return VolumeSerial == volumeSerial;
+    }
 }
 
 public sealed class InstallFileState
@@ -63,7 +78,7 @@ public sealed class InstallFileState
     [JsonPropertyName("m")]
     public long MTimeUtcTicks { get; set; }
 
-    /// <summary>Official manifest sha256, including when PlayerEdited is set.</summary>
+    /// <summary>Last hashed official sha256. Null on a kept player edit.</summary>
     [JsonPropertyName("h")]
     public string? Sha256 { get; set; }
 
@@ -112,9 +127,54 @@ public static class InstallFilesIndexIO
     }
 
     /// <summary>Write-then-rename; a torn index would force a needless full re-hash.</summary>
+    public static uint ReadVolumeSerial(string installPath)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(installPath))
+                return 0;
+            var root = Path.GetPathRoot(Path.GetFullPath(installPath));
+            if (string.IsNullOrEmpty(root))
+                return 0;
+            if (!GetVolumeInformation(
+                    root, null, 0, out var serial, out _, out _, null, 0))
+                return 0;
+            return serial;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern bool GetVolumeInformation(
+        string lpRootPathName,
+        StringBuilder? lpVolumeNameBuffer,
+        int nVolumeNameSize,
+        out uint lpVolumeSerialNumber,
+        out uint lpMaximumComponentLength,
+        out uint lpFileSystemFlags,
+        StringBuilder? lpFileSystemNameBuffer,
+        int nFileSystemNameSize);
+
+    public static void Stamp(InstallFilesIndex index, string installPath)
+    {
+        ArgumentNullException.ThrowIfNull(index);
+        index.Schema = InstallFilesIndex.CurrentSchema;
+        if (!string.IsNullOrWhiteSpace(installPath))
+        {
+            index.InstallPath = installPath;
+            var serial = ReadVolumeSerial(installPath);
+            if (serial != 0)
+                index.VolumeSerial = serial;
+        }
+    }
+
     public static void Save(string path, InstallFilesIndex index)
     {
         ArgumentNullException.ThrowIfNull(index);
+        Stamp(index, index.InstallPath);
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);

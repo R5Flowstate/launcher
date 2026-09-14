@@ -30,6 +30,7 @@ public static class ContentTrackInstaller
         bool restoreMapPayloads = false,
         bool ignoreIndex = false)
     {
+        _ = contentUnchanged;
         var result = new TrackInstallResult
         {
             Preset = preset,
@@ -80,7 +81,7 @@ public static class ContentTrackInstaller
                             manifest, index, installPath, overlay, VerifyDepth.Overlay,
                             progress, cancel,
                             p => Checkpoint(indexPath, manifest, installPath, p),
-                            preset, contentUnchanged, restoreMapPayloads),
+                            preset, restoreMapPayloads),
                         cancel).ConfigureAwait(false);
 
                     result.LastScanHashed = plan.Hashed;
@@ -232,6 +233,8 @@ public static class ContentTrackInstaller
                 ManifestId = manifest.ManifestId,
                 InstallPath = installPath,
             };
+            index.ManifestId = manifest.ManifestId;
+            index.InstallPath = installPath;
             foreach (var kv in plan.Verified)
                 index.Files[kv.Key] = kv.Value;
             InstallFilesIndexIO.Save(path, index);
@@ -243,7 +246,7 @@ public static class ContentTrackInstaller
         }
     }
 
-    static void WriteIndex(
+    public static void WriteIndex(
         string path, ContentManifest manifest, string installPath, ReconcilePlan plan)
     {
         var edited = new HashSet<string>(
@@ -257,6 +260,7 @@ public static class ContentTrackInstaller
         index.ManifestId = manifest.ManifestId;
         index.InstallPath = installPath;
         index.VerifiedUtc = DateTime.UtcNow.ToString("O");
+        index.ProofMismatch = null;
 
         foreach (var f in manifest.Files)
         {
@@ -285,16 +289,16 @@ public static class ContentTrackInstaller
                 continue;
             }
 
-            // Kept by size or as a player edit. Do not write the official
-            // hash -- the next scan would treat that as a confirmed read.
+            // A player edit is not hashed proof. Leaving the official sha
+            // here would make the next Overlay scan treat it as confirmed.
             if (isEdit)
             {
                 index.Files[norm] = new InstallFileState
                 {
                     Size = info.Length,
                     MTimeUtcTicks = info.LastWriteTimeUtc.Ticks,
-                    Sha256 = f.Sha256,
-                    VerifiedUtcTicks = DateTime.UtcNow.Ticks,
+                    Sha256 = null,
+                    VerifiedUtcTicks = 0,
                     PlayerEdited = true,
                 };
             }

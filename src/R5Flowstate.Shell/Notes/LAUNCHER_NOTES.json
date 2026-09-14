@@ -3,6 +3,15 @@
   "kind": "notes",
   "entries": [
     {
+      "date": "14 Sep 2026",
+      "title": "Launcher 0.1.52",
+      "items": [
+        "Hash every official file on Verify",
+        "Remove leftover disk maps that hide official maps",
+        "Recheck the install once after this update"
+      ]
+    },
+    {
       "date": "13 Sep 2026",
       "title": "Launcher 0.1.51",
       "items": [

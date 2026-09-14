@@ -12,8 +12,8 @@ public static class ContentInstallService
         InstallHealthAssessor.Assess(channel, installPath, requireClient, requireServer);
 
     /// <summary>
-    /// User-facing check of an already-on-disk folder: INSTALL_STATE, triad, SHARE lists.
-    /// Reports progress. Does not download or repair.
+    /// Hash every official file against the cached content manifests.
+    /// Writes schema-2 INSTALL_FILES on a clean result. Does not download.
     /// </summary>
     public static Task<InstallHealthReport> VerifyExistingAsync(
         ChannelManifest? channel,
@@ -67,70 +67,82 @@ public static class ContentInstallService
             Step("No INSTALL_STATE — checking game files…");
         }
 
-        var probes = new (string label, string rel)[]
-        {
-            ("client exe", "r5apex.exe"),
-            ("loader", "loader.dll"),
-            ("client dll", "client.dll"),
-            ("client dll", Path.Combine("game", "client.dll")),
-            ("server exe", "r5apex_ds.exe"),
-            ("server dll", "server.dll"),
-            ("server dll", Path.Combine("game", "server.dll")),
-            ("playlists", Path.Combine("platform", "playlists_r5_patch.txt")),
-        };
-        for (var i = 0; i < probes.Length; i++)
-        {
-            var (label, rel) = probes[i];
-            var full = Path.Combine(installPath, rel);
-            var present = File.Exists(full);
-            Step(
-                present ? "Found " + label + "." : "Missing " + label + ".",
-                i + 1,
-                probes.Length,
-                "probe");
-        }
+        var hashedAny = false;
+        var fetchCount = 0;
+        var shadowCount = 0;
+        var samples = new List<string>();
+        var indexPath = Path.Combine(installPath, ProductConstants.InstallFilesFileName);
 
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (preset, manPath) in EnumerateShareManifests(installPath, state))
+        foreach (var (preset, manPath) in EnumerateContentManifests(installPath, state))
         {
-            if (!seen.Add(manPath))
-                continue;
-            Step("Reading " + preset + " manifest…", track: preset);
+            cancel.ThrowIfCancellationRequested();
+            Step("Hashing " + preset + " files…", track: preset);
+            ContentManifest man;
             try
             {
-                var man = ShareManifestIO.Load(manPath);
-                // SkipFatVerify means "not this track's payload", so only the fat
-                // tracks may use it as a skip. Platform and HD own nothing else,
-                // and skipping their own classes would verify an empty set.
-                var ownsNonFat =
-                    string.Equals(preset, "platform", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(preset, "hd", StringComparison.OrdinalIgnoreCase);
-                var fileProgress = new Progress<(int current, int total, string path)>(p =>
-                {
-                    Step(
-                        "Checking " + preset + " files…",
-                        p.current,
-                        p.total,
-                        preset);
-                });
-                ShareFileVerifier.VerifyInstallFiles(
-                    installPath,
-                    man,
-                    skipRelativePath: ownsNonFat ? null : OverlayPaths.SkipFatVerify,
-                    progress: fileProgress,
-                    sizeOptionalRelativePath: OverlayPaths.IgnoreSizeMismatch);
+                man = ContentManifestIO.Load(manPath);
             }
             catch (Exception ex)
             {
                 Step(preset + " manifest failed: " + ex.Message, track: preset);
+                continue;
             }
+
+            hashedAny = true;
+            var index = InstallFilesIndexIO.TryLoad(indexPath);
+            var plan = ContentReconciler.Plan(
+                man, index, installPath, OverlayExtractPolicy.KeepEdits, VerifyDepth.Full,
+                progress, cancel, track: preset);
+
+            foreach (var a in plan.Work)
+            {
+                fetchCount++;
+                if (samples.Count < 8)
+                    samples.Add("mismatch: " + a.Path);
+            }
+            foreach (var a in plan.Deletions)
+            {
+                shadowCount++;
+                if (samples.Count < 8)
+                    samples.Add("leftover: " + a.Path);
+            }
+
+            if (!plan.Work.Any() && !plan.Deletions.Any())
+                ContentTrackInstaller.WriteIndex(indexPath, man, installPath, plan);
         }
 
         Step("Finishing check…");
-        return Assess(channel, installPath, requireClient: true, requireServer: true);
+        var report = Assess(channel, installPath, requireClient: true, requireServer: true);
+        if (hashedAny && fetchCount == 0 && shadowCount == 0)
+        {
+            report = Assess(channel, installPath, requireClient: true, requireServer: true);
+            return report;
+        }
+
+        if (hashedAny && (fetchCount > 0 || shadowCount > 0))
+        {
+            report.Overall = InstallHealthStatus.Corrupted;
+            report.Enforced = true;
+            if (report.Client is not null)
+            {
+                report.Client.Status = InstallHealthStatus.Corrupted;
+                report.Client.MissingFileCount = fetchCount;
+                report.Client.SizeMismatchCount = shadowCount;
+                report.Client.SampleIssues = samples;
+                report.Client.Reason =
+                    $"files broken (mismatch={fetchCount} leftover={shadowCount})";
+            }
+            report.Reasons.Clear();
+            report.Reasons.Add(
+                $"files broken (mismatch={fetchCount} leftover={shadowCount})");
+            foreach (var s in samples.Take(4))
+                report.Reasons.Add(s);
+        }
+
+        return report;
     }
 
-    static IEnumerable<(string preset, string path)> EnumerateShareManifests(
+    static IEnumerable<(string preset, string path)> EnumerateContentManifests(
         string installPath,
         InstallState? state)
     {
@@ -142,18 +154,10 @@ public static class ContentInstallService
             ("hd", state?.HdCatalogVersion),
         })
         {
-            var cached = InstallHealthAssessor.FindCachedShareManifest(installPath, preset, ver);
+            var cached = InstallHealthAssessor.FindCachedContentManifest(installPath, preset, ver);
             if (!string.IsNullOrWhiteSpace(cached) && File.Exists(cached))
                 yield return (preset, cached);
         }
-
-        var last = OverlayLeftoverWipe.LastSharePath(installPath);
-        if (File.Exists(last))
-            yield return ("overlay", last);
-
-        var root = Path.Combine(installPath, ProductConstants.ShareManifestFileName);
-        if (File.Exists(root))
-            yield return ("root", root);
     }
 
     /// <summary>
@@ -629,7 +633,7 @@ public static class ContentInstallService
                             {
                                 Phase = "scan",
                                 Track = track.Preset,
-                                Message = "content unchanged since last install; checking files by size",
+                                Message = "content unchanged since last install; checking files against the index",
                             });
                         }
 

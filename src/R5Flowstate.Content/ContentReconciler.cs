@@ -112,7 +112,6 @@ public static class ContentReconciler
         CancellationToken cancel = default,
         Action<ReconcilePlan>? checkpoint = null,
         string track = "",
-        bool trustSize = false,
         bool restoreMapPayloads = false)
     {
         ArgumentNullException.ThrowIfNull(manifest);
@@ -121,6 +120,7 @@ public static class ContentReconciler
 
         var plan = new ReconcilePlan();
         var wanted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var officialStems = OverlayPaths.OfficialMapStems(manifest.Files.Select(f => f.Path));
         var total = manifest.Files.Count;
 
         long payload = 0;
@@ -146,7 +146,7 @@ public static class ContentReconciler
 
             reporter.Begin(entry.Path);
             plan.Actions.Add(Decide(
-                entry, full, index, overlay, depth, plan, reporter, cancel, trustSize,
+                entry, full, index, overlay, depth, plan, reporter, cancel,
                 restoreMapPayloads));
             reporter.Finish(entry.Size);
 
@@ -159,7 +159,8 @@ public static class ContentReconciler
 
         reporter.Flush();
         reporter.Sweep();
-        AddDeletions(manifest, installPath, wanted, overlay, index, plan, cancel);
+        AddDeletions(manifest, installPath, wanted, overlay, index, officialStems, plan, cancel);
+        AddShadowDeletions(installPath, officialStems, wanted, plan, cancel);
         return plan;
     }
 
@@ -258,7 +259,6 @@ public static class ContentReconciler
         ReconcilePlan plan,
         ScanReporter reporter,
         CancellationToken cancel,
-        bool trustSize = false,
         bool restoreMapPayloads = false)
     {
         var info = new FileInfo(full);
@@ -271,8 +271,8 @@ public static class ContentReconciler
         var isOverlay = OverlayPaths.IsOverlayOwned(entry.Path);
         var mtime = info.LastWriteTimeUtc.Ticks;
 
-        // The overlay tree is what players edit, and a same-size edit is exactly
-        // what a stat sweep cannot see -- so it is always hashed.
+        // Overlay is always hashed. Fat is hashed when the index cannot prove
+        // the last confirmed hash is still the file on disk.
         var mustHash = depth == VerifyDepth.Full || (depth >= VerifyDepth.Overlay && isOverlay);
 
         if (!mustHash)
@@ -280,7 +280,7 @@ public static class ContentReconciler
             var known = Lookup(index, entry.Path);
             if (known is not null && known.StatMatches(info.Length, mtime))
             {
-                if (KeepRecordedEdit(known, entry.Path, overlay, restoreMapPayloads))
+                if (KeepRecordedEdit(known, entry.Path, overlay))
                     return new FileAction(entry.Path, entry, FileActionKind.KeepPlayerEdit);
                 if (!known.PlayerEdited &&
                     string.Equals(known.Sha256, entry.Sha256, StringComparison.OrdinalIgnoreCase))
@@ -288,18 +288,6 @@ public static class ContentReconciler
                 if (!known.PlayerEdited)
                     return Differs(entry, full, overlay, plan, reporter, cancel, restoreMapPayloads);
             }
-            // Size-only keep is for an untouched file we have no record of
-            // (old-launcher adoption) or a record that still matches. A changed
-            // mtime means the bytes may have changed -- hash them. Trusting
-            // size after a killed in-place write is how a full-size sparse
-            // dest becomes "installed".
-            if (trustSize && !isOverlay &&
-                (known is null || known.StatMatches(info.Length, mtime)) &&
-                (known is null ||
-                 !known.PlayerEdited ||
-                 KeepRecordedEdit(known, entry.Path, overlay, restoreMapPayloads)))
-                return new FileAction(entry.Path, entry, FileActionKind.Keep);
-            // No trustworthy record, so fall through and hash rather than guess.
         }
 
         var actual = HashFile(full, cancel, reporter.Tick);
@@ -321,17 +309,13 @@ public static class ContentReconciler
         return Differs(entry, full, overlay, plan, reporter, cancel, restoreMapPayloads);
     }
 
-    static bool KeepRecordedEdit(
-        InstallFileState known,
-        string path,
-        OverlayExtractPolicy overlay,
-        bool restoreMapPayloads)
+    static bool KeepRecordedEdit(InstallFileState known, string path, OverlayExtractPolicy overlay)
     {
         if (!known.PlayerEdited)
             return false;
-        if (overlay == OverlayExtractPolicy.KeepEdits)
-            return true;
-        return OverlayPaths.IsMapPayload(path) && !restoreMapPayloads;
+        if (OverlayPaths.IsOfficialMapPayload(path))
+            return false;
+        return overlay == OverlayExtractPolicy.KeepEdits && OverlayPaths.IsOverlayOwned(path);
     }
 
     static FileAction Differs(
@@ -343,10 +327,9 @@ public static class ContentReconciler
         CancellationToken cancel,
         bool restoreMapPayloads)
     {
-        if (OverlayPaths.IsMapPayload(entry.Path) && !restoreMapPayloads)
-            return new FileAction(entry.Path, entry, FileActionKind.KeepPlayerEdit);
         if (overlay == OverlayExtractPolicy.KeepEdits && OverlayPaths.IsOverlayOwned(entry.Path))
             return new FileAction(entry.Path, entry, FileActionKind.KeepPlayerEdit);
+        _ = restoreMapPayloads;
 
         // A chunked file that is still the right size may only be wrong in a few
         // places, so a killed 10 GB transfer resumes at chunk granularity.
@@ -479,6 +462,7 @@ public static class ContentReconciler
         HashSet<string> wanted,
         OverlayExtractPolicy overlay,
         InstallFilesIndex? index,
+        ISet<string> officialStems,
         ReconcilePlan plan,
         CancellationToken cancel)
     {
@@ -505,6 +489,11 @@ public static class ContentReconciler
                     continue;
                 if (IsLauncherPrivate(rel))
                     continue;
+                if (OverlayPaths.IsShadowLeftover(rel, officialStems))
+                {
+                    plan.Actions.Add(new FileAction(rel, null, FileActionKind.Delete));
+                    continue;
+                }
                 if (!ownedClasses.Contains(OverlayPaths.Classify(rel)))
                     continue;
                 if (IsInstallScratch(rel))
@@ -535,6 +524,54 @@ public static class ContentReconciler
 
                 plan.Actions.Add(new FileAction(rel, null, FileActionKind.Delete));
             }
+        }
+    }
+
+    /// <summary>
+    /// Loose disk maps the engine will open before the official VPK. Walked
+    /// even when maps/ is not a root this manifest owns.
+    /// </summary>
+    public static IReadOnlyList<string> FindShadowLeftovers(
+        string installPath,
+        ISet<string> officialStems,
+        CancellationToken cancel = default)
+    {
+        ArgumentNullException.ThrowIfNull(officialStems);
+        var found = new List<string>();
+        if (string.IsNullOrWhiteSpace(installPath) || officialStems.Count == 0)
+            return found;
+
+        foreach (var root in new[] { "platform/maps", "maps" })
+        {
+            cancel.ThrowIfCancellationRequested();
+            if (!SafePath.TryJoin(installPath, root, out var dir) || !Directory.Exists(dir))
+                continue;
+            foreach (var file in EnumerateNoReparse(dir, cancel))
+            {
+                var rel = OverlayPaths.Norm(Path.GetRelativePath(installPath, file));
+                if (OverlayPaths.IsShadowLeftover(rel, officialStems))
+                    found.Add(rel);
+            }
+        }
+        return found;
+    }
+
+    static void AddShadowDeletions(
+        string installPath,
+        ISet<string> officialStems,
+        HashSet<string> wanted,
+        ReconcilePlan plan,
+        CancellationToken cancel)
+    {
+        var listed = new HashSet<string>(
+            plan.Deletions.Select(a => OverlayPaths.Norm(a.Path)),
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var rel in FindShadowLeftovers(installPath, officialStems, cancel))
+        {
+            if (wanted.Contains(rel) || listed.Contains(rel))
+                continue;
+            plan.Actions.Add(new FileAction(rel, null, FileActionKind.Delete));
+            listed.Add(rel);
         }
     }
 

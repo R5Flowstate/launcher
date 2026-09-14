@@ -125,8 +125,7 @@ public static class OverlayPaths
     }
 
     /// <summary>
-    /// Map payload a player may replace or add. common.rpak is not this:
-    /// only mp_rr_* names plus disk maps and navmesh.
+    /// Official packed map or a player disk map. common.rpak is not this.
     /// </summary>
     public static bool IsMapPayload(string? rel)
     {
@@ -137,18 +136,83 @@ public static class OverlayPaths
             return false;
         if (IsPlayerMap(r))
             return true;
-        var slash = r.LastIndexOf('/');
-        var name = slash >= 0 ? r[(slash + 1)..] : r;
-        return name.StartsWith("mp_rr_", StringComparison.Ordinal)
-               || name.Contains("_mp_rr_", StringComparison.Ordinal);
+        return IsOfficialMapName(FileName(r));
+    }
+
+    /// <summary>
+    /// A manifest-owned mp_rr_* pak or map VPK. Disk maps are not this.
+    /// </summary>
+    public static bool IsOfficialMapPayload(string? rel)
+    {
+        var r = Norm(rel).ToLowerInvariant();
+        if (r.Length == 0 || r.EndsWith(OptOwnedSuffix, StringComparison.Ordinal))
+            return false;
+        if (IsPlayerMap(r))
+            return false;
+        return IsOfficialMapName(FileName(r));
     }
 
     /// <summary>
     /// Size drift here is a player edit, not a truncated official file.
-    /// Presence is still required for files the pack lists.
+    /// Official maps are not exempt: a short VPK is damage.
     /// </summary>
-    public static bool IgnoreSizeMismatch(string? rel) =>
-        SkipFatVerify(rel) || IsMapPayload(rel);
+    public static bool IgnoreSizeMismatch(string? rel)
+    {
+        var c = Classify(rel);
+        return c is Class.OverlayOwned or Class.OverlayOptional;
+    }
+
+    /// <summary>
+    /// Map stem used to pair a leftover disk BSP with the official pak/VPK.
+    /// `paks/Win64/mp_rr_district.rpak` and `vpk/server_mp_rr_district.bsp.pak000_dir.vpk`
+    /// both yield `mp_rr_district`.
+    /// </summary>
+    public static string? OfficialMapStem(string? rel)
+    {
+        var name = FileName(Norm(rel).ToLowerInvariant());
+        if (name.Length == 0)
+            return null;
+        var at = name.IndexOf("mp_rr_", StringComparison.Ordinal);
+        if (at < 0)
+            return null;
+        var stem = name[at..];
+        var bsp = stem.IndexOf(".bsp", StringComparison.Ordinal);
+        if (bsp >= 0)
+            return stem[..bsp];
+        var dot = stem.IndexOf('.');
+        return dot >= 0 ? stem[..dot] : stem;
+    }
+
+    public static HashSet<string> OfficialMapStems(IEnumerable<string?> paths)
+    {
+        var stems = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in paths)
+        {
+            if (!IsOfficialMapPayload(path))
+                continue;
+            var stem = OfficialMapStem(path);
+            if (!string.IsNullOrEmpty(stem))
+                stems.Add(stem);
+        }
+        return stems;
+    }
+
+    /// <summary>
+    /// Loose disk map that the engine will open ahead of the official VPK.
+    /// Navmesh under maps/navmesh/ is not this.
+    /// </summary>
+    public static bool IsShadowLeftover(string? rel, ISet<string> officialStems)
+    {
+        ArgumentNullException.ThrowIfNull(officialStems);
+        var r = Norm(rel).ToLowerInvariant();
+        if (r.Length == 0 || IsNavmesh(r))
+            return false;
+        if (!r.StartsWith("platform/maps/", StringComparison.Ordinal) &&
+            !r.StartsWith("maps/", StringComparison.Ordinal))
+            return false;
+        var stem = OfficialMapStem(r);
+        return stem is not null && officialStems.Contains(stem);
+    }
 
     public static bool IsOptOwned(string? rel) =>
         Classify(rel) == Class.OptOwned;
@@ -171,4 +235,21 @@ public static class OverlayPaths
         }
         return false;
     }
+
+    public static bool IsNavmesh(string? rel)
+    {
+        var r = Norm(rel).ToLowerInvariant();
+        return r.StartsWith("maps/navmesh/", StringComparison.Ordinal)
+               || r == "maps/navmesh";
+    }
+
+    static string FileName(string r)
+    {
+        var slash = r.LastIndexOf('/');
+        return slash >= 0 ? r[(slash + 1)..] : r;
+    }
+
+    static bool IsOfficialMapName(string name) =>
+        name.StartsWith("mp_rr_", StringComparison.Ordinal)
+        || name.Contains("_mp_rr_", StringComparison.Ordinal);
 }

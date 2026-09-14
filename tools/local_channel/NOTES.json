@@ -4,6 +4,37 @@
   "entries": [
     {
       "date": "13 Sep 2026",
+      "title": "1.0.5",
+      "items": [
+        "## Gameplay",
+        "Fix some Aim Assist divergences",
+        "Fix shader cache timing out connection in DX12",
+        "Fix slow first map load",
+        "Fix weapon staying holstered after a climb",
+        "Fix Revenant wall climb",
+        "Add Movement Ability to keybinds",
+        "Force outdated servers to update",
+        "Tune Mantle Boost to match retail values",
+        "Improve Mantle Boost RUI",
+        "Fix digital water causing prediction error in Thunderdome",
+        "## Modes",
+        "Give FFA guns on spawn",
+        "Fix FFA minimap hiding after a round",
+        "Fix Lab dummy sliders crashing the server",
+        "Add invincible dummies on the firing range",
+        "Credit 1v1 damage to the hitting weapon",
+        "1v1 defaults Minimal for Visual Clutter toggle",
+        "Hide firing-range dummy hit dots unless Hit Indicators is on",
+        "## Weapons",
+        "Fix RE-45 Fusion burst sound",
+        "Fix attaching more than 2 corrupted attachments being allowed",
+        "Lock dormant hopups like retail",
+        "Fix Ballistic overheat crashing the server",
+        "Fix Alternator not showing crosshair with double tap"
+      ]
+    },
+    {
+      "date": "13 Sep 2026",
       "title": "1.0.4",
       "items": [
         "Add \"FPS Max\" slider to video settings menu",

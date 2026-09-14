@@ -17,6 +17,12 @@ public enum InstallHealthStatus
 
     /// <summary>State claims ready but files missing/size mismatch (or verify failed).</summary>
     Corrupted = 4,
+
+    /// <summary>
+    /// Files are present; INSTALL_FILES is missing, schema-1, or the wrong volume.
+    /// PLAY runs a full hash before it will start the game.
+    /// </summary>
+    Unverified = 5,
 }
 
 public sealed class TrackHealth
@@ -72,9 +78,12 @@ public sealed class InstallHealthReport
         Overall is InstallHealthStatus.Missing
             or InstallHealthStatus.Incomplete
             or InstallHealthStatus.UpdateAvailable
-            or InstallHealthStatus.Corrupted;
+            or InstallHealthStatus.Corrupted
+            or InstallHealthStatus.Unverified;
 
     public bool NeedsRepair => Overall == InstallHealthStatus.Corrupted;
+
+    public bool NeedsVerify => Overall == InstallHealthStatus.Unverified;
 
     public bool NeedsUpdate => Overall == InstallHealthStatus.UpdateAvailable;
 

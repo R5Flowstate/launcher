@@ -178,7 +178,7 @@ public static class ShareUnpacker
         var sb = new StringBuilder();
         foreach (var f in arch.Files)
         {
-            if (string.IsNullOrWhiteSpace(f.Path) || !OverlayPaths.IsMapPayload(f.Path))
+            if (string.IsNullOrWhiteSpace(f.Path) || !OverlayPaths.IsPlayerMap(f.Path))
                 continue;
             if (!SafePath.TryJoin(destRoot, f.Path, out var full) || !File.Exists(full))
                 continue;
@@ -202,7 +202,7 @@ public static class ShareUnpacker
                 continue;
             if (overlay == OverlayExtractPolicy.KeepEdits && OverlayPaths.IsOverlayOwned(f.Path))
                 continue;
-            if (!restoreMapPayloads && OverlayPaths.IsMapPayload(f.Path))
+            if (!restoreMapPayloads && OverlayPaths.IsPlayerMap(f.Path))
                 continue;
             var rel = f.Path.Replace('/', Path.DirectorySeparatorChar);
             var full = Path.Combine(destRoot, rel);
@@ -470,7 +470,7 @@ public static class ShareUnpacker
                 var entry = entries[i];
                 var target = Path.Combine(destInstallPath, entry.FullName.Replace('/', Path.DirectorySeparatorChar));
                 if (!restoreMapPayloads &&
-                    OverlayPaths.IsMapPayload(entry.FullName) &&
+                    OverlayPaths.IsPlayerMap(entry.FullName) &&
                     File.Exists(target))
                     continue;
                 var parent = Path.GetDirectoryName(target);

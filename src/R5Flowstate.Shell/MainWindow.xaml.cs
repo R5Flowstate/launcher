@@ -51,6 +51,8 @@ public partial class MainWindow : Window
     private double _progressRate;
     private DateTime _progressLastUiUtc;
     private DispatcherTimer? _procWatch;
+    private DispatcherTimer? _proofSweep;
+    private int _proofSweepBusy;
     private DispatcherTimer? _shellUpdateWatch;
     private readonly List<ModeCardViewModel> _modeCards = new();
     private ModeCardViewModel? _selectedMode;
@@ -187,6 +189,7 @@ public partial class MainWindow : Window
         Disconnect,
         Install,
         Repair,
+        Verify,
         Update,
         SetUp,
         SwitchAdvanced,
@@ -497,6 +500,10 @@ public partial class MainWindow : Window
             };
             _procWatch.Start();
 
+            _proofSweep = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
+            _proofSweep.Tick += (_, _) => TickProofSweep();
+            _proofSweep.Start();
+
             UpdateStatus(Loc.Get("status_checking"));
             SetSimpleStatus(Loc.Get("status_checking"));
             _ = StartupChannelFlowAsync();
@@ -521,6 +528,65 @@ public partial class MainWindow : Window
         var root = ReadInstallPathBox();
         if (!HealthMemoFresh(root))
             KickHealthRefresh(root);
+    }
+
+    private void TickProofSweep()
+    {
+        if (_windowClosing || _installBusy || _verifyBusy)
+            return;
+        if (Interlocked.CompareExchange(ref _proofSweepBusy, 1, 0) != 0)
+            return;
+
+        var root = ReadInstallPathBox();
+        var health = _healthMemo;
+        if (string.IsNullOrWhiteSpace(root) ||
+            health is null ||
+            !health.IsReady ||
+            !HealthMemoFresh(root))
+        {
+            Interlocked.Exchange(ref _proofSweepBusy, 0);
+            return;
+        }
+
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                var statePath = Path.Combine(root, ProductConstants.InstallStateFileName);
+                if (!File.Exists(statePath))
+                    return;
+                var state = InstallStateIO.Load(statePath);
+                var cached = InstallHealthAssessor.FindCachedContentManifest(
+                    root, "client", state.ClientCatalogVersion)
+                    ?? InstallHealthAssessor.FindCachedContentManifest(
+                        root, "platform", state.PlatformCatalogVersion);
+                if (string.IsNullOrWhiteSpace(cached) || !File.Exists(cached))
+                    return;
+
+                var man = ContentManifestIO.Load(cached);
+                var result = ContentProofSweep.Step(root, man);
+                if (!result.Ran || !result.Mismatch)
+                    return;
+
+                if (_windowClosing)
+                    return;
+                Dispatcher.BeginInvoke(() =>
+                {
+                    InvalidateHealthMemo();
+                    KickHealthRefresh(root);
+                    SetSimpleStatus(Loc.Get("health_corrupt"));
+                    Log("Proof sweep mismatch: " + (result.Path ?? "?"));
+                });
+            }
+            catch
+            {
+                // Idle sweep is best-effort.
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _proofSweepBusy, 0);
+            }
+        });
     }
 
     private void TickProcessWatch()
@@ -1572,20 +1638,18 @@ public partial class MainWindow : Window
         _ = RunVerifyFilesAsync();
 
     /// <summary>
-    /// Check every file against the manifest and say what is wrong. Deliberately
-    /// does not fix anything: repair is a separate button so a player can look
-    /// before anything is rewritten.
+    /// Hash every official file. Does not download. Repair is a separate action.
     /// </summary>
-    private async Task RunVerifyFilesAsync()
+    private async Task<InstallHealthReport?> RunVerifyFilesAsync()
     {
         if (_installBusy || _verifyBusy)
-            return;
+            return _healthMemo;
 
         var root = ReadInstallPathBox();
         if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
         {
             SetSimpleStatus(Loc.Get("status_no_game_folder"));
-            return;
+            return null;
         }
 
         _verifyBusy = true;
@@ -1594,13 +1658,16 @@ public partial class MainWindow : Window
         {
             PaintInstallControls();
             ShowSimpleInstallBar(true);
-            Log("Verify: checking every file against the manifest.");
+            RefreshSimplePlayButton();
+            Log("Verify: hashing every official file.");
 
             var health = await ContentInstallService.VerifyExistingAsync(
                 _manifest, root, CreateVerifyProgress(), _installCts.Token)
                 .ConfigureAwait(true);
 
-            InvalidateHealthMemo();
+            _healthMemo = health;
+            _healthMemoRoot = root;
+            _healthMemoUtc = DateTime.UtcNow;
             var summary = health.IsReady
                 ? Loc.Get("verify_ok")
                 : Loc.Format("verify_problems", health.Summary);
@@ -1609,15 +1676,18 @@ public partial class MainWindow : Window
             if (!_settings.SimpleMode)
                 MessageBox.Show(this, summary, Loc.Get("verify_files"),
                     MessageBoxButton.OK, MessageBoxImage.Information);
+            return health;
         }
         catch (OperationCanceledException)
         {
             Log("Verify cancelled.");
+            return null;
         }
         catch (Exception ex)
         {
             Log("Verify failed: " + ex.Message);
             SetSimpleStatus(ex.Message);
+            return null;
         }
         finally
         {
@@ -1983,6 +2053,8 @@ public partial class MainWindow : Window
                 ? Loc.Format("health_missing_n", health.BrokenFileCount)
                 : Loc.Get("health_corrupt");
         }
+        if (health.Overall == InstallHealthStatus.Unverified)
+            return Loc.Get("health_unverified");
         if (!health.Enforced)
             return Loc.Get("health_local");
         if (health.Overall == InstallHealthStatus.Ready && health.HasOverlayEdits)
@@ -2046,6 +2118,12 @@ public partial class MainWindow : Window
             return false;
         }
 
+        if (health.NeedsVerify)
+        {
+            refuseReason = Loc.Format("gate_unverified", health.Summary);
+            return false;
+        }
+
         if (health.BlocksPlay && !health.NeedsUpdate)
         {
             refuseReason = Loc.Format("gate_not_ready", health.Summary);
@@ -2099,6 +2177,35 @@ public partial class MainWindow : Window
             Log("Update available but downloads are off; allowing play.");
         }
 
+        if (health.NeedsVerify)
+        {
+            Log("Check files before play: " + health.Summary);
+            if (_settings.SimpleMode)
+                SetSimpleStatus(Loc.Get("status_files_need_verify"));
+            _verifyBusy = true;
+            ShowSimpleInstallBar(true);
+            RefreshSimplePlayButton();
+            try
+            {
+                health = await ContentInstallService.VerifyExistingAsync(
+                    _manifest, root, CreateVerifyProgress()).ConfigureAwait(true);
+                _healthMemo = health;
+                _healthMemoRoot = root;
+                _healthMemoUtc = DateTime.UtcNow;
+                RefreshInstallStateLabels();
+            }
+            catch (Exception ex)
+            {
+                return (false, Loc.Format("verify_problems", ex.Message));
+            }
+            finally
+            {
+                _verifyBusy = false;
+                ShowSimpleInstallBar(false);
+                RefreshSimplePlayButton();
+            }
+        }
+
         if (health.NeedsRepair && autoRepairCorrupt)
         {
             var channel = _manifest;
@@ -2142,6 +2249,8 @@ public partial class MainWindow : Window
                     Loc.Format("gate_channel_newer", health.Summary));
             }
         }
+        else if (health.NeedsVerify)
+            return (false, Loc.Format("gate_unverified", health.Summary));
         else if (health.BlocksPlay)
             return (false, Loc.Format("gate_not_ready", health.Summary));
 
@@ -3550,6 +3659,7 @@ public partial class MainWindow : Window
     private void StopWatchdogs()
     {
         _procWatch?.Stop();
+        _proofSweep?.Stop();
         _shellUpdateWatch?.Stop();
         _consoleTimer?.Stop();
     }
@@ -4127,6 +4237,9 @@ public partial class MainWindow : Window
             case SimplePlayKind.Repair:
                 _ = RunRepairAsync(resumeIncomplete: true);
                 break;
+            case SimplePlayKind.Verify:
+                await RunVerifyThenPlayAsync().ConfigureAwait(true);
+                break;
             case SimplePlayKind.Update:
                 _ = RunInstallAsync(InstallMode.Full);
                 break;
@@ -4162,6 +4275,28 @@ public partial class MainWindow : Window
                     break;
                 }
         }
+    }
+
+    private async Task RunVerifyThenPlayAsync()
+    {
+        var health = await RunVerifyFilesAsync().ConfigureAwait(true);
+        if (health is null)
+            return;
+        RefreshSimplePlayButton(health);
+        if (!health.IsReady)
+            return;
+        if (_selectedMode is null)
+        {
+            SetSimpleStatus(Loc.Get("status_pick_mode"));
+            return;
+        }
+        var map = _selectedMode.SelectedMapStem;
+        if (string.IsNullOrWhiteSpace(map))
+        {
+            SetSimpleStatus(Loc.Get("status_pick_map"));
+            return;
+        }
+        await RunPlayAsync(_selectedMode.PlaylistId, map).ConfigureAwait(true);
     }
 
     private async Task StopSessionAsync()
@@ -4254,7 +4389,7 @@ public partial class MainWindow : Window
         {
             var root = ReadInstallPathBox();
             health ??= HealthForUi(root);
-            var confirmed = GameConfirmed(root, health);
+            var confirmed = GameOnDisk(root, health);
 
             if (_verifyBusy || _installBusy || _quickPlayBusy || _joinBusy)
             {
@@ -4341,6 +4476,14 @@ public partial class MainWindow : Window
                 if (health.NeedsUpdate)
                     SetSimpleStatus(Loc.Get("status_play_downloads_off"));
 
+                if (health.NeedsVerify)
+                {
+                    _simplePlayKind = SimplePlayKind.Verify;
+                    PaintPlayButton(Loc.Get("verify_action"), enabled: true, stop: false);
+                    SetSimpleStatus(Loc.Get("status_files_need_verify"));
+                    return;
+                }
+
                 if ((health.BlocksPlay && !health.NeedsUpdate) || health.NeedsRepair)
                 {
                     var repair = !NeedsSetup(root);
@@ -4392,9 +4535,12 @@ public partial class MainWindow : Window
             BtnPlay.Content = caption;
             BtnPlay.IsEnabled = enabled;
             BtnPlay.Visibility = Visibility.Visible;
-            BtnPlay.ToolTip = _simplePlayKind == SimplePlayKind.Repair
-                ? Loc.Get("tip_download_missing")
-                : null;
+            BtnPlay.ToolTip = _simplePlayKind switch
+            {
+                SimplePlayKind.Repair => Loc.Get("tip_download_missing"),
+                SimplePlayKind.Verify => Loc.Get("tip_check_files"),
+                _ => null,
+            };
             var styleKey = _simplePlayKind switch
             {
                 SimplePlayKind.ChangeMap => "PlayBarChange",
@@ -4476,6 +4622,7 @@ public partial class MainWindow : Window
                 tip = Loc.Get("tip_update");
                 break;
             case SimplePlayKind.Play:
+            case SimplePlayKind.Verify:
             case SimplePlayKind.Install:
             case SimplePlayKind.Repair:
             case SimplePlayKind.SetUp:
@@ -5405,6 +5552,13 @@ public partial class MainWindow : Window
         return health.IsReady || health.NeedsUpdate;
     }
 
+    static bool GameOnDisk(string root, InstallHealthReport health)
+    {
+        if (GameConfirmed(root, health))
+            return true;
+        return health.Enforced && health.NeedsVerify;
+    }
+
     async Task AdoptInstallFolderAsync(string dir, bool persist)
     {
         if (_verifyBusy || _installBusy)
@@ -5458,6 +5612,11 @@ public partial class MainWindow : Window
                         ? Loc.Get("status_play_downloads_off")
                         : Loc.Get("ready_to_play"));
                 Log("Folder check ok: " + health.Summary);
+            }
+            else if (health.NeedsVerify)
+            {
+                SetSimpleStatus(Loc.Get("status_files_need_verify"));
+                Log("Folder check unverified: " + health.Summary);
             }
             else if (NeedsSetup(dir))
             {
