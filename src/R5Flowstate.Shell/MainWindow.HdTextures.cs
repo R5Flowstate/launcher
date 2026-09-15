@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using R5Flowstate.Content;
 using R5Flowstate.Contracts;
 
@@ -15,6 +16,7 @@ public partial class MainWindow
     }
 
     bool _suppressHdEvent;
+    bool _hdAnnounceQueued;
 
     // A toggle thrown mid-download is honoured when the run ends. Deleting or
     // fetching HD while the installer is writing the same folder races it.
@@ -51,12 +53,12 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>Paint both HD rows: the settings card and the download card.</summary>
+    /// <summary>Paint the settings HD row.</summary>
     void RefreshHdTextures()
     {
-        var boxes = new[] { ChkHdTextures, ChkHdTexturesInstall };
-        var labels = new[] { TxtHdTextures, TxtHdTexturesInstall };
-        if (boxes[0] is null && boxes[1] is null)
+        var boxes = new[] { ChkHdTextures };
+        var labels = new[] { TxtHdTextures };
+        if (boxes[0] is null)
             return;
 
         var install = InstallRoot();
@@ -188,6 +190,7 @@ public partial class MainWindow
 
     void ApplyHdChoice(string install, bool enabled, bool kickInstall)
     {
+        MarkHdAnnounced();
         try
         {
             var res = ContentInstallService.SetHdEnabled(install, enabled);
@@ -236,50 +239,74 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// Tell existing players once that HD textures exist. A fresh install is
-    /// offered HD in the install card, so this is only for people who already
-    /// finished installing before the option shipped.
+    /// Ask once after the base game is ready to play. Never during a write —
+    /// toggling HD while files are landing races the installer.
     /// </summary>
     void MaybeAnnounceHdTextures()
     {
-        if (_settings.HdTexturesAnnounced)
+        if (_hdAnnounceQueued || !CanOfferHdTextures())
             return;
+
+        _hdAnnounceQueued = true;
+        Dispatcher.BeginInvoke(ShowHdAnnounceDialog, DispatcherPriority.ApplicationIdle);
+    }
+
+    bool CanOfferHdTextures()
+    {
+        if (!IsLoaded || _installBusy || _verifyBusy || _settings.HdTexturesAnnounced)
+            return false;
+        if (PanelSimpleSetup?.Visibility == Visibility.Visible)
+            return false;
 
         var install = InstallRoot();
         if (string.IsNullOrWhiteSpace(install))
-            return;
+            return false;
 
-        // Player installs only. Unenforced (master tree) is already complete on disk.
         var health = HealthForUi(install);
         if (!health.IsReady)
-            return;
+            return false;
         if (!health.Enforced)
         {
             MarkHdAnnounced();
-            return;
+            return false;
         }
         var space = HdSpace(install);
         if (space is null || !space.Available)
-            return;
+            return false;
         if (HdEnabledOnDisk(install) || HdTextureSet.AnyPresent(install))
         {
             MarkHdAnnounced();
-            return;
+            return false;
         }
+        return true;
+    }
 
-        MarkHdAnnounced();
-        var ok = MessageBox.Show(
-            this,
-            Loc.Format("hd_announce_fmt", space.MissingGiB),
-            Loc.Get("hd_textures"),
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Information);
-        if (ok != MessageBoxResult.Yes)
-            return;
-        // The notice already quoted the size; only the space refusal is left.
-        if (!HdFitsOrWarn(install))
-            return;
-        ApplyHdChoice(install, true, kickInstall: true);
+    void ShowHdAnnounceDialog()
+    {
+        try
+        {
+            if (!CanOfferHdTextures())
+                return;
+
+            var install = InstallRoot();
+            var space = HdSpace(install);
+            MarkHdAnnounced();
+            var ok = MessageBox.Show(
+                this,
+                Loc.Format("hd_announce_fmt", space?.MissingGiB ?? 0),
+                Loc.Get("hd_textures"),
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Information);
+            if (ok != MessageBoxResult.Yes)
+                return;
+            if (!HdFitsOrWarn(install))
+                return;
+            ApplyHdChoice(install, true, kickInstall: true);
+        }
+        finally
+        {
+            _hdAnnounceQueued = false;
+        }
     }
 
     void MarkHdAnnounced()

@@ -152,7 +152,8 @@ public partial class MainWindow : Window
         {
             try
             {
-                var report = ContentInstallService.Assess(manifest, root, true, true);
+                var report = ContentInstallService.Assess(
+                    manifest, root, true, true, _settings.KeepLocalFiles);
                 // Root first: readers pair the memo with this field, so publishing
                 // the report ahead of it can hand a painter the wrong pairing.
                 _healthMemoRoot = root;
@@ -260,6 +261,8 @@ public partial class MainWindow : Window
                 ChkShowUnlistedMaps.IsChecked = _settings.ShowUnlistedMaps;
             if (ChkJoinWithoutDev is not null)
                 ChkJoinWithoutDev.IsChecked = _settings.JoinWithoutDev;
+            if (ChkKeepLocalFiles is not null)
+                ChkKeepLocalFiles.IsChecked = _settings.KeepLocalFiles;
             if (ChkUseDx12 is not null)
                 ChkUseDx12.IsChecked = _settings.UseDx12;
             if (ChkClientDx12 is not null)
@@ -564,7 +567,8 @@ public partial class MainWindow : Window
                     return;
 
                 var man = ContentManifestIO.Load(cached);
-                var result = ContentProofSweep.Step(root, man);
+                var result = ContentProofSweep.Step(
+                    root, man, keepLocalFiles: _settings.KeepLocalFiles);
                 if (!result.Ran || !result.Mismatch)
                     return;
 
@@ -1389,6 +1393,20 @@ public partial class MainWindow : Window
             : "Join: keep developer mode");
     }
 
+    private void OnKeepLocalFilesChanged(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded || _suppressArgsPersist)
+            return;
+        _settings.KeepLocalFiles = ChkKeepLocalFiles?.IsChecked == true;
+        try { SettingsStore.Save(_settings); }
+        catch (Exception ex) { Log($"Settings save failed: {ex.Message}"); }
+        Log(_settings.KeepLocalFiles
+            ? "Keep local file changes"
+            : "Treat replaced game files as damage");
+        InvalidateHealthMemo();
+        KickHealthRefresh(ReadInstallPathBox());
+    }
+
     private void OnDediSelectionChanged(object sender, RoutedEventArgs e)
     {
         if (!IsLoaded || _suppressDediUi || _suppressArgsPersist)
@@ -1526,6 +1544,8 @@ public partial class MainWindow : Window
             _settings.ShowUnlistedMaps = ChkShowUnlistedMaps.IsChecked == true;
         if (ChkJoinWithoutDev is not null)
             _settings.JoinWithoutDev = ChkJoinWithoutDev.IsChecked == true;
+        if (ChkKeepLocalFiles is not null)
+            _settings.KeepLocalFiles = ChkKeepLocalFiles.IsChecked == true;
         if (ChkOpenConsoleOnLaunch is not null)
             _settings.OpenConsoleOnLaunch = ChkOpenConsoleOnLaunch.IsChecked == true;
         _settings.DediPlaylist = SelectedPlaylistId();
@@ -1662,7 +1682,8 @@ public partial class MainWindow : Window
             Log("Verify: hashing every official file.");
 
             var health = await ContentInstallService.VerifyExistingAsync(
-                _manifest, root, CreateVerifyProgress(), _installCts.Token)
+                _manifest, root, CreateVerifyProgress(), _installCts.Token,
+                keepLocalFiles: _settings.KeepLocalFiles, deep: true)
                 .ConfigureAwait(true);
 
             _healthMemo = health;
@@ -1777,7 +1798,8 @@ public partial class MainWindow : Window
                     forcedOverlay: OverlayExtractPolicy.WriteOfficial)
                     .ConfigureAwait(true);
                 health = await Task.Run(() => ContentInstallService.Assess(
-                    _manifest, installPath, requireClient: true, requireServer: true))
+                    _manifest, installPath, requireClient: true, requireServer: true,
+                    keepLocalFiles: _settings.KeepLocalFiles))
                     .ConfigureAwait(true);
                 _healthMemo = health;
                 _healthMemoRoot = installPath;
@@ -1795,7 +1817,8 @@ public partial class MainWindow : Window
                     progress: progress,
                     decideOverlay: DecideOverlayEdits,
                     allowContent: gate.Content,
-                    allowPlatform: gate.Platform).ConfigureAwait(true);
+                    allowPlatform: gate.Platform,
+                    keepLocalFiles: _settings.KeepLocalFiles).ConfigureAwait(true);
             }
 
             RefreshInstallStateLabels();
@@ -1945,7 +1968,8 @@ public partial class MainWindow : Window
                 runControl: _installRun,
                 decideOverlay: DecideOverlayEdits,
                 allowContent: gate.Content,
-                allowPlatform: gate.Platform).ConfigureAwait(true);
+                allowPlatform: gate.Platform,
+                keepLocalFiles: _settings.KeepLocalFiles).ConfigureAwait(true);
 
             RefreshInstallStateLabels(state);
             if (state.Incomplete || !string.IsNullOrWhiteSpace(state.LastError))
@@ -2153,10 +2177,11 @@ public partial class MainWindow : Window
         if (_manifest is null)
             await LoadChannelAsync().ConfigureAwait(true);
 
+        var keepLocal = _settings.KeepLocalFiles;
         var health = await Task.Run(() =>
         {
             var report = ContentInstallService.Assess(
-                _manifest, root, requireClient, requireServer);
+                _manifest, root, requireClient, requireServer, keepLocal);
             _healthMemo = report;
             _healthMemoRoot = root;
             _healthMemoUtc = DateTime.UtcNow;
@@ -2187,7 +2212,8 @@ public partial class MainWindow : Window
             try
             {
                 health = await ContentInstallService.VerifyExistingAsync(
-                    _manifest, root, CreateVerifyProgress()).ConfigureAwait(true);
+                    _manifest, root, CreateVerifyProgress(),
+                    keepLocalFiles: keepLocal, deep: !keepLocal).ConfigureAwait(true);
                 _healthMemo = health;
                 _healthMemoRoot = root;
                 _healthMemoUtc = DateTime.UtcNow;
@@ -2228,7 +2254,8 @@ public partial class MainWindow : Window
                     progress: CreateInstallProgress(),
                     decideOverlay: DecideOverlayEdits,
                     allowContent: gate.Content,
-                    allowPlatform: gate.Platform).ConfigureAwait(true);
+                    allowPlatform: gate.Platform,
+                    keepLocalFiles: keepLocal).ConfigureAwait(true);
                 _healthMemo = health;
                 _healthMemoRoot = root;
                 _healthMemoUtc = DateTime.UtcNow;
@@ -2645,10 +2672,31 @@ public partial class MainWindow : Window
         if (!Dispatcher.CheckAccess())
             return Dispatcher.Invoke(() => DecideOverlayEdits(report));
         var choice = OverlayScriptsWindow.Ask(this, report);
-        Log(choice == OverlayExtractPolicy.KeepEdits
-            ? $"Leaving {report.Total} edited script file(s)."
-            : $"Restoring official scripts ({report.Total} edited).");
+        if (choice == OverlayExtractPolicy.KeepAll)
+            PersistKeepLocalFiles(true);
+        Log(choice == OverlayExtractPolicy.KeepAll
+            ? $"Keeping {report.Total} edited file(s) on every update."
+            : choice == OverlayExtractPolicy.KeepEdits
+                ? $"Leaving {report.Total} edited file(s)."
+                : $"Restoring official files ({report.Total} edited).");
         return choice;
+    }
+
+    void PersistKeepLocalFiles(bool on)
+    {
+        _settings.KeepLocalFiles = on;
+        try { SettingsStore.Save(_settings); }
+        catch (Exception ex) { Log($"Settings save failed: {ex.Message}"); }
+        _suppressArgsPersist = true;
+        try
+        {
+            if (ChkKeepLocalFiles is not null)
+                ChkKeepLocalFiles.IsChecked = on;
+        }
+        finally
+        {
+            _suppressArgsPersist = false;
+        }
     }
 
     private static string PlainContentGateMessage(string? reason)
@@ -5632,7 +5680,9 @@ public partial class MainWindow : Window
             if (_manifest is null)
                 await LoadChannelAsync().ConfigureAwait(true);
 
-            var quick = ContentInstallService.Assess(_manifest, dir, true, true);
+            var keepLocal = _settings.KeepLocalFiles;
+            var quick = ContentInstallService.Assess(
+                _manifest, dir, true, true, keepLocal);
             if (GameConfirmed(dir, quick))
             {
                 ReloadPlaylistsAndMaps(selectSaved: true);
@@ -5660,7 +5710,8 @@ public partial class MainWindow : Window
             Log("Checking install folder: " + dir);
 
             var health = await ContentInstallService.VerifyExistingAsync(
-                _manifest, dir, CreateVerifyProgress()).ConfigureAwait(true);
+                _manifest, dir, CreateVerifyProgress(),
+                keepLocalFiles: keepLocal, deep: !keepLocal).ConfigureAwait(true);
             _healthMemo = health;
             _healthMemoRoot = dir;
             _healthMemoUtc = DateTime.UtcNow;
@@ -6132,7 +6183,8 @@ public partial class MainWindow : Window
         try
         {
             var health = await Task.Run(
-                () => ContentInstallService.Assess(_manifest, root, true, true));
+                () => ContentInstallService.Assess(
+                    _manifest, root, true, true, _settings.KeepLocalFiles));
             if (!health.NeedsUpdate)
                 return;
             if (!LaneBlocksPlay(health, gate, requireClient: true, requireServer: true))

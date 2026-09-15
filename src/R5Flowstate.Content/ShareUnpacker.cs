@@ -130,7 +130,7 @@ public static class ShareUnpacker
             ReportUnpack(progress, ai, archives.Count, label, 0, arch.PayloadBytes);
 
             var args = $"x \"{first}\" -o\"{destInstallPath}\" -y -aoa -bsp1 -bb0 -bso0 -mmt=1";
-            if (overlay == OverlayExtractPolicy.KeepEdits)
+            if (OverlayExtractPolicies.IsKeep(overlay))
                 args += OverlayExcludeArgs();
             args += ExistingMapExcludeArgs(destInstallPath, arch, restoreMapPayloads);
             if (!string.IsNullOrEmpty(password))
@@ -200,7 +200,8 @@ public static class ShareUnpacker
         {
             if (string.IsNullOrWhiteSpace(f.Path))
                 continue;
-            if (overlay == OverlayExtractPolicy.KeepEdits && OverlayPaths.IsOverlayOwned(f.Path))
+            if (OverlayExtractPolicies.IsKeep(overlay) &&
+                (OverlayPaths.IsOverlayOwned(f.Path) || OverlayPaths.IsOverlayOptional(f.Path)))
                 continue;
             if (!restoreMapPayloads && OverlayPaths.IsPlayerMap(f.Path))
                 continue;

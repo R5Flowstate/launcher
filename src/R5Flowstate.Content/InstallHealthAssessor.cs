@@ -12,7 +12,8 @@ public static class InstallHealthAssessor
         ChannelManifest? channel,
         string installPath,
         bool requireClient = true,
-        bool requireServer = false)
+        bool requireServer = false,
+        bool keepLocalFiles = false)
     {
         var report = new InstallHealthReport
         {
@@ -91,7 +92,8 @@ public static class InstallHealthAssessor
                 readyFlag: state?.ClientReady ?? false,
                 installedVer: state?.ClientCatalogVersion,
                 installedHash: state?.ClientContentHash,
-                incomplete: state?.Incomplete ?? true);
+                incomplete: state?.Incomplete ?? true,
+                keepLocalFiles: keepLocalFiles);
         }
 
         if (requireServer || channel?.Server is not null)
@@ -105,7 +107,8 @@ public static class InstallHealthAssessor
                 readyFlag: state?.ServerReady ?? false,
                 installedVer: state?.ServerCatalogVersion,
                 installedHash: state?.ServerContentHash,
-                incomplete: state?.Incomplete ?? true);
+                incomplete: state?.Incomplete ?? true,
+                keepLocalFiles: keepLocalFiles);
         }
 
         if (channel?.Platform is not null)
@@ -119,7 +122,8 @@ public static class InstallHealthAssessor
                 readyFlag: state?.PlatformReady ?? false,
                 installedVer: state?.PlatformCatalogVersion,
                 installedHash: state?.PlatformContentHash,
-                incomplete: state?.Incomplete ?? true);
+                incomplete: state?.Incomplete ?? true,
+                keepLocalFiles: keepLocalFiles);
         }
 
         // HD is opt-in. A player who never enabled it must never see the install
@@ -136,7 +140,8 @@ public static class InstallHealthAssessor
                 readyFlag: state?.HdReady ?? false,
                 installedVer: state?.HdCatalogVersion,
                 installedHash: state?.HdContentHash,
-                incomplete: state?.Incomplete ?? true);
+                incomplete: state?.Incomplete ?? true,
+                keepLocalFiles: keepLocalFiles);
         }
 
         var statuses = new List<InstallHealthStatus>();
@@ -159,7 +164,7 @@ public static class InstallHealthAssessor
         }
 
         report.Overall = Worst(statuses);
-        AttachShadowsAndProof(report, installPath, state);
+        AttachShadowsAndProof(report, installPath, state, keepLocalFiles);
         CollectReasons(report);
         AttachOverlay(report, installPath, channel);
         return report;
@@ -174,7 +179,8 @@ public static class InstallHealthAssessor
         bool readyFlag,
         string? installedVer,
         string? installedHash,
-        bool incomplete)
+        bool incomplete,
+        bool keepLocalFiles = false)
     {
         var h = new TrackHealth
         {
@@ -272,7 +278,9 @@ public static class InstallHealthAssessor
                     installPath,
                     man,
                     skipRelativePath: isPlatform ? null : OverlayPaths.SkipFatVerify,
-                    sizeOptionalRelativePath: OverlayPaths.IgnoreSizeMismatch);
+                    sizeOptionalRelativePath: keepLocalFiles
+                        ? static _ => true
+                        : OverlayPaths.IgnoreSizeMismatch);
                 h.MissingFileCount = vr.Missing;
                 h.SizeMismatchCount = vr.SizeMismatch;
                 h.SampleIssues = vr.Samples;
@@ -336,7 +344,9 @@ public static class InstallHealthAssessor
                                 continue;
                             }
                             var len = new FileInfo(full).Length;
-                            if (len != f.Size && !OverlayPaths.IgnoreSizeMismatch(f.Path))
+                            if (len != f.Size &&
+                                !keepLocalFiles &&
+                                !OverlayPaths.IgnoreSizeMismatch(f.Path))
                             {
                                 sizeMismatch++;
                                 if (samples.Count < 4)
@@ -648,7 +658,8 @@ public static class InstallHealthAssessor
     static void AttachShadowsAndProof(
         InstallHealthReport report,
         string installPath,
-        InstallState? state)
+        InstallState? state,
+        bool keepLocalFiles = false)
     {
         if (string.IsNullOrWhiteSpace(installPath) || !Directory.Exists(installPath))
             return;
@@ -707,7 +718,7 @@ public static class InstallHealthAssessor
             return;
         }
 
-        if (!string.IsNullOrWhiteSpace(index.ProofMismatch))
+        if (!keepLocalFiles && !string.IsNullOrWhiteSpace(index.ProofMismatch))
         {
             var sample = index.ProofMismatch;
             if (report.Client is not null)

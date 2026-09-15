@@ -8,25 +8,34 @@ public static class ContentInstallService
         ChannelManifest? channel,
         string installPath,
         bool requireClient = true,
-        bool requireServer = false) =>
-        InstallHealthAssessor.Assess(channel, installPath, requireClient, requireServer);
+        bool requireServer = false,
+        bool keepLocalFiles = false) =>
+        InstallHealthAssessor.Assess(
+            channel, installPath, requireClient, requireServer, keepLocalFiles);
 
     /// <summary>
-    /// Hash every official file against the cached content manifests.
-    /// Writes schema-2 INSTALL_FILES on a clean result. Does not download.
+    /// Hash official files against the cached content manifests.
+    /// Deep hashes the whole tree. Otherwise overlay + index. Does not download.
     /// </summary>
     public static Task<InstallHealthReport> VerifyExistingAsync(
         ChannelManifest? channel,
         string installPath,
         IProgress<ContentInstallProgress>? progress = null,
-        CancellationToken cancel = default) =>
-        Task.Run(() => VerifyExisting(channel, installPath, progress, cancel), cancel);
+        CancellationToken cancel = default,
+        bool keepLocalFiles = false,
+        bool deep = true) =>
+        Task.Run(
+            () => VerifyExisting(
+                channel, installPath, progress, cancel, keepLocalFiles, deep),
+            cancel);
 
     static InstallHealthReport VerifyExisting(
         ChannelManifest? channel,
         string installPath,
         IProgress<ContentInstallProgress>? progress,
-        CancellationToken cancel)
+        CancellationToken cancel,
+        bool keepLocalFiles = false,
+        bool deep = true)
     {
         void Step(string message, long current = 0, long total = 0, string track = "")
         {
@@ -90,8 +99,14 @@ public static class ContentInstallService
 
             hashedAny = true;
             var index = InstallFilesIndexIO.TryLoad(indexPath);
+            var overlay = keepLocalFiles
+                ? OverlayExtractPolicy.KeepAll
+                : OverlayExtractPolicy.KeepEdits;
+            var depth = deep && !keepLocalFiles
+                ? VerifyDepth.Full
+                : VerifyDepth.Overlay;
             var plan = ContentReconciler.Plan(
-                man, index, installPath, OverlayExtractPolicy.KeepEdits, VerifyDepth.Full,
+                man, index, installPath, overlay, depth,
                 progress, cancel, track: preset);
             var officialStems = OverlayPaths.OfficialMapStems(man.Files.Select(f => f.Path));
 
@@ -110,12 +125,12 @@ public static class ContentInstallService
                     samples.Add("leftover: " + a.Path);
             }
 
-            if (!plan.Work.Any())
-                ContentTrackInstaller.WriteIndex(indexPath, man, installPath, plan);
+            ContentTrackInstaller.WriteIndex(indexPath, man, installPath, plan);
         }
 
         Step("Finishing check…");
-        var report = Assess(channel, installPath, requireClient: true, requireServer: true);
+        var report = Assess(
+            channel, installPath, requireClient: true, requireServer: true, keepLocalFiles);
         if (hashedAny && fetchCount == 0)
             return report;
 
@@ -176,11 +191,12 @@ public static class ContentInstallService
         CancellationToken cancel = default,
         Func<OverlayEditReport, OverlayExtractPolicy>? decideOverlay = null,
         bool allowContent = true,
-        bool allowPlatform = true)
+        bool allowPlatform = true,
+        bool keepLocalFiles = false)
     {
         ArgumentNullException.ThrowIfNull(channel);
 
-        var report = Assess(channel, installPath, requireClient, requireServer);
+        var report = Assess(channel, installPath, requireClient, requireServer, keepLocalFiles);
         if (report.IsReady || !report.Enforced)
             return report;
 
@@ -202,9 +218,10 @@ public static class ContentInstallService
                     decideOverlay: decideOverlay,
                     allowContent: allowContent,
                     allowPlatform: allowPlatform,
-                    forceReinstall: true)
+                    forceReinstall: true,
+                    keepLocalFiles: keepLocalFiles)
                 .ConfigureAwait(false);
-            return Assess(channel, installPath, requireClient, requireServer);
+            return Assess(channel, installPath, requireClient, requireServer, keepLocalFiles);
         }
 
         if ((report.Overall is InstallHealthStatus.Missing or InstallHealthStatus.Incomplete)
@@ -216,9 +233,10 @@ public static class ContentInstallService
             await InstallAsync(channel, mode, installPath, fetcher, progress, cancel,
                     decideOverlay: decideOverlay,
                     allowContent: allowContent,
-                    allowPlatform: allowPlatform)
+                    allowPlatform: allowPlatform,
+                    keepLocalFiles: keepLocalFiles)
                 .ConfigureAwait(false);
-            return Assess(channel, installPath, requireClient, requireServer);
+            return Assess(channel, installPath, requireClient, requireServer, keepLocalFiles);
         }
 
         if (report.NeedsUpdate && autoApplyUpdates)
@@ -229,9 +247,10 @@ public static class ContentInstallService
             await InstallAsync(channel, mode, installPath, fetcher, progress, cancel,
                     decideOverlay: decideOverlay,
                     allowContent: allowContent,
-                    allowPlatform: allowPlatform)
+                    allowPlatform: allowPlatform,
+                    keepLocalFiles: keepLocalFiles)
                 .ConfigureAwait(false);
-            return Assess(channel, installPath, requireClient, requireServer);
+            return Assess(channel, installPath, requireClient, requireServer, keepLocalFiles);
         }
 
         return report;
@@ -271,7 +290,8 @@ public static class ContentInstallService
         bool allowContent = true,
         bool allowPlatform = true,
         bool forceReinstall = false,
-        OverlayExtractPolicy? forcedOverlay = null)
+        OverlayExtractPolicy? forcedOverlay = null,
+        bool keepLocalFiles = false)
     {
         ArgumentNullException.ThrowIfNull(channel);
         if (string.IsNullOrWhiteSpace(installPath))
@@ -378,7 +398,9 @@ public static class ContentInstallService
         // Restore official must ignore OverlayKeepKey; remembered KeepEdits
         // would otherwise no-op that button.
         OverlayExtractPolicy? overlayPolicy = forcedOverlay
-            ?? (overlayRemembered ? OverlayExtractPolicy.KeepEdits : null);
+            ?? (keepLocalFiles
+                ? OverlayExtractPolicy.KeepAll
+                : overlayRemembered ? OverlayExtractPolicy.KeepEdits : null);
         if (overlayPolicy == OverlayExtractPolicy.WriteOfficial)
             state.OverlayKeepKey = null;
         var restoreMapPayloads = forcedOverlay == OverlayExtractPolicy.WriteOfficial;
@@ -586,16 +608,16 @@ public static class ContentInstallService
                         overlayPolicy = decideOverlay?.Invoke(overlayEdits)
                                         ?? OverlayExtractPolicy.KeepEdits;
                         state.OverlayKeepKey =
-                            overlayPolicy == OverlayExtractPolicy.KeepEdits
+                            OverlayExtractPolicies.IsKeep(overlayPolicy.Value)
                                 ? overlayKeepKey
                                 : null;
                         InstallStateIO.Save(statePath, state);
                         progress?.Report(new ContentInstallProgress
                         {
                             Phase = "overlay",
-                            Message = overlayPolicy == OverlayExtractPolicy.KeepEdits
-                                ? "Leaving edited script files in place."
-                                : "Restoring official script files.",
+                            Message = OverlayExtractPolicies.IsKeep(overlayPolicy.Value)
+                                ? "Leaving edited files in place."
+                                : "Restoring official files.",
                         });
                     }
                     else if (overlayRemembered && !reportedRememberedOverlay &&
@@ -648,7 +670,7 @@ public static class ContentInstallService
                             overlay,
                             contentUnchanged: contentUnchanged && !forceReinstall,
                             restoreMapPayloads: restoreMapPayloads,
-                            ignoreIndex: forceReinstall).ConfigureAwait(false);
+                            ignoreIndex: false).ConfigureAwait(false);
                     }
                     else if (step.Kind == UpdateStepKind.InstallBase)
                     {
@@ -686,7 +708,7 @@ public static class ContentInstallService
                     }
 
                     if (step.Kind == UpdateStepKind.InstallBase &&
-                        overlay != OverlayExtractPolicy.KeepEdits &&
+                        !OverlayExtractPolicies.IsKeep(overlay) &&
                         (IsPlatform(track.Preset) || IsClient(track.Preset)))
                     {
                         TryPlatformLeftoverWipe(plan.InstallPath, track.Preset, step.ToVersion);

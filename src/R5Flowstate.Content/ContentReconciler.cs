@@ -266,7 +266,8 @@ public static class ContentReconciler
             return AdoptPartOrFetch(entry, full, plan, reporter, cancel);
 
         if (info.Length != entry.Size)
-            return Differs(entry, full, overlay, plan, reporter, cancel, restoreMapPayloads);
+            return Differs(
+                entry, full, index, overlay, plan, reporter, cancel, restoreMapPayloads);
 
         var isOverlay = OverlayPaths.IsOverlayOwned(entry.Path);
         var mtime = info.LastWriteTimeUtc.Ticks;
@@ -286,7 +287,8 @@ public static class ContentReconciler
                     string.Equals(known.Sha256, entry.Sha256, StringComparison.OrdinalIgnoreCase))
                     return new FileAction(entry.Path, entry, FileActionKind.Keep);
                 if (!known.PlayerEdited)
-                    return Differs(entry, full, overlay, plan, reporter, cancel, restoreMapPayloads);
+                    return Differs(
+                        entry, full, index, overlay, plan, reporter, cancel, restoreMapPayloads);
             }
         }
 
@@ -306,28 +308,74 @@ public static class ContentReconciler
             return new FileAction(entry.Path, entry, FileActionKind.Keep);
         }
 
-        return Differs(entry, full, overlay, plan, reporter, cancel, restoreMapPayloads);
+        return Differs(
+            entry, full, index, overlay, plan, reporter, cancel, restoreMapPayloads);
     }
 
     static bool KeepRecordedEdit(InstallFileState known, string path, OverlayExtractPolicy overlay)
     {
         if (!known.PlayerEdited)
             return false;
-        if (OverlayPaths.IsOfficialMapPayload(path))
+        if (OverlayPaths.IsOfficialMapPayload(path) && overlay != OverlayExtractPolicy.KeepAll)
             return false;
-        return overlay == OverlayExtractPolicy.KeepEdits && OverlayPaths.IsOverlayOwned(path);
+        return OverlayExtractPolicies.Keeps(overlay, path);
+    }
+
+    /// <summary>
+    /// KeepEdits: any overlay/optional mismatch is the player's.
+    /// KeepAll: keep what they changed; a tip that moved under an
+    /// untouched official file is still an update.
+    /// </summary>
+    static bool ShouldKeepDiff(
+        ContentFile entry, string full, InstallFilesIndex? index, OverlayExtractPolicy overlay)
+    {
+        if (!OverlayExtractPolicies.Keeps(overlay, entry.Path))
+            return false;
+        if (overlay != OverlayExtractPolicy.KeepAll)
+            return true;
+
+        var known = Lookup(index, entry.Path);
+        if (known is null)
+            return true;
+        if (known.PlayerEdited)
+            return true;
+        if (!string.IsNullOrEmpty(known.Sha256) &&
+            string.Equals(known.Sha256, entry.Sha256, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        try
+        {
+            var info = new FileInfo(full);
+            if (!info.Exists)
+                return false;
+            if (known.StatMatches(info.Length, info.LastWriteTimeUtc.Ticks))
+                return false;
+            if (!string.IsNullOrEmpty(known.Sha256))
+            {
+                var actual = HashFile(full);
+                if (string.Equals(actual, known.Sha256, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+        }
+        catch
+        {
+            return true;
+        }
+
+        return true;
     }
 
     static FileAction Differs(
         ContentFile entry,
         string full,
+        InstallFilesIndex? index,
         OverlayExtractPolicy overlay,
         ReconcilePlan plan,
         ScanReporter reporter,
         CancellationToken cancel,
         bool restoreMapPayloads)
     {
-        if (overlay == OverlayExtractPolicy.KeepEdits && OverlayPaths.IsOverlayOwned(entry.Path))
+        if (ShouldKeepDiff(entry, full, index, overlay))
             return new FileAction(entry.Path, entry, FileActionKind.KeepPlayerEdit);
         _ = restoreMapPayloads;
 
@@ -512,7 +560,7 @@ public static class ContentReconciler
                 // to make, are not leftovers.
                 if (OverlayPaths.IsOverlayOwned(rel) || OverlayPaths.IsOverlayOptional(rel))
                 {
-                    if (overlay == OverlayExtractPolicy.KeepEdits)
+                    if (OverlayExtractPolicies.IsKeep(overlay))
                     {
                         if (WasOfficial(index, rel))
                             plan.Actions.Add(new FileAction(rel, null, FileActionKind.Delete));

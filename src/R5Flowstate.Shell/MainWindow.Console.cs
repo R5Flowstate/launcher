@@ -78,7 +78,8 @@ public partial class MainWindow
         RefreshSimplePlayButton();
     }
 
-    const int DownloadLimitMbpsMax = 10000;
+    const int DownloadLimitMBpsMax = 10000;
+    const long BytesPerMBs = 1_000_000L;
 
     bool _suppressLimitSync;
 
@@ -106,12 +107,12 @@ public partial class MainWindow
         ApplyDownloadLimit();
     }
 
-    void WriteDownloadLimitBoxes(int mbps)
+    void WriteDownloadLimitBoxes(int mbs, TextBox? except = null)
     {
-        var text = Math.Max(0, mbps).ToString(CultureInfo.InvariantCulture);
+        var text = Math.Max(0, mbs).ToString(CultureInfo.InvariantCulture);
         foreach (var box in DownloadLimitBoxes())
         {
-            if (box is null || box.Text == text)
+            if (box is null || ReferenceEquals(box, except) || box.Text == text)
                 continue;
             box.Text = text;
         }
@@ -119,29 +120,29 @@ public partial class MainWindow
 
     void ApplyDownloadLimit()
     {
-        FileSystemFetcher.GlobalMaxBytesPerSecond = _settings.DownloadLimitMbps * 125_000L;
+        FileSystemFetcher.GlobalMaxBytesPerSecond = _settings.DownloadLimitMbps * BytesPerMBs;
         ContentExecutor.GlobalConcurrency = _settings.DownloadConcurrency;
     }
 
     void CaptureDownloadLimitFromUi()
     {
-        var text = TxtDownloadLimit?.IsKeyboardFocusWithin == true
-            ? TxtDownloadLimit.Text
+        var box = TxtDownloadLimit?.IsKeyboardFocusWithin == true
+            ? TxtDownloadLimit
             : TxtDownloadLimitInstall?.IsKeyboardFocusWithin == true
-                ? TxtDownloadLimitInstall.Text
-                : TxtDownloadLimit?.Text ?? TxtDownloadLimitInstall?.Text;
-        if (!TryParseDownloadLimitMbps(text, out var mbps))
+                ? TxtDownloadLimitInstall
+                : TxtDownloadLimit ?? TxtDownloadLimitInstall;
+        if (box is null || !TryParseDownloadLimitMBps(box.Text, out var mbs))
             return;
-        CommitDownloadLimit(mbps, persist: false);
+        CommitDownloadLimit(mbs, persist: false, source: box);
     }
 
-    void CommitDownloadLimit(int mbps, bool persist)
+    void CommitDownloadLimit(int mbs, bool persist, TextBox? source = null)
     {
-        mbps = Math.Clamp(mbps, 0, DownloadLimitMbpsMax);
-        var changed = mbps != _settings.DownloadLimitMbps;
-        _settings.DownloadLimitMbps = mbps;
+        mbs = Math.Clamp(mbs, 0, DownloadLimitMBpsMax);
+        var changed = mbs != _settings.DownloadLimitMbps;
+        _settings.DownloadLimitMbps = mbs;
         _suppressLimitSync = true;
-        try { WriteDownloadLimitBoxes(mbps); }
+        try { WriteDownloadLimitBoxes(mbs, except: source); }
         finally { _suppressLimitSync = false; }
         ApplyDownloadLimit();
         if (!persist)
@@ -150,22 +151,33 @@ public partial class MainWindow
         catch (Exception ex) { Log($"Settings save failed: {ex.Message}"); }
         if (changed)
         {
-            Log(mbps > 0
-                ? $"Download limit: {mbps} Mbps"
+            Log(mbs > 0
+                ? $"Download limit: {mbs} MB/s"
                 : "Download limit: unlimited");
         }
     }
 
-    static bool TryParseDownloadLimitMbps(string? text, out int mbps)
+    static bool TryParseDownloadLimitMBps(string? text, out int mbs)
     {
-        mbps = 0;
+        mbs = 0;
         if (string.IsNullOrWhiteSpace(text))
             return true;
         if (!int.TryParse(text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
             || value < 0)
             return false;
-        mbps = Math.Min(value, DownloadLimitMbpsMax);
+        mbs = Math.Min(value, DownloadLimitMBpsMax);
         return true;
+    }
+
+    private void OnDownloadLimitTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!IsLoaded || _suppressArgsPersist || _suppressLimitSync)
+            return;
+        if (sender is not TextBox box)
+            return;
+        if (!TryParseDownloadLimitMBps(box.Text, out var mbs))
+            return;
+        CommitDownloadLimit(mbs, persist: true, source: box);
     }
 
     private void OnDownloadLimitLostFocus(object sender, RoutedEventArgs e)
@@ -174,12 +186,12 @@ public partial class MainWindow
             return;
         if (sender is not TextBox box)
             return;
-        if (!TryParseDownloadLimitMbps(box.Text, out var mbps))
+        if (!TryParseDownloadLimitMBps(box.Text, out var mbs))
         {
             WriteDownloadLimitBoxes(_settings.DownloadLimitMbps);
             return;
         }
-        CommitDownloadLimit(mbps, persist: true);
+        CommitDownloadLimit(mbs, persist: true, source: box);
     }
 
     private void OnDownloadLimitKeyDown(object sender, KeyEventArgs e)

@@ -8,6 +8,23 @@ public enum OverlayExtractPolicy
 {
     WriteOfficial = 0,
     KeepEdits = 1,
+    /// <summary>Keep any existing file that differs, including paks and maps.</summary>
+    KeepAll = 2,
+}
+
+public static class OverlayExtractPolicies
+{
+    public static bool IsKeep(OverlayExtractPolicy overlay) =>
+        overlay != OverlayExtractPolicy.WriteOfficial;
+
+    public static bool Keeps(OverlayExtractPolicy overlay, string? path)
+    {
+        if (overlay == OverlayExtractPolicy.WriteOfficial)
+            return false;
+        if (overlay == OverlayExtractPolicy.KeepAll)
+            return true;
+        return OverlayPaths.IsOverlayOwned(path) || OverlayPaths.IsOverlayOptional(path);
+    }
 }
 
 public sealed class OverlayEditReport

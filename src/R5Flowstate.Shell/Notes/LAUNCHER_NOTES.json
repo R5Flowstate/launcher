@@ -4,6 +4,19 @@
   "entries": [
     {
       "date": "14 Sep 2026",
+      "title": "Launcher 0.1.54",
+      "items": [
+        "Add Keep my file changes always",
+        "Keep edited files on a game update",
+        "Update files that were not edited",
+        "Skip a full file check after an edit",
+        "Show download limit in MB/s",
+        "Fix download speed limit across files",
+        "Ask about HD textures after Play is ready"
+      ]
+    },
+    {
+      "date": "14 Sep 2026",
       "title": "Launcher 0.1.53",
       "items": [
         "Stop leftover extras blocking Play",

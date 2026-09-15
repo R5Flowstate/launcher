@@ -1427,16 +1427,6 @@
                                          TextWrapping="NoWrap"
                                          TextTrimming="CharacterEllipsis"/>
                             </DockPanel>
-                            <CheckBox x:Name="ChkHdTexturesInstall" Margin="0,10,0,0"
-                                      Content="{loc:T hd_textures}"
-                                      ToolTip="{loc:T tip_hd_textures}"
-                                      Checked="OnHdTexturesChanged"
-                                      Unchecked="OnHdTexturesChanged"/>
-                            <TextBlock x:Name="TxtHdTexturesInstall" Margin="0,4,0,0"
-                                       FontSize="12"
-                                       Foreground="{StaticResource TextSecondary}"
-                                       TextWrapping="NoWrap"
-                                       TextTrimming="CharacterEllipsis"/>
                             <DockPanel Margin="0,12,0,0" LastChildFill="False">
                               <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
                                 <Button x:Name="BtnSimpleInstallPause"
@@ -1460,9 +1450,10 @@
                                          VerticalAlignment="Center"
                                          ToolTip="{loc:T tip_download_limit}"
                                          PreviewTextInput="OnDownloadLimitPreviewText"
+                                         TextChanged="OnDownloadLimitTextChanged"
                                          LostFocus="OnDownloadLimitLostFocus"
                                          KeyDown="OnDownloadLimitKeyDown"/>
-                                <TextBlock Text="{loc:T mbps_unit}" Margin="6,0,0,0"
+                                <TextBlock Text="{loc:T mbs_unit}" Margin="6,0,0,0"
                                            VerticalAlignment="Center"
                                            Foreground="{StaticResource TextSecondary}"/>
                               </StackPanel>
@@ -2279,9 +2270,10 @@
                            MaxLength="5"
                            ToolTip="{loc:T tip_download_limit}"
                            PreviewTextInput="OnDownloadLimitPreviewText"
+                           TextChanged="OnDownloadLimitTextChanged"
                            LostFocus="OnDownloadLimitLostFocus"
                            KeyDown="OnDownloadLimitKeyDown"/>
-                  <TextBlock Text="{loc:T mbps_unit}" Margin="6,0,0,0"
+                  <TextBlock Text="{loc:T mbs_unit}" Margin="6,0,0,0"
                              VerticalAlignment="Center"
                              Foreground="{StaticResource TextSecondary}"/>
                 </StackPanel>
@@ -2310,6 +2302,11 @@
                         Click="OnRepair"
                         ToolTip="{loc:T tip_repair}"/>
               </StackPanel>
+              <CheckBox x:Name="ChkKeepLocalFiles" Margin="0,0,0,12"
+                        Content="{loc:T keep_local_files}"
+                        ToolTip="{loc:T tip_keep_local_files}"
+                        Checked="OnKeepLocalFilesChanged"
+                        Unchecked="OnKeepLocalFilesChanged"/>
               <CheckBox x:Name="ChkHdTextures" Margin="0,0,0,6"
                         Content="{loc:T hd_textures}"
                         ToolTip="{loc:T tip_hd_textures}"

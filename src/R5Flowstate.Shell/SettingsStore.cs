@@ -100,6 +100,7 @@ public static class SettingsStore
             ChannelUrl = string.Empty,
             InitialInstallAccepted = false,
             AutoApplyUpdates = false,
+            KeepLocalFiles = false,
             ClientWidth = ResolutionCatalog.DefaultWidth,
             ClientHeight = ResolutionCatalog.DefaultHeight,
             ClientWindowMode = ResolutionCatalog.DefaultWindowMode,
@@ -199,6 +200,7 @@ public static class SettingsStore
                 s.ChannelUrl = chUrl ?? string.Empty;
             s.InitialInstallAccepted = ReadBool(key, "InitialInstallAccepted", defaultValue: false);
             s.AutoApplyUpdates = ReadBool(key, "AutoApplyUpdates", defaultValue: false);
+            s.KeepLocalFiles = ReadBool(key, "KeepLocalFiles", defaultValue: false);
             // A resolution is always sent, so an absent or nonsense saved value
             // resolves to the default rather than to "unset".
             s.ClientWidth = ResolutionCatalog.ClampDimension(
@@ -276,6 +278,7 @@ public static class SettingsStore
         key.SetValue("ChannelUrl", settings.ChannelUrl ?? string.Empty);
         key.SetValue("InitialInstallAccepted", settings.InitialInstallAccepted ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("AutoApplyUpdates", settings.AutoApplyUpdates ? 1 : 0, RegistryValueKind.DWord);
+        key.SetValue("KeepLocalFiles", settings.KeepLocalFiles ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("ClientWidth",
             ResolutionCatalog.ClampDimension(settings.ClientWidth, ResolutionCatalog.DefaultWidth),
             RegistryValueKind.DWord);
@@ -446,7 +449,7 @@ public sealed class LauncherSettings
     /// <summary>Run r5apex_dx12.exe.</summary>
     public bool UseDx12 { get; set; }
 
-    /// <summary>Game download cap in Mbps. 0 = unlimited.</summary>
+    /// <summary>Game download cap in MB/s (decimal, same as the progress rate). 0 = unlimited.</summary>
     public int DownloadLimitMbps { get; set; }
 
     /// <summary>0 = automatic.</summary>
@@ -486,4 +489,10 @@ public sealed class LauncherSettings
     public bool ForceSoftwareRender { get; set; }
 
     public bool AutoApplyUpdates { get; set; }
+
+    /// <summary>
+    /// Replacing a script, DLL, or pak is a kept edit, not corruption.
+    /// PLAY does not hash the whole tree after each change.
+    /// </summary>
+    public bool KeepLocalFiles { get; set; }
 }

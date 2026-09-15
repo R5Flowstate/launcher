@@ -4,7 +4,7 @@
         xmlns:loc="clr-namespace:R5Flowstate.Shell"
         Title="{loc:T overlay_title}"
         Icon="Assets/app.ico"
-        SizeToContent="Height" Width="520"
+        SizeToContent="Height" Width="580"
         ResizeMode="NoResize"
         Background="{StaticResource WindowBg}" Foreground="{StaticResource TextPrimary}"
         FontFamily="Segoe UI"
@@ -23,14 +23,17 @@
     <TextBlock Margin="0,16,0,0" FontSize="13"
                Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"
                Text="{loc:T overlay_body}"/>
-    <DockPanel Margin="0,20,0,0" LastChildFill="False">
-      <Button DockPanel.Dock="Right" Content="{loc:T overlay_restore}"
-              MinWidth="148" Height="36"
+    <WrapPanel Margin="0,20,0,0" HorizontalAlignment="Right">
+      <Button Content="{loc:T overlay_restore}"
+              MinWidth="148" Height="36" Margin="0,0,10,0"
               Style="{StaticResource DangerButtonSmall}" Click="OnRestore"/>
-      <Button DockPanel.Dock="Right" Content="{loc:T overlay_leave}"
+      <Button Content="{loc:T overlay_leave}"
               MinWidth="140" Height="36" Margin="0,0,10,0"
+              Style="{StaticResource GhostButton}" Click="OnLeave"/>
+      <Button Content="{loc:T overlay_leave_always}"
+              MinWidth="200" Height="36"
               IsDefault="True"
-              Style="{StaticResource AccentButton}" Click="OnLeave"/>
-    </DockPanel>
+              Style="{StaticResource AccentButton}" Click="OnAlways"/>
+    </WrapPanel>
   </StackPanel>
 </Window>

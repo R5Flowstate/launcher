@@ -19,7 +19,8 @@ public static class ContentProofSweep
     public static Result Step(
         string installPath,
         ContentManifest manifest,
-        CancellationToken cancel = default)
+        CancellationToken cancel = default,
+        bool keepLocalFiles = false)
     {
         ArgumentNullException.ThrowIfNull(manifest);
         if (string.IsNullOrWhiteSpace(installPath))
@@ -84,6 +85,19 @@ public static class ContentProofSweep
             if (string.Equals(index.ProofMismatch, entry.Path, StringComparison.OrdinalIgnoreCase))
                 index.ProofMismatch = null;
         }
+        else if (keepLocalFiles)
+        {
+            index.Files[norm] = new InstallFileState
+            {
+                Size = info.Length,
+                MTimeUtcTicks = info.LastWriteTimeUtc.Ticks,
+                Sha256 = null,
+                VerifiedUtcTicks = 0,
+                PlayerEdited = true,
+            };
+            if (string.Equals(index.ProofMismatch, entry.Path, StringComparison.OrdinalIgnoreCase))
+                index.ProofMismatch = null;
+        }
         else
         {
             index.ProofMismatch = entry.Path;
@@ -99,7 +113,7 @@ public static class ContentProofSweep
         return new Result
         {
             Ran = true,
-            Mismatch = miss,
+            Mismatch = miss && !keepLocalFiles,
             Path = entry.Path,
             Cursor = next,
         };

@@ -5,6 +5,8 @@ namespace R5Flowstate.Shell;
 
 public partial class OverlayScriptsWindow : Window
 {
+    OverlayExtractPolicy _choice = OverlayExtractPolicy.KeepEdits;
+
     OverlayScriptsWindow(OverlayEditReport report)
     {
         InitializeComponent();
@@ -19,19 +21,25 @@ public partial class OverlayScriptsWindow : Window
     public static OverlayExtractPolicy Ask(Window owner, OverlayEditReport report)
     {
         var w = new OverlayScriptsWindow(report) { Owner = owner };
-        var ok = w.ShowDialog() == true;
-        return ok ? OverlayExtractPolicy.WriteOfficial : OverlayExtractPolicy.KeepEdits;
+        w.ShowDialog();
+        return w._choice;
     }
 
     void OnRestore(object sender, RoutedEventArgs e)
     {
+        _choice = OverlayExtractPolicy.WriteOfficial;
         DialogResult = true;
-        Close();
     }
 
     void OnLeave(object sender, RoutedEventArgs e)
     {
+        _choice = OverlayExtractPolicy.KeepEdits;
         DialogResult = false;
-        Close();
+    }
+
+    void OnAlways(object sender, RoutedEventArgs e)
+    {
+        _choice = OverlayExtractPolicy.KeepAll;
+        DialogResult = false;
     }
 }

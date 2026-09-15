@@ -17,11 +17,15 @@ public sealed class FileSystemFetcher : IHttpFetcher, IDisposable
 
     static long s_maxBytesPerSecond;
 
-    /// <summary>0 = unlimited. Read per chunk, so a change applies mid-download.</summary>
+    /// <summary>0 = unlimited. Shared across every connection. Read per chunk, so a change applies mid-download.</summary>
     public static long GlobalMaxBytesPerSecond
     {
         get => Interlocked.Read(ref s_maxBytesPerSecond);
-        set => Interlocked.Exchange(ref s_maxBytesPerSecond, Math.Max(0, value));
+        set
+        {
+            Interlocked.Exchange(ref s_maxBytesPerSecond, Math.Max(0, value));
+            ThrottleWindow.Reset();
+        }
     }
 
     public InstallRunControl? RunControl { get; set; }
@@ -635,38 +639,57 @@ public sealed class FileSystemFetcher : IHttpFetcher, IDisposable
     }
 
     /// <summary>
-    /// Sleeps whenever bytes arrive ahead of the cap. The window resets every
-    /// few seconds so a slow stretch does not bank credit for a later burst.
+    /// One shared token bucket so N parallel fetches cannot each take the full
+    /// cap. The progress line is the sum of those fetches; the box is that sum.
     /// </summary>
     sealed class ThrottleWindow
     {
-        DateTime _startUtc = DateTime.UtcNow;
-        long _bytes;
+        static readonly object s_gate = new();
+        static DateTime s_lastUtc = DateTime.UtcNow;
+        static long s_tokens;
+
+        public static void Reset()
+        {
+            lock (s_gate)
+            {
+                s_tokens = 0;
+                s_lastUtc = DateTime.UtcNow;
+            }
+        }
 
         public async Task PaceAsync(int read, CancellationToken cancel)
         {
             var cap = GlobalMaxBytesPerSecond;
             if (cap <= 0)
-            {
-                _bytes = 0;
-                _startUtc = DateTime.UtcNow;
                 return;
-            }
 
-            _bytes += read;
-            var elapsed = (DateTime.UtcNow - _startUtc).TotalSeconds;
-            var budget = _bytes / (double)cap;
-            if (budget > elapsed)
+            while (true)
             {
-                var wait = Math.Min(1.0, budget - elapsed);
-                await Task.Delay(TimeSpan.FromSeconds(wait), cancel).ConfigureAwait(false);
-                elapsed += wait;
-            }
+                TimeSpan wait;
+                lock (s_gate)
+                {
+                    var now = DateTime.UtcNow;
+                    var elapsed = (now - s_lastUtc).TotalSeconds;
+                    if (elapsed < 0)
+                        elapsed = 0;
+                    s_lastUtc = now;
+                    var refill = (long)(elapsed * cap);
+                    var ceiling = cap;
+                    s_tokens = Math.Min(ceiling, s_tokens + refill);
+                    if (s_tokens >= read)
+                    {
+                        s_tokens -= read;
+                        return;
+                    }
 
-            if (elapsed >= 4)
-            {
-                _startUtc = DateTime.UtcNow;
-                _bytes = 0;
+                    var need = read - s_tokens;
+                    s_tokens = 0;
+                    wait = TimeSpan.FromSeconds(Math.Min(1.0, need / (double)cap));
+                }
+
+                if (wait <= TimeSpan.Zero)
+                    return;
+                await Task.Delay(wait, cancel).ConfigureAwait(false);
             }
         }
     }
