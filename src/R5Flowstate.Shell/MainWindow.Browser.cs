@@ -446,7 +446,6 @@ public partial class MainWindow
         var kept = _serverRows.Select(r =>
         {
             var n = ToRow(r.Listing);
-            n.PingMs = r.PingMs;
             n.IsFavorite = r.IsFavorite;
             n.IsSteering = r.IsSteering;
             return n;
@@ -504,8 +503,6 @@ public partial class MainWindow
             ListServersAdvanced.ItemsSource = null;
             ListServersAdvanced.ItemsSource = _serverRows;
         }
-
-        _ = MeasureLatencyAsync(_serverRows.ToList());
     }
 
     private void ApplyFavorites()
@@ -539,40 +536,6 @@ public partial class MainWindow
         catch (Exception ex) { Log($"Settings save failed: {ex.Message}"); }
 
         BindServerLists();
-    }
-
-    /// <summary>
-    /// ICMP round-trip per host. It is not the game's own latency -- the server
-    /// does not publish one -- but it separates a nearby host from one an ocean
-    /// away, which is what the column is for. All hosts probe concurrently.
-    /// </summary>
-    private async Task MeasureLatencyAsync(List<ServerRowViewModel> rows)
-    {
-        var probes = new List<Task>(rows.Count);
-        foreach (var row in rows)
-        {
-            if (string.IsNullOrWhiteSpace(row.Listing.Ip) || row.Listing.IsUpdateNotice)
-                continue;
-            probes.Add(ProbeLatencyAsync(row));
-        }
-
-        await Task.WhenAll(probes).ConfigureAwait(true);
-    }
-
-    private static async Task ProbeLatencyAsync(ServerRowViewModel row)
-    {
-        try
-        {
-            using var ping = new System.Net.NetworkInformation.Ping();
-            var reply = await ping.SendPingAsync(row.Listing.Ip, 1500).ConfigureAwait(true);
-            row.PingMs = reply.Status == System.Net.NetworkInformation.IPStatus.Success
-                ? (int)Math.Max(1, reply.RoundtripTime)
-                : 0;
-        }
-        catch
-        {
-            row.PingMs = 0;
-        }
     }
 
     private void SetBrowserStatus(string text)

@@ -4782,6 +4782,12 @@ public partial class MainWindow : Window
         }
         if (BtnSimpleInstallCancel is not null)
             BtnSimpleInstallCancel.IsEnabled = busy;
+        // The cap throttles downloads; a verify only hashes local files, so the
+        // box would promise something it cannot do for the whole run.
+        if (PanelSimpleDownloadLimit is not null)
+            PanelSimpleDownloadLimit.Visibility = _verifyBusy && !busy
+                ? Visibility.Collapsed
+                : Visibility.Visible;
     }
 
     void KickShellSelfUpdate()

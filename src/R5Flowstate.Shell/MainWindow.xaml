@@ -20,7 +20,6 @@
                   UseAeroCaptionButtons="False"/>
   </WindowChrome.WindowChrome>
   <Window.Resources>
-    <local:PingTierBrushConverter x:Key="PingBrush"/>
     <BooleanToVisibilityConverter x:Key="BoolVis"/>
 
     <DataTemplate x:Key="ServerRowTemplate">
@@ -42,12 +41,7 @@
                   IsEnabled="{Binding JoinEnabled}"
                   ToolTip="{Binding JoinHint}"
                   Tag="{Binding}"
-                  Click="OnJoinServerClick"/>
-          <TextBlock DockPanel.Dock="Right" Text="{Binding PingLabel}"
-                     VerticalAlignment="Center" Margin="12,0,0,0"
-                     MinWidth="58" TextAlignment="Right"
-                     FontFamily="Consolas" FontSize="12"
-                     Foreground="{Binding PingTier, Converter={StaticResource PingBrush}}"/>
+                   Click="OnJoinServerClick"/>
           <StackPanel VerticalAlignment="Center">
             <DockPanel>
               <Viewbox DockPanel.Dock="Left" Width="12" Height="12" Margin="0,1,7,0"
@@ -1427,7 +1421,8 @@
                                          TextWrapping="NoWrap"
                                          TextTrimming="CharacterEllipsis"/>
                             </DockPanel>
-                            <DockPanel Margin="0,12,0,0" LastChildFill="False">
+                            <DockPanel x:Name="PanelSimpleDownloadLimit"
+                                       Margin="0,12,0,0" LastChildFill="False">
                               <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
                                 <Button x:Name="BtnSimpleInstallPause"
                                         Content="{loc:T pause}"

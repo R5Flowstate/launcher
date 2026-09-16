@@ -6,7 +6,6 @@ namespace R5Flowstate.Shell;
 
 public sealed class ServerRowViewModel : INotifyPropertyChanged
 {
-    private int _pingMs = -1;
     private bool _isFavorite;
     private bool _isSteering;
 
@@ -97,37 +96,6 @@ public sealed class ServerRowViewModel : INotifyPropertyChanged
 
     /// <summary>Stable identity for favourites; the master server has no server id.</summary>
     public string Key => Listing.Ip + ":" + Listing.Port;
-
-    /// <summary>Round-trip in ms; -1 while unmeasured, 0 when the host did not answer.</summary>
-    public int PingMs
-    {
-        get => _pingMs;
-        set
-        {
-            if (_pingMs == value)
-                return;
-            _pingMs = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(PingLabel));
-            OnPropertyChanged(nameof(PingTier));
-        }
-    }
-
-    public string PingLabel => _pingMs switch
-    {
-        < 0 => "--",
-        0 => Loc.Get("n_a"),
-        _ => _pingMs + " ms",
-    };
-
-    /// <summary>Drives the colour band on the row; kept out of the view's way.</summary>
-    public string PingTier => _pingMs switch
-    {
-        < 0 or 0 => "None",
-        <= 80 => "Good",
-        <= 160 => "Fair",
-        _ => "Poor",
-    };
 
     public bool IsFavorite
     {

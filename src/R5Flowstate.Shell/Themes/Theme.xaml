@@ -28,7 +28,6 @@
   <SolidColorBrush x:Key="AccentTrack"   Color="#1E3B2A"/>
 
   <SolidColorBrush x:Key="PingFair"      Color="#E0C25A"/>
-  <SolidColorBrush x:Key="PingPoor"      Color="#D9756A"/>
 
   <SolidColorBrush x:Key="DangerFg"      Color="#F3B7BE"/>
   <SolidColorBrush x:Key="DangerBg"      Color="#2A1418"/>

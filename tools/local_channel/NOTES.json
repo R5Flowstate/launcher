@@ -3,6 +3,28 @@
   "kind": "notes",
   "entries": [
     {
+      "date": "15 Sep 2026",
+      "title": "1.0.6",
+      "items": [
+        "Fix some script crashes cases",
+        "Fix FFA spawn guns",
+        "Fix firing range character select",
+        "Fix Grapple via Infinite Abilities toggle (spiderman)",
+        "Add back updated Mantle Boost RUI",
+        "Fix zip leftover gun after dismount",
+        "Fix zip three usages limit",
+        "Fix controller Y treating as mouse-wheel",
+        "Fix shader cache leftover files"
+      ]
+    },
+    {
+      "date": "14 Sep 2026",
+      "title": "Patch 1",
+      "items": [
+        "Revert Mantle Boost RUI update"
+      ]
+    },
+    {
       "date": "13 Sep 2026",
       "title": "1.0.5",
       "items": [
@@ -27,7 +49,7 @@
         "Hide firing-range dummy hit dots unless Hit Indicators is on",
         "## Weapons",
         "Fix RE-45 Fusion burst sound",
-        "Fix attaching more than 2 corrupted attachments being allowed",
+        "Fix attaching more than one corrupted attachment being allowed",
         "Lock dormant hopups like retail",
         "Fix Ballistic overheat crashing the server",
         "Fix Alternator not showing crosshair with double tap"

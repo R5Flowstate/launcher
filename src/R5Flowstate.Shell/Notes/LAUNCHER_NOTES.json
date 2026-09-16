@@ -3,6 +3,14 @@
   "kind": "notes",
   "entries": [
     {
+      "date": "15 Sep 2026",
+      "title": "Launcher 0.1.55",
+      "items": [
+        "Remove ping from the server list",
+        "Hide download limit during file check"
+      ]
+    },
+    {
       "date": "14 Sep 2026",
       "title": "Launcher 0.1.54",
       "items": [
