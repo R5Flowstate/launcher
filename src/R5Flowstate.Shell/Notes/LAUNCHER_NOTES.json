@@ -4,6 +4,15 @@
   "entries": [
     {
       "date": "27 Sep 2026",
+      "title": "Launcher 0.1.60",
+      "items": [
+        "Fix mod installs failing with file in use",
+        "Fix updates asking for too much free space",
+        "Show mod icons and installed state in Browse"
+      ]
+    },
+    {
+      "date": "27 Sep 2026",
       "title": "Launcher 0.1.59",
       "items": [
         "Install map mods that ship colour grades"

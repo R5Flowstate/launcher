@@ -5584,9 +5584,15 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!TryMeasureInstallDisk(InstallMode.Full, root, out var planned, out var need, out var free))
+        if (!TryMeasureInstallDisk(InstallMode.Full, root, out var planned, out var need, out var free, out var sizing))
         {
             PaintSize(Loc.Get("disk_unread"), danger: false);
+            return;
+        }
+
+        if (sizing)
+        {
+            PaintSize(Loc.Get("disk_sizing"), danger: false);
             return;
         }
 
@@ -5624,11 +5630,13 @@ public partial class MainWindow : Window
             SetSimpleStatus(_installDiskMessage);
     }
 
-    bool TryMeasureInstallDisk(InstallMode mode, string path, out long planned, out long need, out long free)
+    bool TryMeasureInstallDisk(
+        InstallMode mode, string path, out long planned, out long need, out long free, out bool sizing)
     {
         planned = 0;
         need = 0;
         free = -1;
+        sizing = false;
         if (_manifest is null || string.IsNullOrWhiteSpace(path))
             return false;
 
@@ -5638,6 +5646,7 @@ public partial class MainWindow : Window
             var gate = CachedDownloadGate();
             InstallPlanner.FilterDownloadLanes(plan, gate.Content, gate.Platform);
             InstallPlanner.ExcludeCurrentTracks(plan, _manifest, path);
+            sizing = ApplyUpdateEstimates(plan, path);
             InstallPlanner.MeasureWork(plan, _manifest, out planned, out need);
             free = InstallPathPolicy.FreeBytes(path);
             return true;
@@ -5646,6 +5655,70 @@ public partial class MainWindow : Window
         {
             return false;
         }
+    }
+
+    readonly Dictionary<string, long> _updateEstimates = new(StringComparer.OrdinalIgnoreCase);
+    readonly HashSet<string> _updateEstimating = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Swaps each content-manifest track's whole-track size for what the
+    /// update will actually fetch. True while an estimate is still loading.
+    /// </summary>
+    bool ApplyUpdateEstimates(InstallPlan plan, string root)
+    {
+        var sizing = false;
+        foreach (var t in plan.Tracks)
+        {
+            var tip = InstallPlanner.TipFor(_manifest!, t.Preset);
+            if (tip is null || !tip.UsesContentManifest)
+                continue;
+
+            var key = root + "|" + t.Preset + "|" + tip.ContentHash;
+            if (_updateEstimates.TryGetValue(key, out var bytes))
+            {
+                if (bytes >= 0)
+                    t.TotalBytes = bytes;
+                continue;
+            }
+
+            sizing = true;
+            StartUpdateEstimate(key, root, t.Preset, tip);
+        }
+        return sizing;
+    }
+
+    void StartUpdateEstimate(string key, string root, string preset, ChannelTrackTip tip)
+    {
+        if (!_updateEstimating.Add(key) || _manifest is null)
+            return;
+
+        var channel = _manifest;
+        _ = Task.Run(async () =>
+        {
+            long bytes = -1;
+            string? error = null;
+            try
+            {
+                using var fetcher = new FileSystemFetcher(TimeSpan.FromSeconds(30));
+                bytes = await UpdateSizeEstimator.EstimateAsync(
+                    channel, tip, preset, root, fetcher, CancellationToken.None).ConfigureAwait(false) ?? -1;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+            }
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                _updateEstimating.Remove(key);
+                _updateEstimates[key] = bytes;
+                if (error is not null)
+                    Log($"Update size for {preset} unavailable: {error}");
+                else if (bytes >= 0)
+                    Log($"Update size: {preset} {tip.CatalogVersion} fetches {bytes} bytes");
+                RefreshSimplePlayButton();
+            });
+        });
     }
 
     static string FormatDiskShortage(long need, long planned, long free)
@@ -6176,8 +6249,8 @@ public partial class MainWindow : Window
 
         try
         {
-            if (TryMeasureInstallDisk(mode, installPath, out var planned, out var need, out var free) &&
-                free >= 0 && free < need)
+            if (TryMeasureInstallDisk(mode, installPath, out var planned, out var need, out var free, out var sizing) &&
+                !sizing && free >= 0 && free < need)
             {
                 var msg = FormatDiskShortage(need, planned, free);
                 SetSimpleStatus(msg);

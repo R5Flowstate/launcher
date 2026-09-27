@@ -193,6 +193,8 @@ public sealed class BrowseModRowViewModel : INotifyPropertyChanged
         Description = package.Description ?? string.Empty;
         var latest = package.Versions is { Count: > 0 } ? package.Versions[0] : null;
         LatestVersion = latest?.VersionNumber ?? Loc.Get("n_a");
+        IconSource = TryLoadRemoteIcon(package.IconUrl);
+        HasIcon = IconSource is not null;
     }
 
     public ModPackage Package { get; }
@@ -201,6 +203,53 @@ public sealed class BrowseModRowViewModel : INotifyPropertyChanged
     public string Owner { get; }
     public string Description { get; }
     public string LatestVersion { get; }
+    public ImageSource? IconSource { get; }
+    public bool HasIcon { get; }
+
+    /// <summary>Installed copy's version, or null when the package is not installed.</summary>
+    public string? InstalledVersion { get; private set; }
+
+    public bool IsInstalled => InstalledVersion is not null;
+
+    public bool IsCurrent =>
+        IsInstalled && !ModRowViewModel.IsNewer(LatestVersion, InstalledVersion!);
+
+    public void SetInstalledVersion(string? version)
+    {
+        if (string.Equals(InstalledVersion, version, StringComparison.Ordinal))
+            return;
+        InstalledVersion = version;
+        OnPropertyChanged(nameof(InstalledVersion));
+        OnPropertyChanged(nameof(IsInstalled));
+        OnPropertyChanged(nameof(IsCurrent));
+        OnPropertyChanged(nameof(InstallCaption));
+        OnPropertyChanged(nameof(InstallEnabled));
+    }
+
+    // Listing icons come from the Thunderstore CDN; any other host or scheme is not fetched.
+    static ImageSource? TryLoadRemoteIcon(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)
+            || !Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || uri.Scheme != Uri.UriSchemeHttps
+            || !(uri.Host.Equals("thunderstore.io", StringComparison.OrdinalIgnoreCase)
+                 || uri.Host.EndsWith(".thunderstore.io", StringComparison.OrdinalIgnoreCase)))
+            return null;
+        try
+        {
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.UriSource = uri;
+            bmp.DecodePixelWidth = 64;
+            bmp.EndInit();
+            return bmp;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     public string Detail
     {
@@ -214,7 +263,11 @@ public sealed class BrowseModRowViewModel : INotifyPropertyChanged
         }
     }
 
-    public string InstallCaption => _busy ? Loc.Get("mods_installing") : Loc.Get("mods_install");
+    public string InstallCaption =>
+        _busy ? Loc.Get("mods_installing")
+        : IsCurrent ? Loc.Get("mods_browse_installed")
+        : IsInstalled ? Loc.Get("mods_browse_update")
+        : Loc.Get("mods_install");
 
     public bool Busy
     {
@@ -230,7 +283,7 @@ public sealed class BrowseModRowViewModel : INotifyPropertyChanged
         }
     }
 
-    public bool InstallEnabled => !_busy;
+    public bool InstallEnabled => !_busy && !IsCurrent;
 
     public string ProgressText
     {

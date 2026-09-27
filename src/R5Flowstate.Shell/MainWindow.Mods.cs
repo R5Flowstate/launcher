@@ -186,6 +186,7 @@ public partial class MainWindow
         {
             _modRows.Clear();
             BindInstalledMods();
+            UpdateBrowseInstalledState();
             SetModsStatus(Loc.Get("mods_no_install"));
             return;
         }
@@ -222,6 +223,7 @@ public partial class MainWindow
             }
 
             BindInstalledMods();
+            UpdateBrowseInstalledState();
             if (skipped.Count > 0)
                 SetModsStatus(Loc.Format("mods_status_skipped", skipped.Count));
             else if (_modRows.Count == 0)
@@ -234,6 +236,27 @@ public partial class MainWindow
         catch (Exception ex)
         {
             SetModsStatus(ex.Message);
+        }
+    }
+
+    // A catalog package is installed when a mod folder carries its <Owner>.<Name> id or its
+    // Owner-Name folder; the manifest version is the one Thunderstore compares against.
+    void UpdateBrowseInstalledState()
+    {
+        foreach (var row in _browseRows)
+        {
+            var id = ModInstaller.ExpectedCatalogId(row.Package);
+            var mod = _modRows.FirstOrDefault(r =>
+                string.Equals(r.Id, id, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(r.FolderName, row.FullName, StringComparison.OrdinalIgnoreCase));
+            string? version = null;
+            if (mod is not null)
+            {
+                version = string.IsNullOrWhiteSpace(mod.Mod.ThunderstoreVersion)
+                    ? mod.Mod.Version
+                    : mod.Mod.ThunderstoreVersion;
+            }
+            row.SetInstalledVersion(version);
         }
     }
 
@@ -279,6 +302,7 @@ public partial class MainWindow
                 _browseRows.Add(new BrowseModRowViewModel(pkg));
             }
 
+            UpdateBrowseInstalledState();
             BindBrowseMods();
             if (_browseRows.Count == 0)
                 SetModsStatus(Loc.Get("mods_browse_empty"));

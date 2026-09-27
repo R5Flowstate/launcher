@@ -125,6 +125,8 @@
   "mods_install_file": "從檔案安裝...",
   "mods_install": "安裝",
   "mods_installing": "正在安裝...",
+  "mods_browse_installed": "已安裝",
+  "mods_browse_update": "更新",
   "mods_uninstall": "解除安裝",
   "mods_uninstall_title": "解除安裝模組",
   "mods_uninstall_confirm": "解除安裝 {0}？這會刪除安裝目錄中的模組資料夾。",

@@ -125,6 +125,8 @@
   "mods_install_file": "ファイルから導入...",
   "mods_install": "導入",
   "mods_installing": "導入中...",
+  "mods_browse_installed": "導入済み",
+  "mods_browse_update": "更新",
   "mods_uninstall": "削除",
   "mods_uninstall_title": "モッドを削除",
   "mods_uninstall_confirm": "{0} を削除しますか？インストール先のモッドフォルダーが消えます。",

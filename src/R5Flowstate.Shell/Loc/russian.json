@@ -125,6 +125,8 @@
   "mods_install_file": "Установить из файла...",
   "mods_install": "Установить",
   "mods_installing": "Установка...",
+  "mods_browse_installed": "Установлен",
+  "mods_browse_update": "Обновить",
   "mods_uninstall": "Удалить",
   "mods_uninstall_title": "Удалить мод",
   "mods_uninstall_confirm": "Удалить {0}? Папка мода будет стёрта из установки.",

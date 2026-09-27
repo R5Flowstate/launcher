@@ -125,6 +125,8 @@
   "mods_install_file": "파일에서 설치...",
   "mods_install": "설치",
   "mods_installing": "설치 중...",
+  "mods_browse_installed": "설치됨",
+  "mods_browse_update": "업데이트",
   "mods_uninstall": "제거",
   "mods_uninstall_title": "모드 제거",
   "mods_uninstall_confirm": "{0}을(를) 제거할까요? 설치 폴더의 모드 폴더가 삭제됩니다.",

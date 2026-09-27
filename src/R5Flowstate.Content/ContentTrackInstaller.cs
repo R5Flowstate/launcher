@@ -186,7 +186,7 @@ public static class ContentTrackInstaller
         }
     }
 
-    static async Task<ContentManifest> LoadManifestAsync(
+    internal static async Task<ContentManifest> LoadManifestAsync(
         UpdateStep step,
         string installPath,
         string preset,

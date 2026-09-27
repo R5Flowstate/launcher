@@ -125,6 +125,8 @@
   "mods_install_file": "Aus Datei installieren...",
   "mods_install": "Installieren",
   "mods_installing": "Installiere...",
+  "mods_browse_installed": "Installiert",
+  "mods_browse_update": "Aktualisieren",
   "mods_uninstall": "Deinstallieren",
   "mods_uninstall_title": "Mod deinstallieren",
   "mods_uninstall_confirm": "{0} deinstallieren? Der Mod-Ordner wird aus der Installation gelöscht.",

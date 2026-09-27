@@ -125,6 +125,8 @@
   "mods_install_file": "Installer depuis un fichier...",
   "mods_install": "Installer",
   "mods_installing": "Installation...",
+  "mods_browse_installed": "Installé",
+  "mods_browse_update": "Mettre à jour",
   "mods_uninstall": "Désinstaller",
   "mods_uninstall_title": "Désinstaller le mod",
   "mods_uninstall_confirm": "Désinstaller {0} ? Cela supprime le dossier du mod de l'installation.",

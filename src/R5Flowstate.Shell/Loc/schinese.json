@@ -125,6 +125,8 @@
   "mods_install_file": "从文件安装...",
   "mods_install": "安装",
   "mods_installing": "正在安装...",
+  "mods_browse_installed": "已安装",
+  "mods_browse_update": "更新",
   "mods_uninstall": "卸载",
   "mods_uninstall_title": "卸载模组",
   "mods_uninstall_confirm": "卸载 {0}？这将删除安装目录中的模组文件夹。",

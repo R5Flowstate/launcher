@@ -238,60 +238,61 @@ public sealed class ThunderstoreClient : IDisposable
                 throw new InvalidOperationException("Download exceeds size cap.");
 
             await using var input = await response.Content.ReadAsStreamAsync(cancel).ConfigureAwait(false);
-            await using var output = new FileStream(
-                tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1024 * 1024, useAsync: true);
-
-            var buffer = new byte[1024 * 1024];
-            long done = 0;
-            var fileName = Path.GetFileName(destPath);
-            progress?.Report(new ContentInstallProgress
+            await using (var output = new FileStream(
+                             tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1024 * 1024, useAsync: true))
             {
-                Phase = "download",
-                Unit = ProgressUnit.Bytes,
-                FileName = fileName,
-                Message = fileName,
-                Current = 0,
-                Total = declared,
-            });
-
-            using var stall = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-            stall.CancelAfter(StallTimeout);
-            var lastReport = DateTime.UtcNow;
-            while (true)
-            {
-                int read;
-                try
+                var buffer = new byte[1024 * 1024];
+                long done = 0;
+                var fileName = Path.GetFileName(destPath);
+                progress?.Report(new ContentInstallProgress
                 {
-                    read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), stall.Token)
-                        .ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
-                {
-                    throw new IOException($"Stalled for {StallTimeout.TotalSeconds:0}s: {fileName}");
-                }
+                    Phase = "download",
+                    Unit = ProgressUnit.Bytes,
+                    FileName = fileName,
+                    Message = fileName,
+                    Current = 0,
+                    Total = declared,
+                });
 
-                if (read <= 0)
-                    break;
-
+                using var stall = CancellationTokenSource.CreateLinkedTokenSource(cancel);
                 stall.CancelAfter(StallTimeout);
-                done += read;
-                if (done > MaxDownloadBytes)
-                    throw new InvalidOperationException("Download exceeds size cap.");
-                await output.WriteAsync(buffer.AsMemory(0, read), cancel).ConfigureAwait(false);
-
-                var now = DateTime.UtcNow;
-                if (done >= declared || (now - lastReport).TotalMilliseconds >= 200)
+                var lastReport = DateTime.UtcNow;
+                while (true)
                 {
-                    lastReport = now;
-                    progress?.Report(new ContentInstallProgress
+                    int read;
+                    try
                     {
-                        Phase = "download",
-                        Unit = ProgressUnit.Bytes,
-                        FileName = fileName,
-                        Message = fileName,
-                        Current = done,
-                        Total = declared > 0 ? declared : done,
-                    });
+                        read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), stall.Token)
+                            .ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
+                    {
+                        throw new IOException($"Stalled for {StallTimeout.TotalSeconds:0}s: {fileName}");
+                    }
+
+                    if (read <= 0)
+                        break;
+
+                    stall.CancelAfter(StallTimeout);
+                    done += read;
+                    if (done > MaxDownloadBytes)
+                        throw new InvalidOperationException("Download exceeds size cap.");
+                    await output.WriteAsync(buffer.AsMemory(0, read), cancel).ConfigureAwait(false);
+
+                    var now = DateTime.UtcNow;
+                    if (done >= declared || (now - lastReport).TotalMilliseconds >= 200)
+                    {
+                        lastReport = now;
+                        progress?.Report(new ContentInstallProgress
+                        {
+                            Phase = "download",
+                            Unit = ProgressUnit.Bytes,
+                            FileName = fileName,
+                            Message = fileName,
+                            Current = done,
+                            Total = declared > 0 ? declared : done,
+                        });
+                    }
                 }
             }
 

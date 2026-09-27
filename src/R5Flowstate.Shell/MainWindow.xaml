@@ -287,11 +287,28 @@
           <Button DockPanel.Dock="Right"
                   Style="{StaticResource AccentButton}"
                   Content="{Binding InstallCaption}"
-                  Width="96" Height="34" Margin="14,0,0,0"
+                  MinWidth="96" Height="34" Padding="12,0" Margin="14,0,0,0"
                   VerticalAlignment="Center"
                   IsEnabled="{Binding InstallEnabled}"
                   Tag="{Binding}"
                   Click="OnBrowseModInstall"/>
+          <Grid DockPanel.Dock="Left" Width="48" Height="48" Margin="0,0,12,0"
+                VerticalAlignment="Center">
+            <Image Source="Assets/logo.png" Opacity="0.28" Stretch="Uniform"
+                   IsHitTestVisible="False"/>
+            <Image Source="{Binding IconSource}" Stretch="UniformToFill">
+              <Image.Style>
+                <Style TargetType="Image">
+                  <Setter Property="Visibility" Value="Visible"/>
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding HasIcon}" Value="False">
+                      <Setter Property="Visibility" Value="Collapsed"/>
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Image.Style>
+            </Image>
+          </Grid>
           <StackPanel VerticalAlignment="Center">
             <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
                        Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
