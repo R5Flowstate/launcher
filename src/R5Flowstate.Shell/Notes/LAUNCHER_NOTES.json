@@ -4,6 +4,13 @@
   "entries": [
     {
       "date": "27 Sep 2026",
+      "title": "Launcher 0.1.58",
+      "items": [
+        "Keep enabled mods through updates and repairs"
+      ]
+    },
+    {
+      "date": "27 Sep 2026",
       "title": "Launcher 0.1.57",
       "items": [
         "Fix repair loop that blocked Play after enabling mods"

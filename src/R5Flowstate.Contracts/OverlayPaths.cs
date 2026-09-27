@@ -46,7 +46,13 @@ public static class OverlayPaths
         "server.dll",
         "loader.dll",
         "r5f_sdk_version.txt",
-        // The game and the launcher rewrite these whenever a mod is enabled.
+    };
+
+    // The game rewrites these on every boot and the launcher on every mod toggle.
+    // A shipped copy only seeds a fresh install: never verified, replaced, deleted
+    // or offered as an edit.
+    static readonly string[] PlayerOwnedExact =
+    {
         "mods/mods.vdf",
         "mods/allowed_mods.vdf",
         "mods/required_mods.vdf",
@@ -123,8 +129,21 @@ public static class OverlayPaths
         return c is Class.Fat or Class.FatOwned;
     }
 
+    public static bool IsPlayerOwned(string? rel)
+    {
+        var r = Norm(rel).ToLowerInvariant();
+        foreach (var e in PlayerOwnedExact)
+        {
+            if (r == e)
+                return true;
+        }
+        return false;
+    }
+
     public static bool SkipFatVerify(string? rel)
     {
+        if (IsPlayerOwned(rel))
+            return true;
         var c = Classify(rel);
         return c is Class.OverlayOwned or Class.OverlayOptional or Class.OptOwned;
     }
@@ -163,6 +182,8 @@ public static class OverlayPaths
     /// </summary>
     public static bool IgnoreSizeMismatch(string? rel)
     {
+        if (IsPlayerOwned(rel))
+            return true;
         var c = Classify(rel);
         return c is Class.OverlayOwned or Class.OverlayOptional;
     }

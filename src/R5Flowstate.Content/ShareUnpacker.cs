@@ -205,6 +205,8 @@ public static class ShareUnpacker
                 continue;
             if (!restoreMapPayloads && OverlayPaths.IsPlayerMap(f.Path))
                 continue;
+            if (OverlayPaths.IsPlayerOwned(f.Path))
+                continue;
             var rel = f.Path.Replace('/', Path.DirectorySeparatorChar);
             var full = Path.Combine(destRoot, rel);
             try

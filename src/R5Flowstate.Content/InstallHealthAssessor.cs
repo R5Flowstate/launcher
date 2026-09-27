@@ -327,7 +327,8 @@ public static class InstallHealthAssessor
                         foreach (var f in cman.Files)
                         {
                             if (OverlayPaths.IsOverlayOwned(f.Path) ||
-                                OverlayPaths.IsOverlayOptional(f.Path))
+                                OverlayPaths.IsOverlayOptional(f.Path) ||
+                                OverlayPaths.IsPlayerOwned(f.Path))
                                 continue;
                             if (!SafePath.TryJoin(installPath, f.Path, out var full))
                             {

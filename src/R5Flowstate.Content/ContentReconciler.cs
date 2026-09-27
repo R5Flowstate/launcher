@@ -265,6 +265,9 @@ public static class ContentReconciler
         if (!info.Exists)
             return AdoptPartOrFetch(entry, full, plan, reporter, cancel);
 
+        if (OverlayPaths.IsPlayerOwned(entry.Path))
+            return new FileAction(entry.Path, entry, FileActionKind.Keep);
+
         if (info.Length != entry.Size)
             return Differs(
                 entry, full, index, overlay, plan, reporter, cancel, restoreMapPayloads);
@@ -535,7 +538,7 @@ public static class ContentReconciler
                 var rel = OverlayPaths.Norm(Path.GetRelativePath(installPath, file));
                 if (rel.Length == 0 || wanted.Contains(rel))
                     continue;
-                if (IsLauncherPrivate(rel))
+                if (IsLauncherPrivate(rel) || OverlayPaths.IsPlayerOwned(rel))
                     continue;
                 if (OverlayPaths.IsShadowLeftover(rel, officialStems))
                 {

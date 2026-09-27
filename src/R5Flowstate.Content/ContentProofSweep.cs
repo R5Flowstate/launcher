@@ -38,7 +38,8 @@ public static class ContentProofSweep
         var fat = new List<ContentFile>();
         foreach (var f in manifest.Files)
         {
-            if (OverlayPaths.IsOverlayOwned(f.Path) || OverlayPaths.IsOverlayOptional(f.Path))
+            if (OverlayPaths.IsOverlayOwned(f.Path) || OverlayPaths.IsOverlayOptional(f.Path) ||
+                OverlayPaths.IsPlayerOwned(f.Path))
                 continue;
             if (OverlayPaths.IsOptOwned(f.Path))
                 continue;
