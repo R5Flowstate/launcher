@@ -814,7 +814,10 @@ public static class ContentInstallService
                         or InstallMode.ServerSecondary
                         or InstallMode.DedicatedOnly;
 
-                    var health = Assess(channel, installPath, needClient, needServer);
+                    // Judge the result by the policy the install just applied: files
+                    // it kept on purpose are not corruption.
+                    var health = Assess(channel, installPath, needClient, needServer,
+                        keepLocalFiles: overlayPolicy == OverlayExtractPolicy.KeepAll);
                     if (health.NeedsRepair ||
                         health.Overall is InstallHealthStatus.Incomplete
                             or InstallHealthStatus.Missing)

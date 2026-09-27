@@ -46,6 +46,11 @@ public static class OverlayPaths
         "server.dll",
         "loader.dll",
         "r5f_sdk_version.txt",
+        // The game and the launcher rewrite these whenever a mod is enabled.
+        "mods/mods.vdf",
+        "mods/allowed_mods.vdf",
+        "mods/required_mods.vdf",
+        "mods/mod_policy.txt",
     };
 
     // Disk maps. The client track owns platform/ (scripts live there) and

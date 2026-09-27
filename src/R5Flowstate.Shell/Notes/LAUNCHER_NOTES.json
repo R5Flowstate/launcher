@@ -3,6 +3,13 @@
   "kind": "notes",
   "entries": [
     {
+      "date": "27 Sep 2026",
+      "title": "Launcher 0.1.57",
+      "items": [
+        "Fix repair loop that blocked Play after enabling mods"
+      ]
+    },
+    {
       "date": "26 Sep 2026",
       "title": "Launcher 0.1.56",
       "items": [
