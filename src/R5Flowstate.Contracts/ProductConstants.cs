@@ -29,10 +29,10 @@ public static class ProductConstants
     public const string ModsDirName = "mods";
 
     /// <summary>
-    /// Live Thunderstore catalog (browse, profiles, join-install). Off until the
-    /// r5flowstate community exists. Local zip install stays.
+    /// Live Thunderstore catalog (browse, profiles, join-install) for the
+    /// r5flowstate community. Local zip install works either way.
     /// </summary>
-    public const bool ThunderstoreEnabled = false;
+    public const bool ThunderstoreEnabled = true;
 
     public const string RegistryKeyPath = @"Software\R5Flowstate";
 

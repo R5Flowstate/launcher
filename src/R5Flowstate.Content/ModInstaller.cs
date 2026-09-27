@@ -13,10 +13,17 @@ public sealed class ModInstaller
     public const int MaxZipEntries = 5000;
     public const long MaxUncompressedBytes = 2L * 1024 * 1024 * 1024;
     public const int MaxCompressionRatio = 100;
+    public const int MaxFolderDepth = 8;
 
-    static readonly HashSet<string> ForbiddenExtensions = new(StringComparer.OrdinalIgnoreCase)
+    // Content types a mod can legitimately ship. Anything else refuses the whole archive:
+    // a blocklist always misses the next executable format.
+    static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".dll", ".exe", ".asi", ".sys", ".bat", ".cmd", ".ps1", ".scr", ".msi", ".com",
+        "", ".nut", ".gnut", ".rson", ".txt", ".vdf", ".cfg", ".json", ".md", ".csv", ".res", ".menu",
+        ".png", ".jpg", ".jpeg", ".webp", ".dds",
+        ".rpak", ".starpak", ".mbnk", ".mstr", ".mprj",
+        ".bsp", ".bsp_lump", ".ent", ".kv", ".vpk", ".nm", ".ain",
+        ".ttf", ".otf",
     };
 
     readonly ThunderstoreClient _thunderstore;
@@ -25,6 +32,10 @@ public sealed class ModInstaller
     {
         _thunderstore = thunderstore ?? throw new ArgumentNullException(nameof(thunderstore));
     }
+
+    /// <summary>Catalog packages must declare <c>mod.vdf</c> id <c>Owner.Name</c>.</summary>
+    public static string ExpectedCatalogId(ModPackage package) =>
+        (package.Owner ?? string.Empty) + "." + (package.Name ?? string.Empty);
 
     public Task<InstalledMod> InstallAsync(
         string installPath,
@@ -37,18 +48,37 @@ public sealed class ModInstaller
         var version = PickVersion(package, versionNumber);
         if (string.IsNullOrWhiteSpace(version.DownloadUrl))
             throw new InvalidOperationException("Package version has no download URL.");
-        var folder = string.IsNullOrWhiteSpace(package.FullName)
-            ? package.Owner + "-" + package.Name
-            : package.FullName;
-        return InstallFromUrlAsync(installPath, version.DownloadUrl, folder, progress, cancel);
+        if (string.IsNullOrWhiteSpace(package.Owner) || string.IsNullOrWhiteSpace(package.Name))
+            throw new InvalidOperationException("Package has no owner or name.");
+
+        var expectedId = ExpectedCatalogId(package);
+        if (!ModId.IsValid(expectedId))
+        {
+            throw new InvalidOperationException(
+                "Package " + package.Owner + "-" + package.Name + " cannot be installed: its mod id '" +
+                expectedId + "' must be 4-32 letters, digits, '.' or '_'.");
+        }
+
+        var folder = package.Owner + "-" + package.Name;
+        var binding = new CatalogBinding(expectedId, package.Name, version.VersionNumber);
+        return InstallFromUrlCoreAsync(installPath, version.DownloadUrl, folder, binding, progress, cancel);
     }
 
-    public async Task<InstalledMod> InstallFromUrlAsync(
+    public Task<InstalledMod> InstallFromUrlAsync(
         string installPath,
         string url,
         string? folderName = null,
         IProgress<ContentInstallProgress>? progress = null,
-        CancellationToken cancel = default)
+        CancellationToken cancel = default) =>
+        InstallFromUrlCoreAsync(installPath, url, folderName, binding: null, progress, cancel);
+
+    async Task<InstalledMod> InstallFromUrlCoreAsync(
+        string installPath,
+        string url,
+        string? folderName,
+        CatalogBinding? binding,
+        IProgress<ContentInstallProgress>? progress,
+        CancellationToken cancel)
     {
         var modsDir = ModsStore.ModsDirectory(installPath);
         Directory.CreateDirectory(modsDir);
@@ -64,7 +94,7 @@ public sealed class ModInstaller
                 Message = "Downloading mod package",
             });
             await _thunderstore.DownloadAsync(url, zipPath, progress, cancel).ConfigureAwait(false);
-            return await InstallFromZipAsync(installPath, zipPath, folderName, progress, cancel)
+            return await InstallFromZipCoreAsync(installPath, zipPath, folderName, binding, progress, cancel)
                 .ConfigureAwait(false);
         }
         finally
@@ -73,12 +103,21 @@ public sealed class ModInstaller
         }
     }
 
-    public async Task<InstalledMod> InstallFromZipAsync(
+    public Task<InstalledMod> InstallFromZipAsync(
         string installPath,
         string zipPath,
         string? folderName = null,
         IProgress<ContentInstallProgress>? progress = null,
-        CancellationToken cancel = default)
+        CancellationToken cancel = default) =>
+        InstallFromZipCoreAsync(installPath, zipPath, folderName, binding: null, progress, cancel);
+
+    async Task<InstalledMod> InstallFromZipCoreAsync(
+        string installPath,
+        string zipPath,
+        string? folderName,
+        CatalogBinding? binding,
+        IProgress<ContentInstallProgress>? progress,
+        CancellationToken cancel)
     {
         if (string.IsNullOrWhiteSpace(zipPath))
             throw new ArgumentException("Zip path is required.", nameof(zipPath));
@@ -111,14 +150,22 @@ public sealed class ModInstaller
                     "Archive has no " + ModsStore.ModSettingsFileName + " after extract.");
             }
 
-            var doc = ModVdf.Parse(File.ReadAllText(vdfPath));
+            var vdfText = ModsStore.ReadModSettingsText(vdfPath) ?? throw new InvalidOperationException(
+                "Archive " + ModsStore.ModSettingsFileName + " is larger than the game accepts.");
+            var doc = ModVdf.Parse(vdfText);
             var id = doc.Get("id");
             if (string.IsNullOrEmpty(id) || !ModId.IsValid(id))
             {
+                var shown = id is { Length: > 40 } ? id[..40] + "..." : id ?? "";
                 throw new InvalidOperationException(
                     "Archive " + ModsStore.ModSettingsFileName +
-                    " is missing a valid id (got '" + (id ?? "") + "').");
+                    " is missing a valid id (got '" + shown + "').");
             }
+
+            if (binding is not null)
+                VerifyCatalogBinding(staging, id, binding);
+
+            VerifyOwnedFiles(installPath, staging, id, doc);
 
             var destName = ChooseFolderName(folderName, nestedName, Path.GetFileName(zipPath));
             if (!SafePath.IsSafeRelative(destName, out var reason))
@@ -136,19 +183,36 @@ public sealed class ModInstaller
                 Message = "Installing " + id,
             });
 
+            // The engine keys mods by id with '.' folded to '_'; two folders sharing that key
+            // disable each other, and replacing another author's folder would be a takeover.
+            var normalizedId = ModId.Normalize(id);
             foreach (var existing in ModsStore.Discover(installPath))
             {
-                if (!string.Equals(existing.Id, id, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(ModId.Normalize(existing.Id), normalizedId, StringComparison.OrdinalIgnoreCase))
                     continue;
                 if (string.Equals(existing.FolderName, destName, StringComparison.OrdinalIgnoreCase))
                     continue;
-                if (!SafePath.TryJoin(modsDir, existing.FolderName, out var oldDir))
-                    continue;
-                ModsStore.DeleteDirectoryNoReparse(oldDir);
+                throw new InvalidOperationException(
+                    "Mod id '" + id + "' is already used by the installed mod in '" + existing.FolderName +
+                    "'. Uninstall it first.");
             }
 
             if (Directory.Exists(dest))
+            {
+                // Replacing a folder is an update of the same mod, never a swap to another id.
+                if (SafePath.TryJoin(dest, ModsStore.ModSettingsFileName, out var oldVdf) && File.Exists(oldVdf))
+                {
+                    var oldText = ModsStore.ReadModSettingsText(oldVdf);
+                    var oldId = oldText is null ? null : ModVdf.Parse(oldText).Get("id");
+                    if (!string.Equals(oldId, id, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidOperationException(
+                            "Folder '" + destName + "' holds mod '" + oldId + "', not '" + id + "'. Uninstall it first.");
+                    }
+                }
+
                 ModsStore.DeleteDirectoryNoReparse(dest);
+            }
 
             Directory.Move(staging, dest);
             ModsStore.AddOrEnable(installPath, id);
@@ -163,6 +227,81 @@ public sealed class ModInstaller
             TryDeleteTree(staging);
         }
     }
+
+    // Same rule the engine applies at load; refusing here reports it at install time.
+    static void VerifyOwnedFiles(string installPath, string staging, string id, ModVdfDocument doc)
+    {
+        var nameSpace = ModOwnership.Namespace(id);
+        if (!ModOwnership.IsUsableNamespace(nameSpace))
+            throw new InvalidOperationException("Mod id '" + id + "' reads as '" + ModOwnership.Separator + "' in file names; pick another id.");
+
+        var maps = ModOwnership.ReadMaps(doc, nameSpace, out var mapError)
+                   ?? throw new InvalidOperationException("Archive " + ModsStore.ModSettingsFileName + ": " + mapError + ".");
+        foreach (var map in maps)
+        {
+            if (BaseShipsMap(installPath, map))
+                throw new InvalidOperationException("Package declares map '" + map + "', which the game already ships.");
+        }
+
+        var tables = ModOwnership.ReadDatatableOverrides(doc, out var tableError)
+                     ?? throw new InvalidOperationException("Archive " + ModsStore.ModSettingsFileName + ": " + tableError + ".");
+        if (ModOwnership.ReadLocalizationOverrides(doc, out var locError) is null)
+            throw new InvalidOperationException("Archive " + ModsStore.ModSettingsFileName + ": " + locError + ".");
+
+        foreach (var file in Directory.EnumerateFiles(staging, "*", SearchOption.AllDirectories))
+        {
+            var rel = Path.GetRelativePath(staging, file).Replace('\\', '/');
+            if (rel.Count(c => c == '/') > MaxFolderDepth)
+                throw new InvalidOperationException("Package nests folders deeper than " + MaxFolderDepth + ": " + rel);
+            if (!ModOwnership.OwnsPath(nameSpace, maps, tables, rel, installPath))
+            {
+                throw new InvalidOperationException(
+                    "Package ships '" + rel + "', outside its namespace '" + nameSpace +
+                    "' and its declared maps.");
+            }
+        }
+    }
+
+    static bool BaseShipsMap(string installPath, string map)
+    {
+        if (File.Exists(Path.Combine(installPath, "maps", map + ".bsp")) ||
+            File.Exists(Path.Combine(installPath, "paks", "Win64", map + ".rpak")))
+            return true;
+
+        var vpkDir = Path.Combine(installPath, "vpk");
+        return Directory.Exists(vpkDir) &&
+               Directory.EnumerateFiles(vpkDir, "*" + map + ".bsp.pak000_dir.vpk").Any();
+    }
+
+    sealed record CatalogBinding(string ExpectedId, string PackageName, string VersionNumber);
+
+    static void VerifyCatalogBinding(string staging, string id, CatalogBinding binding)
+    {
+        if (!string.Equals(id, binding.ExpectedId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Package mod.vdf id '" + id + "' does not match its Thunderstore name; expected '" +
+                binding.ExpectedId + "'.");
+        }
+
+        if (!SafePath.TryJoin(staging, ModsStore.ManifestFileName, out var manPath) || !File.Exists(manPath))
+            throw new InvalidOperationException("Package has no " + ModsStore.ManifestFileName + ".");
+
+        var man = ModsStore.ReadManifest(manPath)
+                  ?? throw new InvalidOperationException("Package " + ModsStore.ManifestFileName + " is malformed.");
+        if (!string.Equals(man.Name, binding.PackageName, StringComparison.Ordinal) ||
+            !string.Equals(man.VersionNumber, binding.VersionNumber, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Downloaded package is " + man.Name + " " + man.VersionNumber + ", expected " +
+                binding.PackageName + " " + binding.VersionNumber + ".");
+        }
+    }
+
+    // MZ (PE) and ELF; a renamed binary is refused whatever its extension.
+    static bool LooksExecutable(byte[] head, int length) =>
+        (length >= 2 && head[0] == (byte)'M' && head[1] == (byte)'Z') ||
+        (length >= 4 && head[0] == 0x7F && head[1] == (byte)'E' && head[2] == (byte)'L' && head[3] == (byte)'F');
 
     static ModPackageVersion PickVersion(ModPackage package, string? versionNumber)
     {
@@ -180,6 +319,46 @@ public sealed class ModInstaller
         throw new InvalidOperationException("Package has no version " + versionNumber + ".");
     }
 
+    /// <summary>Entry count from the (Zip64) end-of-central-directory record; -1 when absent.</summary>
+    static long DeclaredZipEntryCount(string zipPath)
+    {
+        using var fs = File.OpenRead(zipPath);
+        var tailLength = (int)Math.Min(fs.Length, 22 + 0xFFFF + 20);
+        var tail = new byte[tailLength];
+        fs.Seek(-tailLength, SeekOrigin.End);
+        fs.ReadExactly(tail);
+
+        for (var i = tailLength - 22; i >= 0; i--)
+        {
+            if (tail[i] != 0x50 || tail[i + 1] != 0x4B || tail[i + 2] != 0x05 || tail[i + 3] != 0x06)
+                continue;
+
+            long total = BitConverter.ToUInt16(tail, i + 10);
+            if (total != 0xFFFF || i < 20)
+                return total;
+
+            // Zip64: the locator sits right before the EOCD and points at the Zip64 record.
+            var loc = i - 20;
+            if (tail[loc] != 0x50 || tail[loc + 1] != 0x4B || tail[loc + 2] != 0x06 || tail[loc + 3] != 0x07)
+                return total;
+
+            var zip64Offset = BitConverter.ToInt64(tail, loc + 8);
+            if (zip64Offset < 0 || zip64Offset + 56 > fs.Length)
+                return long.MaxValue;
+
+            var rec = new byte[56];
+            fs.Seek(zip64Offset, SeekOrigin.Begin);
+            fs.ReadExactly(rec);
+            if (rec[0] != 0x50 || rec[1] != 0x4B || rec[2] != 0x06 || rec[3] != 0x06)
+                return long.MaxValue;
+
+            var total64 = BitConverter.ToUInt64(rec, 32);
+            return total64 > long.MaxValue ? long.MaxValue : (long)total64;
+        }
+
+        return -1;
+    }
+
     static string ExtractValidated(
         string zipPath,
         string staging,
@@ -187,6 +366,14 @@ public sealed class ModInstaller
         CancellationToken cancel)
     {
         Directory.CreateDirectory(staging);
+
+        // ZipFile.OpenRead materialises every entry the central directory declares, so the
+        // count is checked from the end-of-central-directory record before opening.
+        var declaredEntries = DeclaredZipEntryCount(zipPath);
+        if (declaredEntries > MaxZipEntries)
+            throw new InvalidOperationException(
+                "Archive declares " + declaredEntries + " entries; cap is " + MaxZipEntries + ".");
+
         using var zip = ZipFile.OpenRead(zipPath);
         if (zip.Entries.Count > MaxZipEntries)
             throw new InvalidOperationException(
@@ -212,10 +399,10 @@ public sealed class ModInstaller
             }
 
             var ext = Path.GetExtension(relative);
-            if (ForbiddenExtensions.Contains(ext))
+            if (!AllowedExtensions.Contains(ext))
             {
                 throw new InvalidOperationException(
-                    "Archive contains a forbidden file type (" + ext + "): " + relative);
+                    "Archive contains a file type mods may not ship (" + ext + "): " + relative);
             }
 
             var uncompressed = entry.Length;
@@ -270,10 +457,22 @@ public sealed class ModInstaller
             using var input = entry.Open();
             using var output = new FileStream(dest, FileMode.Create, FileAccess.Write, FileShare.None);
             var buffer = new byte[81920];
+            var head = new byte[4];
+            var headLen = 0;
             long copied = 0;
             int read;
             while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
             {
+                // A decompressor may hand back one byte at a time; judge the full magic.
+                if (headLen < head.Length)
+                {
+                    var take = Math.Min(head.Length - headLen, read);
+                    Array.Copy(buffer, 0, head, headLen, take);
+                    headLen += take;
+                    if (LooksExecutable(head, headLen))
+                        throw new InvalidOperationException("Archive contains an executable image: " + relative);
+                }
+
                 copied += read;
                 written += read;
                 if (copied > entry.Length)
@@ -290,14 +489,19 @@ public sealed class ModInstaller
             }
 
             fileIndex++;
-            progress?.Report(new ContentInstallProgress
+            // Each report is one UI-thread post that re-lays out the status line; the entry
+            // names come from the package.
+            if (fileIndex == fileCount || fileIndex % 50 == 1)
             {
-                Phase = "extract",
-                Unit = ProgressUnit.Items,
-                Current = fileIndex,
-                Total = fileCount,
-                Message = relative,
-            });
+                progress?.Report(new ContentInstallProgress
+                {
+                    Phase = "extract",
+                    Unit = ProgressUnit.Items,
+                    Current = fileIndex,
+                    Total = fileCount,
+                    Message = relative.Length > 120 ? relative[..120] + "..." : relative,
+                });
+            }
         }
 
         return nestedAmbiguous ? string.Empty : nested ?? string.Empty;

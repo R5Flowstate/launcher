@@ -139,6 +139,8 @@ public static class SettingsStore
             }
 
             s.OfflineNoAuth = ReadBool(key, "OfflineNoAuth", defaultValue: false);
+            if (key.GetValue("OfflineName") is string offlineName)
+                s.OfflineName = LaunchArgs.SanitizeOfflineName(offlineName);
             s.DediHostOnline = ReadBool(key, "DediHostOnline", defaultValue: false);
             s.DevProfile = ReadBool(key, "DevProfile", defaultValue: false);
             // Settings written before the split carry only DevProfile.
@@ -149,6 +151,7 @@ public static class SettingsStore
             s.ShowUnlistedMaps = ReadBool(key, "ShowUnlistedMaps", defaultValue: false);
             s.JoinWithoutDev = ReadBool(key, "JoinWithoutDev", defaultValue: true);
             s.SimpleMode = ReadBool(key, "SimpleMode", defaultValue: true);
+            s.AdvancedServersCollapsed = ReadBool(key, "AdvancedServersCollapsed", defaultValue: false);
 
             if (key.GetValue("DediPlaylist") is string pl && !string.IsNullOrWhiteSpace(pl))
                 s.DediPlaylist = pl;
@@ -182,7 +185,7 @@ public static class SettingsStore
                 s.EulaLanguage = eulaLang ?? string.Empty;
             s.ShowClientConsoleWindow = ReadBool(key, "ShowClientConsoleWindow", defaultValue: false);
             s.OpenConsoleOnLaunch = ReadBool(key, "OpenConsoleOnLaunch", defaultValue: false);
-            s.UseDx12 = ReadBool(key, "UseDx12", defaultValue: false);
+            s.UseDx12 = ReadBool(key, "UseDx12", defaultValue: true);
             s.DownloadLimitMbps = ReadInt(key, "DownloadLimitMbps", defaultValue: 0);
             s.DownloadConcurrency = ReadInt(key, "DownloadConcurrency", defaultValue: 0);
             s.HdTexturesAnnounced = ReadBool(key, "HdTexturesAnnounced", defaultValue: false);
@@ -239,6 +242,7 @@ public static class SettingsStore
         key.SetValue("ClientLaunchArguments", settings.ClientLaunchArguments ?? string.Empty);
         key.SetValue("DediLaunchArguments", settings.DediLaunchArguments ?? string.Empty);
         key.SetValue("OfflineNoAuth", settings.OfflineNoAuth ? 1 : 0, RegistryValueKind.DWord);
+        key.SetValue("OfflineName", LaunchArgs.SanitizeOfflineName(settings.OfflineName));
         key.SetValue("DediHostOnline", settings.DediHostOnline ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("DevProfile", settings.DevProfile ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("ClientDevProfile", settings.ClientDevProfile ? 1 : 0, RegistryValueKind.DWord);
@@ -248,6 +252,7 @@ public static class SettingsStore
         key.SetValue("ShowUnlistedMaps", settings.ShowUnlistedMaps ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("JoinWithoutDev", settings.JoinWithoutDev ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("SimpleMode", settings.SimpleMode ? 1 : 0, RegistryValueKind.DWord);
+        key.SetValue("AdvancedServersCollapsed", settings.AdvancedServersCollapsed ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("DediPlaylist", settings.DediPlaylist ?? string.Empty);
         key.SetValue("DediMap", settings.DediMap ?? string.Empty);
         key.SetValue("DediPort", settings.DediPort > 0 ? settings.DediPort : 37015, RegistryValueKind.DWord);
@@ -385,6 +390,9 @@ public sealed class LauncherSettings
     public string DediLaunchArguments { get; set; } = string.Empty;
     public bool OfflineNoAuth { get; set; }
 
+    /// <summary>Player name for offline launches (-offlinename). Empty keeps the game's default.</summary>
+    public string OfflineName { get; set; } = string.Empty;
+
     /// <summary>Advanced: publish the dedicated server to Spire (+spire_host_visibility 2).</summary>
     public bool DediHostOnline { get; set; }
 
@@ -413,6 +421,9 @@ public sealed class LauncherSettings
 
     /// <summary>True = Simple player shell (default for new installs).</summary>
     public bool SimpleMode { get; set; } = true;
+
+    /// <summary>Advanced layout: the SERVERS card body starts collapsed.</summary>
+    public bool AdvancedServersCollapsed { get; set; }
 
     /// <summary>Last selected mode card playlist id.</summary>
     public string LastModePlaylist { get; set; } = string.Empty;
@@ -446,8 +457,8 @@ public sealed class LauncherSettings
     /// <summary>The one-time "HD textures are available" notice has been shown.</summary>
     public bool HdTexturesAnnounced { get; set; }
 
-    /// <summary>Run r5apex_dx12.exe.</summary>
-    public bool UseDx12 { get; set; }
+    /// <summary>Run r5apex_dx12.exe. On by default for fresh installs.</summary>
+    public bool UseDx12 { get; set; } = true;
 
     /// <summary>Game download cap in MB/s (decimal, same as the progress rate). 0 = unlimited.</summary>
     public int DownloadLimitMbps { get; set; }

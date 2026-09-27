@@ -249,6 +249,7 @@ public partial class MainWindow : Window
                 _settings.OfflineNoAuth = false;
             if (ChkSimpleOffline is not null)
                 ChkSimpleOffline.IsChecked = _settings.OfflineNoAuth;
+            ApplyOfflineNameVisibility();
             if (ChkDediOnline is not null)
                 ChkDediOnline.IsChecked = _settings.DediHostOnline;
             SyncDeveloperChecks();
@@ -1226,7 +1227,9 @@ public partial class MainWindow : Window
         var root = TxtInstallRoot.Text.Trim();
         try
         {
-            _catalog = PlaylistCatalogLoader.Load(root, Loc.Code, _settings.ShowUnlistedMaps, Loc.Lookup);
+            var mods = ModPlaylistSources(root);
+            _catalogModsKey = ModPlaylistSourcesKey(mods);
+            _catalog = PlaylistCatalogLoader.Load(root, Loc.Code, _settings.ShowUnlistedMaps, Loc.Lookup, mods);
         }
         catch (Exception ex)
         {
@@ -1584,6 +1587,7 @@ public partial class MainWindow : Window
 
     private void RefreshArgPreviews()
     {
+        RefreshHostSettingsButtons();
         if (TxtClientPreview is null || TxtDediPreview is null)
             return;
 
@@ -2353,6 +2357,7 @@ public partial class MainWindow : Window
         var root = TxtInstallRoot.Text.Trim();
         var n = ProcessSpawner.KillRole(LaunchRole.Client, root);
         _lastClientPid = null;
+        _replayClientPid = null;
         RestoreSessionMods(force: true);
         Log($"Kill Client: stopped {n} process(es)");
         UpdateKillButtons();
@@ -2631,6 +2636,7 @@ public partial class MainWindow : Window
             }
 
             _lastClientPid = clientResult.ProcessId;
+            _replayClientPid = null;
             Log($"[Play] client pid={clientResult.ProcessId} {LaunchArgs.RedactSensitiveArgs(clientResult.CommandLine ?? string.Empty)}");
             UpdateKillButtons();
             UpdateStatus($"Quick Play OK  |  {PidLine()}  |  {map} → 127.0.0.1:{port}");
@@ -2812,6 +2818,7 @@ public partial class MainWindow : Window
     {
         SetCheckSilently(ChkSimpleOffline, on);
         _settings.OfflineNoAuth = on;
+        ApplyOfflineNameVisibility();
         try { SettingsStore.Save(_settings); }
         catch (Exception ex) { Log($"Settings save failed: {ex.Message}"); }
         RefreshArgPreviews();
@@ -3160,9 +3167,11 @@ public partial class MainWindow : Window
         return LaunchArgs.BuildClientArgs(profile, new ClientArgOptions
         {
             OfflineNoAuth = !forceOnline && IsOfflineOn(),
+            OfflineName = _settings.OfflineName,
             ForceOnline = forceOnline,
             DropDev = dropDev,
             Extra = TxtClientArgs.Text ?? string.Empty,
+            ExtraTokens = ReplayClientTokens(),
             IncludeConnect = includeConnect,
             ConnectHost = connectHost,
             ConnectPort = connectPort ?? SelectedPort(),
@@ -3185,10 +3194,12 @@ public partial class MainWindow : Window
             password = string.Empty;
         }
 
+        var launchPlaylist = playlistOverride ?? SelectedPlaylistId();
         return LaunchArgs.BuildDediArgs(DediProfile(), new DediArgOptions
         {
             Port = SelectedPort(),
-            LaunchPlaylist = playlistOverride ?? SelectedPlaylistId(),
+            LaunchPlaylist = launchPlaylist,
+            PlaylistOverrides = HostOverridesFor(launchPlaylist),
             Map = mapOverride ?? SelectedMap(),
             OfflineNoAuth = IsOfflineOn(),
             Visibility = DediVisibility(),
@@ -3328,7 +3339,10 @@ public partial class MainWindow : Window
         if (result.Ok)
         {
             if (role == LaunchRole.Client)
+            {
                 _lastClientPid = result.ProcessId;
+                _replayClientPid = null;
+            }
             else
                 _lastDediPid = result.ProcessId;
             UpdateKillButtons();
@@ -3408,6 +3422,8 @@ public partial class MainWindow : Window
         if (role == LaunchRole.Client && grantHostConsole && _localRcon is not null)
             extra = MergeEnv(extra, _localRcon.ToEnvironment());
         extra = MergeEnv(extra, extraEnv);
+        if (role == LaunchRole.Client)
+            extra = MergeEnv(extra, HandoffEnvironment());
         // Hosted tap hides AllocConsole. Local play always taps the dedi for
         // host-ready / fatal. Simple (and the console-on-launch box) also tap
         // the client so its pane has every line from process start. Each role
@@ -3688,6 +3704,7 @@ public partial class MainWindow : Window
         StopWatchdogs();
         RestoreSessionMods(force: true);
         DisposeModsServices();
+        DisposeHandoff();
     }
 
     private void OnWindowClosed(object? sender, EventArgs e)
@@ -4230,6 +4247,7 @@ public partial class MainWindow : Window
         if (persist)
             PersistSettingsFromUi();
         RefreshChangeMapButton();
+        RefreshHostSettingsButtons();
     }
 
     // Pinned modes (Lobby, Firing Range) keep their own map.
@@ -4346,6 +4364,28 @@ public partial class MainWindow : Window
         await RunPlayAsync(_selectedMode.PlaylistId, map).ConfigureAwait(true);
     }
 
+    /// <summary>CHANGE MAP / CHANGE PLAYLIST caption with a STOP button inside the big button.</summary>
+    private object ChangeWithStopContent(string caption)
+    {
+        var stop = new Button { Content = Loc.Get("stop"), ToolTip = Loc.Get("tip_stop") };
+        if (TryFindResource("PlayBarInlineStop") is Style style)
+            stop.Style = style;
+        stop.Click += OnInlineStopClick;
+
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(new TextBlock { Text = caption, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(stop);
+        return row;
+    }
+
+    private async void OnInlineStopClick(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is Button b)
+            b.IsEnabled = false;
+        await StopSessionAsync().ConfigureAwait(true);
+    }
+
     private async Task StopSessionAsync()
     {
         _playCts?.Cancel();
@@ -4353,6 +4393,7 @@ public partial class MainWindow : Window
         var root = TxtInstallRoot.Text.Trim();
         var n = await Task.Run(() => ProcessSpawner.KillAll(root)).ConfigureAwait(true);
         _lastClientPid = null;
+        _replayClientPid = null;
         _lastDediPid = null;
         _joinedServer = null;
         RestoreSessionMods(force: true);
@@ -4592,7 +4633,7 @@ public partial class MainWindow : Window
             };
             var styleKey = _simplePlayKind switch
             {
-                SimplePlayKind.ChangeMap => "PlayBarChange",
+                SimplePlayKind.ChangeMap => "PlayBarChangeSplit",
                 SimplePlayKind.RestartClient => "PlayBarRestart",
                 SimplePlayKind.Disconnect => "PlayBarDisconnect",
                 SimplePlayKind.Update => "PlayBarUpdate",
@@ -4600,6 +4641,8 @@ public partial class MainWindow : Window
             };
             if (BtnPlay.TryFindResource(styleKey) is Style style)
                 BtnPlay.Style = style;
+            if (_simplePlayKind == SimplePlayKind.ChangeMap)
+                BtnPlay.Content = ChangeWithStopContent(caption);
         }
 
         PaintConsoleActionButton(caption, enabled);
@@ -5026,6 +5069,7 @@ public partial class MainWindow : Window
             var killed = await Task.Run(() => ProcessSpawner.KillRole(LaunchRole.Client, root))
                 .ConfigureAwait(true);
             _lastClientPid = null;
+            _replayClientPid = null;
             if (killed > 0)
                 Log($"Restart game: killed {killed} client process(es)");
             ResetClientConsoleForNewSession();
@@ -5065,6 +5109,7 @@ public partial class MainWindow : Window
             }
 
             _lastClientPid = result.ProcessId;
+            _replayClientPid = null;
             Log($"Restart game: client pid={result.ProcessId} on {target}");
             SetSimpleStatus(Loc.Format("status_restarted_game", target));
             UpdateStatus($"Restarted on {target}  |  {PidLine()}");
@@ -5463,6 +5508,7 @@ public partial class MainWindow : Window
 
         Gate(BtnTabConsole, null);
         Gate(BtnTabMods, null);
+        Gate(BtnTabReplays, null);
         Gate(BtnTabSettings, Loc.Get("tip_settings"));
         Gate(BtnTabToolSettings, Loc.Get("tip_settings"));
         Gate(BtnHeaderConsole, Loc.Get("tab_console"));
@@ -5474,7 +5520,7 @@ public partial class MainWindow : Window
 
         if (!_settings.SimpleMode)
             ApplyShellMode(simple: true, persist: false);
-        if (_simpleTab is SimpleTab.Console or SimpleTab.Mods or SimpleTab.Settings or SimpleTab.Servers)
+        if (_simpleTab is SimpleTab.Console or SimpleTab.Mods or SimpleTab.Replays or SimpleTab.Settings or SimpleTab.Servers)
             ApplySimpleTab(SimpleTab.Play);
     }
 

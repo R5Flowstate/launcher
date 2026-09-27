@@ -133,10 +133,15 @@ public sealed class ModeCardViewModel : INotifyPropertyChanged
 
     public bool IsApex => string.Equals(Group, ModeGroups.Apex, StringComparison.Ordinal);
 
-    /// <summary>Sort key that keeps the rail's two sections contiguous.</summary>
-    public int GroupRank => IsApex ? 0 : 1;
+    /// <summary>Sort key that keeps each rail section contiguous.</summary>
+    public int GroupRank => ModeGroups.Rank(Group);
 
-    public string GroupTitle => Loc.Get(IsApex ? "group_apex" : "group_flowstate");
+    public string GroupTitle => Group switch
+    {
+        ModeGroups.Apex => Loc.Get("group_apex"),
+        ModeGroups.Custom => Loc.Get("group_custom"),
+        _ => Loc.Get("group_flowstate"),
+    };
 
     public string Title { get; }
     public string Blurb { get; }

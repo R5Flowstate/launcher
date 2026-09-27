@@ -249,40 +249,28 @@ internal static class NetconPlaintext
 
     private static TcpClient? ConnectLoopback(int port, TimeSpan timeout)
     {
+        return TryConnect(AddressFamily.InterNetworkV6, IPAddress.IPv6Loopback, port, timeout)
+            ?? TryConnect(AddressFamily.InterNetwork, IPAddress.Loopback, port, timeout);
+    }
+
+    // The connect is awaited to completion even on timeout: disposing a socket under a
+    // pending ConnectAsync leaves a faulted task (995) that surfaces as UnobservedTaskException.
+    private static TcpClient? TryConnect(AddressFamily family, IPAddress address, int port, TimeSpan timeout)
+    {
+        var client = new TcpClient(family);
         try
         {
-            var v6 = new TcpClient(AddressFamily.InterNetworkV6);
-            v6.Client.DualMode = false;
-            var t = v6.ConnectAsync(IPAddress.IPv6Loopback, port);
-            if (t.Wait(timeout))
-            {
-                t.GetAwaiter().GetResult();
-                return v6;
-            }
-            v6.Dispose();
+            if (family == AddressFamily.InterNetworkV6)
+                client.Client.DualMode = false;
+            using var cts = new CancellationTokenSource(timeout);
+            client.ConnectAsync(address, port, cts.Token).AsTask().GetAwaiter().GetResult();
+            return client;
         }
         catch
         {
-            // try IPv4
+            client.Dispose();
+            return null;
         }
-
-        try
-        {
-            var v4 = new TcpClient(AddressFamily.InterNetwork);
-            var t = v4.ConnectAsync(IPAddress.Loopback, port);
-            if (t.Wait(timeout))
-            {
-                t.GetAwaiter().GetResult();
-                return v4;
-            }
-            v4.Dispose();
-        }
-        catch
-        {
-            // both failed
-        }
-
-        return null;
     }
 
     public static string? SelfCheck()

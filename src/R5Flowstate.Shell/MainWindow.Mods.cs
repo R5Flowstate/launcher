@@ -18,6 +18,44 @@ public partial class MainWindow
     readonly List<BrowseModRowViewModel> _browseRows = new();
     readonly List<DediModPolicyRowViewModel> _dediModRows = new();
     IReadOnlyList<ModPackage> _tsPackages = Array.Empty<ModPackage>();
+
+    // Which enabled map mods the mode rail was built from.
+    string _catalogModsKey = string.Empty;
+
+    static IReadOnlyList<ModPlaylistSource> ModPlaylistSources(string root)
+    {
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            return Array.Empty<ModPlaylistSource>();
+
+        string modsDir;
+        try
+        {
+            modsDir = ModsStore.ModsDirectory(root);
+        }
+        catch
+        {
+            return Array.Empty<ModPlaylistSource>();
+        }
+
+        return ModsStore.Discover(root)
+            .Where(m => m.Enabled && m.Maps.Count > 0)
+            .Select(m => new ModPlaylistSource
+            {
+                Id = m.Id,
+                Folder = Path.Combine(modsDir, m.FolderName),
+                Maps = m.Maps,
+            })
+            .ToList();
+    }
+
+    static string ModPlaylistSourcesKey(IReadOnlyList<ModPlaylistSource> mods) =>
+        string.Join("|", mods.Select(m => m.Id + ":" + string.Join(",", m.Maps)));
+
+    void ReloadCatalogIfModsChanged()
+    {
+        if (ModPlaylistSourcesKey(ModPlaylistSources(ModsInstallRoot())) != _catalogModsKey)
+            ReloadPlaylistsAndMaps(selectSaved: true);
+    }
     ThunderstoreClient? _thunderstore;
     ModInstaller? _modInstaller;
     bool _modsSectionBrowse;
@@ -190,6 +228,8 @@ public partial class MainWindow
                 SetModsStatus(Loc.Get("mods_empty"));
             else
                 SetModsStatus(string.Empty);
+
+            ReloadCatalogIfModsChanged();
         }
         catch (Exception ex)
         {
@@ -234,7 +274,7 @@ public partial class MainWindow
             _browseRows.Clear();
             foreach (var pkg in packages)
             {
-                if (pkg.IsDeprecated)
+                if (pkg.IsDeprecated || pkg.IsNsfw)
                     continue;
                 _browseRows.Add(new BrowseModRowViewModel(pkg));
             }
@@ -295,6 +335,7 @@ public partial class MainWindow
             _suppressModEvents = true;
             row.Enabled = wanted;
             _suppressModEvents = false;
+            ReloadCatalogIfModsChanged();
         }
         catch (Exception ex)
         {
@@ -449,18 +490,58 @@ public partial class MainWindow
             return;
         }
 
+        var unresolved = new List<string>();
+        IReadOnlyList<ModInstallStep> plan;
+        try
+        {
+            plan = ModInstallPlanner.Plan(
+                _tsPackages, new[] { (row.Package, (string?)null) }, ModsStore.Discover(root), unresolved);
+        }
+        catch (Exception ex)
+        {
+            SetModsStatus(Loc.Format("mods_install_failed", ex.Message));
+            return;
+        }
+
+        if (unresolved.Count > 0)
+        {
+            SetModsStatus(Loc.Format("mods_install_failed",
+                Loc.Format("mods_deps_unresolved", string.Join(", ", unresolved))));
+            return;
+        }
+
+        if (plan.Count > 1)
+        {
+            var ask = MessageBox.Show(
+                this,
+                Loc.Format("mods_install_plan", row.Name, PlanLines(plan)),
+                Loc.Get("mods_install_plan_title"),
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Question,
+                MessageBoxResult.Cancel);
+            if (ask != MessageBoxResult.OK)
+                return;
+        }
+
         row.Busy = true;
         SetModsBusy(true);
         SetModsStatus(Loc.Format("mods_join_installing", row.Name));
         try
         {
             var progress = NewModsProgress(row);
-            await ModsInstaller().InstallAsync(root, row.Package, versionNumber: null, progress)
-                .ConfigureAwait(true);
+            await InstallPlanAsync(root, plan, progress, SetModsStatus).ConfigureAwait(true);
             row.ProgressText = string.Empty;
-            SetModsStatus(Loc.Format("mods_install_ok_named", row.Name));
             await LoadInstalledModsCoreAsync().ConfigureAwait(true);
             RefreshDediModPolicyUi();
+
+            var installedId = ModInstaller.ExpectedCatalogId(row.Package);
+            var replaces = _modRows
+                .Where(r => string.Equals(r.Id, installedId, StringComparison.OrdinalIgnoreCase))
+                .SelectMany(r => r.Mod.Replaces)
+                .ToList();
+            SetModsStatus(replaces.Count == 0
+                ? Loc.Format("mods_install_ok_named", row.Name)
+                : Loc.Format("mods_install_ok_replaces", row.Name, string.Join(", ", replaces)));
         }
         catch (Exception ex)
         {
@@ -473,6 +554,23 @@ public partial class MainWindow
             SetModsBusy(false);
         }
     }
+
+    async Task InstallPlanAsync(
+        string root,
+        IReadOnlyList<ModInstallStep> plan,
+        IProgress<ContentInstallProgress>? progress,
+        Action<string> status)
+    {
+        foreach (var step in plan)
+        {
+            status(Loc.Format("mods_join_installing", step.Pin));
+            await ModsInstaller().InstallAsync(root, step.Package, step.Version.VersionNumber, progress)
+                .ConfigureAwait(true);
+        }
+    }
+
+    static string PlanLines(IReadOnlyList<ModInstallStep> plan) =>
+        string.Join("\n", plan.Select(p => p.Pin));
 
     IProgress<ContentInstallProgress> NewModsProgress(BrowseModRowViewModel? row) =>
         new Progress<ContentInstallProgress>(p =>
@@ -579,7 +677,7 @@ public partial class MainWindow
             }
 
             var unresolved = new List<string>();
-            var installed = 0;
+            var roots = new List<(ModPackage, string?)>();
             foreach (var pin in profile.Packages)
             {
                 if (!TryResolvePin(pin, out var package, out var version))
@@ -588,10 +686,12 @@ public partial class MainWindow
                     continue;
                 }
 
-                SetModsStatus(Loc.Format("mods_join_installing", package.Name));
-                await ModsInstaller().InstallAsync(root, package, version).ConfigureAwait(true);
-                installed++;
+                roots.Add((package, version));
             }
+
+            var plan = ModInstallPlanner.Plan(_tsPackages, roots, ModsStore.Discover(root), unresolved);
+            await InstallPlanAsync(root, plan, progress: null, SetModsStatus).ConfigureAwait(true);
+            var installed = plan.Count;
 
             await LoadInstalledModsCoreAsync().ConfigureAwait(true);
             RefreshDediModPolicyUi();
@@ -622,15 +722,9 @@ public partial class MainWindow
         if (string.IsNullOrWhiteSpace(pin))
             return false;
 
+        if (!ModInstallPlanner.TrySplitPin(pin, out var full, out var ver))
+            return false;
         var raw = pin.Trim();
-        var full = raw;
-        string? ver = null;
-        var last = raw.LastIndexOf('-');
-        if (last > 0 && last < raw.Length - 1 && char.IsDigit(raw[last + 1]))
-        {
-            ver = raw[(last + 1)..];
-            full = raw[..last];
-        }
 
         foreach (var pkg in _tsPackages)
         {
@@ -666,27 +760,29 @@ public partial class MainWindow
         var required = DistinctIds(listing.RequiredMods);
         var allowed = DistinctIds(listing.AllowedMods);
 
-        var enabledAny = false;
-        foreach (var id in required)
+        // Mods the player turned off come back only with consent, and only for this session.
+        var turnedOff = required
+            .Where(id => discovered.Any(m => !m.Enabled && string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        if (turnedOff.Count > 0)
         {
-            var local = discovered.FirstOrDefault(m =>
-                string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase));
-            if (local is null || local.Enabled)
-                continue;
-            try
-            {
-                ModsStore.SetEnabled(root, local.Id, true);
-                enabledAny = true;
-            }
-            catch (Exception ex)
-            {
-                SetBrowserStatus(Loc.Format("mods_enable_failed", ex.Message));
+            var enableAsk = MessageBox.Show(
+                this,
+                Loc.Format("mods_join_enable_disabled", string.Join("\n", turnedOff)),
+                Loc.Get("mods_join_missing_title"),
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question,
+                MessageBoxResult.No);
+            if (enableAsk != MessageBoxResult.Yes)
                 return false;
-            }
-        }
 
-        if (enabledAny)
+            var keep = new HashSet<string>(
+                discovered.Where(m => m.Enabled).Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
+            keep.UnionWith(turnedOff);
+            if (!TryBeginSessionModsFilter(root, keep))
+                return false;
             _sessionModsForceRelaunch = true;
+        }
 
         IReadOnlyList<string> enabled;
         try
@@ -716,21 +812,12 @@ public partial class MainWindow
                 return false;
             }
 
-            var ask = MessageBox.Show(
-                this,
-                Loc.Format("mods_join_missing", names),
-                Loc.Get("mods_join_missing_title"),
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question,
-                MessageBoxResult.No);
-            if (ask != MessageBoxResult.Yes)
-                return false;
-
-            List<string> unresolved;
+            List<string> unresolved = new();
+            IReadOnlyList<ModInstallStep> plan;
             try
             {
-                unresolved = await InstallMissingForJoinAsync(root, listing, missing)
-                    .ConfigureAwait(true);
+                SetBrowserStatus(Loc.Get("mods_join_profile"));
+                plan = await PlanJoinInstallAsync(root, listing, missing, unresolved).ConfigureAwait(true);
             }
             catch (Exception ex)
             {
@@ -744,11 +831,52 @@ public partial class MainWindow
                 return false;
             }
 
-            if (unresolved.Count > 0)
+            if (unresolved.Count > 0 || plan.Count == 0)
             {
+                if (unresolved.Count == 0)
+                    unresolved.AddRange(missing);
                 MessageBox.Show(
                     this,
                     Loc.Format("mods_join_unresolved", string.Join("\n", unresolved)),
+                    Loc.Get("mods_join_unresolved_title"),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return false;
+            }
+
+            var ask = MessageBox.Show(
+                this,
+                Loc.Format("mods_join_plan", names, PlanLines(plan)),
+                Loc.Get("mods_join_missing_title"),
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+            if (ask != MessageBoxResult.Yes)
+                return false;
+
+            try
+            {
+                await InstallPlanAsync(root, plan, progress: null, SetBrowserStatus).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                SetBrowserStatus(Loc.Format("mods_install_failed", ex.Message));
+                MessageBox.Show(
+                    this,
+                    Loc.Format("mods_install_failed", ex.Message),
+                    Loc.Get("mods_join_missing_title"),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return false;
+            }
+
+            var nowEnabled = new HashSet<string>(ModsStore.EnabledIds(root), StringComparer.OrdinalIgnoreCase);
+            var stillMissing = required.Where(id => !nowEnabled.Contains(id)).ToList();
+            if (stillMissing.Count > 0)
+            {
+                MessageBox.Show(
+                    this,
+                    Loc.Format("mods_join_unresolved", string.Join("\n", stillMissing)),
                     Loc.Get("mods_join_unresolved_title"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
@@ -796,33 +924,43 @@ public partial class MainWindow
         return true;
     }
 
-    async Task<List<string>> InstallMissingForJoinAsync(
+    /// <summary>
+    /// Resolves a server's missing mod ids (or its pinned profile) to exact catalog
+    /// packages. Nothing is downloaded here; the player confirms the plan first.
+    /// </summary>
+    async Task<IReadOnlyList<ModInstallStep>> PlanJoinInstallAsync(
         string root,
         ServerListing listing,
-        List<string> missing)
+        List<string> missing,
+        List<string> unresolved)
     {
-        if (!ThunderstoreLive)
-            return new List<string>(missing);
-
-        var unresolved = new List<string>();
         if (_tsPackages.Count == 0)
             _tsPackages = await ModsThunderstore().ListPackagesAsync().ConfigureAwait(true);
 
+        var roots = new List<(ModPackage, string?)>();
         if (!string.IsNullOrWhiteSpace(listing.ModsProfile))
         {
-            SetBrowserStatus(Loc.Get("mods_join_profile"));
             var profile = await ModsThunderstore().GetProfileAsync(listing.ModsProfile.Trim())
                 .ConfigureAwait(true);
+            // The profile only chooses versions for mods the server requires; any
+            // other pin it lists is not the server's to install.
+            var wanted = new HashSet<string>(missing, StringComparer.OrdinalIgnoreCase);
             foreach (var pin in profile.Packages)
             {
                 if (!TryResolvePin(pin, out var package, out var version))
-                {
-                    unresolved.Add(pin);
                     continue;
-                }
+                if (wanted.Contains(ModInstaller.ExpectedCatalogId(package)))
+                    roots.Add((package, version));
+                else
+                    Log("Join: ignoring profile pin not required by the server: " + pin);
+            }
 
-                SetBrowserStatus(Loc.Format("mods_join_installing", package.Name));
-                await ModsInstaller().InstallAsync(root, package, version).ConfigureAwait(true);
+            var covered = new HashSet<string>(
+                roots.Select(r => ModInstaller.ExpectedCatalogId(r.Item1)), StringComparer.OrdinalIgnoreCase);
+            foreach (var id in missing)
+            {
+                if (!covered.Contains(id))
+                    unresolved.Add(id);
             }
         }
         else
@@ -831,47 +969,32 @@ public partial class MainWindow
             {
                 var package = MatchPackageById(id);
                 if (package is null)
-                {
                     unresolved.Add(id);
-                    continue;
-                }
-
-                SetBrowserStatus(Loc.Format("mods_join_installing", package.Name));
-                await ModsInstaller().InstallAsync(root, package).ConfigureAwait(true);
+                else
+                    roots.Add((package, null));
             }
         }
 
-        var enabled = new HashSet<string>(ModsStore.EnabledIds(root), StringComparer.OrdinalIgnoreCase);
-        foreach (var id in DistinctIds(listing.RequiredMods))
-        {
-            if (enabled.Contains(id))
-                continue;
-            if (!unresolved.Contains(id, StringComparer.OrdinalIgnoreCase))
-                unresolved.Add(id);
-        }
-
-        return unresolved;
+        return ModInstallPlanner.Plan(
+            _tsPackages, roots, ModsStore.Discover(root), unresolved, keepInstalledRoots: true);
     }
 
+    /// <summary>A catalog mod id is <c>Owner.Name</c>; only that exact package satisfies it.</summary>
     ModPackage? MatchPackageById(string id)
     {
         foreach (var pkg in _tsPackages)
         {
-            if (string.Equals(pkg.Name, id, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(pkg.FullName, id, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(pkg.FullName, pkg.Owner + "-" + id, StringComparison.OrdinalIgnoreCase))
+            if (pkg.IsDeprecated)
+                continue;
+            if (string.Equals(ModInstaller.ExpectedCatalogId(pkg), id, StringComparison.OrdinalIgnoreCase))
                 return pkg;
-            if (!string.IsNullOrEmpty(pkg.FullName))
-            {
-                var dash = pkg.FullName.IndexOf('-');
-                if (dash > 0
-                    && string.Equals(pkg.FullName[(dash + 1)..], id, StringComparison.OrdinalIgnoreCase))
-                    return pkg;
-            }
         }
 
         return null;
     }
+
+    // Engine MAX_MODS_TO_LOAD.
+    const int MaxModsToLoad = 1024;
 
     static List<string> DistinctIds(IReadOnlyList<string>? ids)
     {
@@ -881,8 +1004,11 @@ public partial class MainWindow
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var raw in ids)
         {
+            // Server-supplied; the game loads at most MaxModsToLoad mods anyway.
+            if (result.Count >= MaxModsToLoad)
+                break;
             var id = raw?.Trim();
-            if (string.IsNullOrEmpty(id) || !seen.Add(id))
+            if (string.IsNullOrEmpty(id) || !ModId.IsValid(id) || !seen.Add(id))
                 continue;
             result.Add(id);
         }
@@ -939,9 +1065,7 @@ public partial class MainWindow
                     next.Add((id, true));
             }
 
-            ModsStore.Reorder(root, next.Select(r => r.Id).ToList());
-            foreach (var row in next)
-                ModsStore.SetEnabled(root, row.Id, row.Enabled);
+            ModsStore.SetModList(root, next);
 
             _sessionModsWritten = File.Exists(vdfPath) ? File.ReadAllText(vdfPath) : string.Empty;
             _sessionModsBackup = bakPath;

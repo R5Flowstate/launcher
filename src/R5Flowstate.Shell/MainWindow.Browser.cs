@@ -11,7 +11,7 @@ public partial class MainWindow
     private readonly List<ServerRowViewModel> _serverRows = new();
     private DispatcherTimer? _browserTimer;
     private CancellationTokenSource? _browserCts;
-    private enum SimpleTab { Play, Servers, Leaderboards, Console, Mods, Blog, Notes, Credits, Settings }
+    private enum SimpleTab { Play, Servers, Leaderboards, Console, Mods, Replays, Blog, Notes, Credits, Settings }
 
     private SimpleTab _simpleTab;
     private bool _joinBusy;
@@ -30,9 +30,27 @@ public partial class MainWindow
                 await RefreshServerListAsync(quiet: true).ConfigureAwait(true);
         };
         ApplySimpleTab(SimpleTab.Play);
+        ApplyAdvServersCollapsed();
         if (!_settings.SimpleMode)
             _ = OpenServersAsync();
         RefreshDediModPolicyUi();
+    }
+
+    private void OnToggleAdvServers(object sender, RoutedEventArgs e)
+    {
+        _settings.AdvancedServersCollapsed = !_settings.AdvancedServersCollapsed;
+        try { SettingsStore.Save(_settings); }
+        catch (Exception ex) { Log($"Settings save failed: {ex.Message}"); }
+        ApplyAdvServersCollapsed();
+    }
+
+    private void ApplyAdvServersCollapsed()
+    {
+        if (PanelAdvServersBody is null || BtnAdvServersToggle is null)
+            return;
+        var collapsed = _settings.AdvancedServersCollapsed;
+        PanelAdvServersBody.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+        BtnAdvServersToggle.Content = collapsed ? "\u25B8" : "\u25BE";
     }
 
     private bool IsBrowserVisible()
@@ -154,6 +172,8 @@ public partial class MainWindow
             PanelSimpleConsole.Visibility = tab == SimpleTab.Console ? Visibility.Visible : Visibility.Collapsed;
         if (PanelSimpleMods is not null)
             PanelSimpleMods.Visibility = tab == SimpleTab.Mods ? Visibility.Visible : Visibility.Collapsed;
+        if (PanelSimpleReplays is not null)
+            PanelSimpleReplays.Visibility = tab == SimpleTab.Replays ? Visibility.Visible : Visibility.Collapsed;
         SyncBlogTab(tab);
         if (PanelSimpleNotes is not null)
             PanelSimpleNotes.Visibility = tab == SimpleTab.Notes ? Visibility.Visible : Visibility.Collapsed;
@@ -190,6 +210,7 @@ public partial class MainWindow
         StyleTab(BtnTabServers, tab == SimpleTab.Servers);
         StyleTab(BtnTabConsole, tab == SimpleTab.Console);
         StyleTab(BtnTabMods, tab == SimpleTab.Mods);
+        StyleTab(BtnTabReplays, tab == SimpleTab.Replays);
         StyleTab(BtnTabNotes, tab == SimpleTab.Notes);
         StyleTab(BtnTabCredits, tab == SimpleTab.Credits);
         SyncNotesUnreadDot(markSeen: tab == SimpleTab.Notes);
@@ -910,6 +931,7 @@ public partial class MainWindow
             }
 
             _lastClientPid = clientResult.ProcessId;
+            _replayClientPid = null;
             _joinedServer = listing;
             RefreshConnectionChrome();
             UpdateKillButtons();

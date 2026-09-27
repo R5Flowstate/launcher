@@ -24,6 +24,9 @@ public sealed class ThunderstoreClient : IDisposable
     public const int MaxProfileDecodedBytes = 8 * 1024 * 1024;
     public const long MaxDownloadBytes = 2L * 1024 * 1024 * 1024;
     public const int MaxRedirects = 5;
+    public const int MaxListingNameChars = 256;
+    public const int MaxListingDescriptionChars = 1024;
+    public const int MaxListingUrlChars = 2048;
 
     static readonly TimeSpan ApiTimeout = TimeSpan.FromSeconds(30);
     static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(30);
@@ -204,14 +207,15 @@ public sealed class ThunderstoreClient : IDisposable
         if (string.IsNullOrWhiteSpace(destPath))
             throw new ArgumentException("Destination path is required.", nameof(destPath));
 
-        if (ChannelSource.LooksLocal(url))
+        // A listing's download_url is remote data; only a local index may point at local files.
+        if (_indexIsLocal && ChannelSource.LooksLocal(url))
         {
             var local = ChannelSource.LocalPath(url);
             await CopyLocalAsync(local, destPath, progress, cancel).ConfigureAwait(false);
             return;
         }
 
-        if (Path.IsPathRooted(url) && File.Exists(url))
+        if (_indexIsLocal && Path.IsPathRooted(url) && File.Exists(url))
         {
             await CopyLocalAsync(url, destPath, progress, cancel).ConfigureAwait(false);
             return;
@@ -640,6 +644,11 @@ public sealed class ThunderstoreClient : IDisposable
             if (string.IsNullOrEmpty(owner) || string.IsNullOrEmpty(name))
                 SplitFullName(full, ref owner, ref name);
 
+            // Thunderstore caps these far lower; oversized rows only come from a hostile listing,
+            // and every browse keystroke filters and redraws them.
+            if (full.Length > MaxListingNameChars || owner.Length > MaxListingNameChars || name.Length > MaxListingNameChars)
+                continue;
+
             var desc = p.Description ?? string.Empty;
             var icon = p.IconUrl ?? string.Empty;
             if (versions.Count > 0)
@@ -650,6 +659,11 @@ public sealed class ThunderstoreClient : IDisposable
                 if (string.IsNullOrEmpty(icon))
                     icon = latest.Icon ?? string.Empty;
             }
+
+            if (desc.Length > MaxListingDescriptionChars)
+                desc = desc[..MaxListingDescriptionChars];
+            if (icon.Length > MaxListingUrlChars)
+                icon = string.Empty;
 
             result.Add(new ModPackage
             {

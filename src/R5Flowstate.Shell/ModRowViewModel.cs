@@ -28,7 +28,7 @@ public sealed class ModRowViewModel : INotifyPropertyChanged
         HasUpdate = IsNewer(LatestVersion, string.IsNullOrEmpty(mod.ThunderstoreVersion)
             ? mod.Version
             : mod.ThunderstoreVersion);
-        RealmWarning = RealmDoesNotApply(mod);
+        RealmWarning = RealmIsUnknown(mod);
         ValidationFailed = !ModId.IsValid(mod.Id);
     }
 
@@ -52,7 +52,9 @@ public sealed class ModRowViewModel : INotifyPropertyChanged
     public string UpdateLabel => Loc.Get("mods_update");
 
     public string Detail =>
-        Author + "  ·  " + Version + "  ·  " + Id;
+        Author + "  ·  " + Version + "  ·  " + Id
+        + (IsServerOnly(Mod) ? "  ·  " + Loc.Get("mods_realm_server") : string.Empty)
+        + (Mod.Replaces.Count == 0 ? string.Empty : "  ·  " + Loc.Format("mods_replaces", string.Join(", ", Mod.Replaces)));
 
     public bool Enabled
     {
@@ -124,20 +126,18 @@ public sealed class ModRowViewModel : INotifyPropertyChanged
         }
     }
 
-    internal static bool RealmDoesNotApply(InstalledMod mod)
+    // The engine knows client, server and both; anything else loads as both with a warning.
+    internal static bool RealmIsUnknown(InstalledMod mod)
     {
         var realm = (mod.Realm ?? string.Empty).Trim();
-        if (realm.Length == 0)
-            return false;
-        if (realm.Equals("shared", StringComparison.OrdinalIgnoreCase)
-            || realm.Equals("client", StringComparison.OrdinalIgnoreCase)
-            || realm.Equals("any", StringComparison.OrdinalIgnoreCase)
-            || realm.Equals("both", StringComparison.OrdinalIgnoreCase))
-            return false;
-        if (realm.Equals("server", StringComparison.OrdinalIgnoreCase))
-            return !mod.ClientSafe;
-        return true;
+        return realm.Length != 0
+               && !realm.Equals("client", StringComparison.OrdinalIgnoreCase)
+               && !realm.Equals("server", StringComparison.OrdinalIgnoreCase)
+               && !realm.Equals("both", StringComparison.OrdinalIgnoreCase);
     }
+
+    static bool IsServerOnly(InstalledMod mod) =>
+        string.Equals((mod.Realm ?? string.Empty).Trim(), "server", StringComparison.OrdinalIgnoreCase);
 
     internal static bool IsNewer(string candidate, string current)
     {

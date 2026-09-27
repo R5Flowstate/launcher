@@ -419,6 +419,48 @@
     <Setter Property="Background" Value="{StaticResource ChangeFill}"/>
   </Style>
 
+  <!-- CHANGE MAP / CHANGE PLAYLIST with a STOP button inside it. -->
+  <Style x:Key="PlayBarChangeSplit" TargetType="Button" BasedOn="{StaticResource PlayBarChange}">
+    <Setter Property="Padding" Value="34,0,5,0"/>
+  </Style>
+
+  <Style x:Key="PlayBarInlineStop" TargetType="Button">
+    <Setter Property="Height" Value="28"/>
+    <Setter Property="MinWidth" Value="0"/>
+    <Setter Property="Padding" Value="12,0"/>
+    <Setter Property="Margin" Value="22,0,0,0"/>
+    <Setter Property="FontSize" Value="11.5"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="Foreground" Value="#FFF0F2"/>
+    <Setter Property="Background" Value="{StaticResource DangerFill}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Grid>
+            <Border Background="{TemplateBinding Background}" CornerRadius="6"/>
+            <Border x:Name="Sheen" CornerRadius="6" Opacity="0"
+                    Background="{StaticResource OverlayLight}"/>
+            <Border x:Name="Press" CornerRadius="6" Opacity="0"
+                    Background="{StaticResource OverlayDark}"/>
+            <ContentPresenter Margin="{TemplateBinding Padding}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Sheen" Property="Opacity" Value="0.12"/>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="Sheen" Property="Opacity" Value="0"/>
+              <Setter TargetName="Press" Property="Opacity" Value="0.22"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <Style x:Key="PlayBarDisconnect" TargetType="Button" BasedOn="{StaticResource PlayBarButton}">
     <Setter Property="Foreground" Value="{StaticResource LeaveText}"/>
     <Setter Property="Background" Value="{StaticResource LeaveFill}"/>

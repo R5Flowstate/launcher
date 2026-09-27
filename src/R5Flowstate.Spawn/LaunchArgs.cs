@@ -44,6 +44,9 @@ public sealed class ClientArgOptions
     /// <summary>When true: append -offline and +cl_onlineAuthEnable 0.</summary>
     public bool OfflineNoAuth { get; init; }
 
+    /// <summary>-offlinename. Only sent with OfflineNoAuth; reduced to the charset the server accepts.</summary>
+    public string? OfflineName { get; init; }
+
     /// <summary>
     /// Public join: drop -offline from extras even if the Play Local checkbox
     /// (or a typed extra) still has it.
@@ -112,6 +115,13 @@ public sealed class DediArgOptions
 
     public string? Extra { get; init; }
     public IReadOnlyList<string>? ExtraTokens { get; init; }
+
+    /// <summary>
+    /// Host settings as playlist_override_set pairs. Emitted after +launchplaylist
+    /// (the dedi checks each against the current playlist's declarations) and
+    /// before +map (the level loads with them).
+    /// </summary>
+    public IReadOnlyList<KeyValuePair<string, string>>? PlaylistOverrides { get; init; }
 }
 
 /// <summary>
@@ -156,6 +166,13 @@ public static class LaunchArgs
             if (!ContainsToken(tokens, "-offline"))
                 Append(tokens, "-offline");
             AppendPair(tokens, "+cl_onlineAuthEnable", "0");
+
+            var offlineName = SanitizeOfflineName(options.OfflineName);
+            if (offlineName.Length > 0 && !ContainsToken(tokens, "-offlinename"))
+            {
+                Append(tokens, "-offlinename");
+                Append(tokens, offlineName);
+            }
         }
 
         // -notimeout also disables the in-game timeout, so a dead host leaves the
@@ -314,6 +331,20 @@ public static class LaunchArgs
                 AppendPair(tokens, "+launchplaylist", pl);
         }
 
+        if (options.PlaylistOverrides is not null)
+        {
+            foreach (var kv in options.PlaylistOverrides)
+            {
+                var name = kv.Key.Trim();
+                var value = kv.Value.Trim();
+                if (!IsSafeOverrideName(name) || !IsSafeOverrideValue(value))
+                    continue;
+                tokens.Add("+playlist_override_set");
+                tokens.Add(name);
+                tokens.Add(value);
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(options.Map))
         {
             var mp = options.Map.Trim().ToLowerInvariant();
@@ -324,6 +355,16 @@ public static class LaunchArgs
         AppendExtras(tokens, options.Extra, options.ExtraTokens);
         return tokens;
     }
+
+    /// <summary>Playlist var names: ASCII letters, digits and underscores, at most 127.</summary>
+    public static bool IsSafeOverrideName(string name) =>
+        name.Length is > 0 and <= 127 &&
+        name.All(c => char.IsAsciiLetterOrDigit(c) || c == '_');
+
+    /// <summary>Override values are plain tokens: no spaces, quotes or command separators.</summary>
+    public static bool IsSafeOverrideValue(string value) =>
+        value.Length is > 0 and <= 63 &&
+        value.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '.' or '-' or '+');
 
     /// <summary>
     /// In-place hop line. Password omitted when empty. Caller charset-checks both.
@@ -786,6 +827,14 @@ public static class LaunchArgs
                 continue;
             }
 
+            if (string.Equals(t, "-offlinename", StringComparison.OrdinalIgnoreCase))
+            {
+                tokens.RemoveAt(i);
+                if (i < tokens.Count && !tokens[i].StartsWith('-') && !tokens[i].StartsWith('+'))
+                    tokens.RemoveAt(i);
+                continue;
+            }
+
             if (string.Equals(t, "+cl_onlineAuthEnable", StringComparison.OrdinalIgnoreCase)
                 && i + 1 < tokens.Count
                 && tokens[i + 1] == "0")
@@ -811,6 +860,34 @@ public static class LaunchArgs
             return;
         tokens.Add(key);
         tokens.Add(value);
+    }
+
+    /// <summary>Longest offline name the server accepts (sv_maxPersonaNameLength).</summary>
+    public const int OfflineNameMaxLength = 32;
+
+    /// <summary>
+    /// Offline player name as the server accepts it: A-Z a-z 0-9 - _, spaces become
+    /// '_', everything else is dropped. Same rule the game client applies.
+    /// </summary>
+    public static string SanitizeOfflineName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return string.Empty;
+
+        var sb = new System.Text.StringBuilder(name.Length);
+        foreach (var c in name)
+        {
+            if (c is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z') or (>= '0' and <= '9') or '-' or '_')
+                sb.Append(c);
+            else if (c == ' ' && sb.Length > 0 && sb[^1] != '_')
+                sb.Append('_');
+        }
+
+        while (sb.Length > 0 && sb[^1] == '_')
+            sb.Length--;
+        if (sb.Length > OfflineNameMaxLength)
+            sb.Length = OfflineNameMaxLength;
+        return sb.ToString();
     }
 
     /// <summary>

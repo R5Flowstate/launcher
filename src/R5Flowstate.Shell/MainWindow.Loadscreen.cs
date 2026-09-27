@@ -4,6 +4,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using R5Flowstate.Content.Rpak;
+using R5Flowstate.Spawn;
 
 namespace R5Flowstate.Shell;
 
@@ -45,6 +46,32 @@ public partial class MainWindow
             Log("Host online cleared: an offline launch skips the auth path Spire listing needs");
         }
 
+        ApplyOfflineNameVisibility();
+        OnLaunchOptionsChanged(sender, e);
+    }
+
+    // The name only reaches the game on an offline launch; online the account name is used.
+    private void ApplyOfflineNameVisibility()
+    {
+        if (TxtOfflineName is null)
+            return;
+        TxtOfflineName.Visibility = IsOfflineOn() ? Visibility.Visible : Visibility.Collapsed;
+        if (!TxtOfflineName.IsKeyboardFocusWithin)
+            TxtOfflineName.Text = _settings.OfflineName;
+    }
+
+    private void OnOfflineNameLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded || _suppressArgsPersist || TxtOfflineName is null)
+            return;
+
+        var cleaned = LaunchArgs.SanitizeOfflineName(TxtOfflineName.Text);
+        TxtOfflineName.Text = cleaned;
+        if (cleaned == _settings.OfflineName)
+            return;
+
+        _settings.OfflineName = cleaned;
+        Log(cleaned.Length > 0 ? $"Offline name: {cleaned}" : "Offline name cleared (game default)");
         OnLaunchOptionsChanged(sender, e);
     }
 
@@ -58,6 +85,7 @@ public partial class MainWindow
             SyncDeveloperChecks();
             if (ChkSimpleOffline is not null)
                 ChkSimpleOffline.IsChecked = _settings.OfflineNoAuth;
+            ApplyOfflineNameVisibility();
             if (ChkSimplePassword is not null)
                 ChkSimplePassword.IsChecked = IsPasswordProtectOn();
             if (ChkUseDx12 is not null)

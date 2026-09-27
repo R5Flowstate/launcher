@@ -12,6 +12,13 @@ public static class ModsStore
     public const string RequiredModsFileName = "required_mods.vdf";
     public const string AllowedModsFileName = "allowed_mods.vdf";
     public const string ModSettingsFileName = "mod.vdf";
+
+    // Engine MOD_MAX_MANIFEST_BYTES.
+    public const long MaxModSettingsBytes = 4 * 1024 * 1024;
+
+    /// <summary>mod.vdf text, or null when it is larger than the game accepts.</summary>
+    public static string? ReadModSettingsText(string vdfPath) =>
+        new FileInfo(vdfPath).Length > MaxModSettingsBytes ? null : File.ReadAllText(vdfPath);
     public const string ManifestFileName = "manifest.json";
     public const string IconFileName = "icon.png";
     public const string ScriptsRsonRelative = "scripts/vscripts/scripts.rson";
@@ -106,6 +113,12 @@ public static class ModsStore
             string text;
             try
             {
+                if (new FileInfo(vdfPath).Length > MaxModSettingsBytes)
+                {
+                    skipped?.Add($"folder '{folderName}': {ModSettingsFileName} is larger than the game accepts");
+                    continue;
+                }
+
                 text = File.ReadAllText(vdfPath);
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -137,23 +150,20 @@ public static class ModsStore
             var tsVersion = string.Empty;
             if (SafePath.TryJoin(joined, ManifestFileName, out var manPath) && File.Exists(manPath))
             {
-                try
-                {
-                    var man = JsonSerializer.Deserialize<ThunderstoreManifest>(
-                        File.ReadAllText(manPath), s_manifestJson);
-                    tsVersion = man?.VersionNumber ?? string.Empty;
-                }
-                catch (JsonException)
-                {
-                    skipped?.Add($"folder '{folderName}': malformed {ManifestFileName}");
-                }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-                {
-                    skipped?.Add($"folder '{folderName}': could not read {ManifestFileName}");
-                }
+                // Same size cap as the catalog install path; this runs on every mods refresh.
+                var man = ReadManifest(manPath);
+                if (man is null)
+                    skipped?.Add($"folder '{folderName}': {ManifestFileName} is unreadable, malformed or over {MaxManifestBytes / 1024} KiB");
+                else
+                    tsVersion = man.VersionNumber ?? string.Empty;
             }
 
             var enabled = !enabledById.TryGetValue(id, out var listed) || listed;
+            var replaces = new List<string>();
+            foreach (var table in ModOwnership.ReadDatatableOverrides(doc, out _) ?? Array.Empty<string>())
+                replaces.Add("datatable " + table);
+            foreach (var token in ModOwnership.ReadLocalizationOverrides(doc, out _) ?? Array.Empty<string>())
+                replaces.Add("text " + token);
             found.Add(new InstalledMod
             {
                 FolderName = folderName,
@@ -165,11 +175,12 @@ public static class ModsStore
                 Enabled = enabled,
                 Order = 0,
                 Realm = doc.Get("realm") ?? string.Empty,
-                ClientSafe = ModVdf.IsTruthy(doc.Get("client_safe")),
                 HasScripts = hasScripts,
                 IconPath = iconPath,
                 ThunderstoreVersion = tsVersion,
                 ThunderstoreFullName = folderName,
+                Replaces = replaces,
+                Maps = ModOwnership.ReadMaps(doc, ModOwnership.Namespace(id), out _) ?? Array.Empty<string>(),
             });
         }
 
@@ -216,6 +227,31 @@ public static class ModsStore
 
             if (!seen)
                 next.Add((id, enabled));
+            return next;
+        });
+    }
+
+    /// <summary>Puts <paramref name="rows"/> first, in order, with their enabled state; other rows keep theirs. One write.</summary>
+    public static void SetModList(string installPath, IReadOnlyList<(string Id, bool Enabled)> rows)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+
+        MutateModList(installPath, current =>
+        {
+            var next = new List<(string Id, bool Enabled)>(rows.Count + current.Count);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in rows)
+            {
+                if (ModId.IsValid(row.Id) && seen.Add(row.Id))
+                    next.Add(row);
+            }
+
+            foreach (var row in current)
+            {
+                if (seen.Add(row.Id))
+                    next.Add(row);
+            }
+
             return next;
         });
     }
@@ -510,9 +546,33 @@ public static class ModsStore
         File.Move(tmp, path, overwrite: true);
     }
 
-    sealed class ThunderstoreManifest
+    public const int MaxManifestBytes = 64 * 1024;
+
+    /// <summary>Thunderstore manifest.json, or null when missing, oversized or malformed.</summary>
+    public static ThunderstoreManifest? ReadManifest(string path)
     {
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists || info.Length > MaxManifestBytes)
+                return null;
+            return JsonSerializer.Deserialize<ThunderstoreManifest>(File.ReadAllText(path), s_manifestJson);
+        }
+        catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    public sealed class ThunderstoreManifest
+    {
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
         [JsonPropertyName("version_number")]
         public string? VersionNumber { get; set; }
+
+        [JsonPropertyName("dependencies")]
+        public List<string>? Dependencies { get; set; }
     }
 }

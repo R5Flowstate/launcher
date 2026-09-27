@@ -5,7 +5,7 @@
         xmlns:loc="clr-namespace:R5Flowstate.Shell"
         Title="R5Flowstate"
         Icon="Assets/app.ico"
-        Height="737" Width="1099"
+        Height="737" Width="1135"
         MinHeight="640" MinWidth="1080"
         Background="{StaticResource WindowBg}" Foreground="{StaticResource TextPrimary}"
         FontFamily="Segoe UI" TextOptions.TextFormattingMode="Ideal"
@@ -148,6 +148,136 @@
           </StackPanel>
         </DockPanel>
       </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="ReplayRowTemplate">
+      <StackPanel>
+        <TextBlock Text="{Binding DayHeader}" Visibility="{Binding DayHeaderVisibility}"
+                   FontSize="13" FontWeight="SemiBold" Margin="4,14,0,6"
+                   Foreground="{StaticResource TextSecondary}"/>
+        <Border CornerRadius="8" Margin="0,0,0,2" Padding="8">
+          <Border.Style>
+            <Style TargetType="Border">
+              <Setter Property="Background" Value="Transparent"/>
+              <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                  <Setter Property="Background" Value="{StaticResource SurfaceBg}"/>
+                </Trigger>
+              </Style.Triggers>
+            </Style>
+          </Border.Style>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Width="112" Height="63" CornerRadius="6" VerticalAlignment="Top"
+                    Background="{StaticResource SurfaceSunken}">
+              <Grid>
+                <Image Source="{Binding Art}" Stretch="UniformToFill"
+                       HorizontalAlignment="Center" VerticalAlignment="Center">
+                  <Image.Clip>
+                    <RectangleGeometry Rect="0,0,112,63" RadiusX="6" RadiusY="6"/>
+                  </Image.Clip>
+                </Image>
+                <Border HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="4"
+                        Background="#CC000000" CornerRadius="3" Padding="4,1">
+                  <TextBlock Text="{Binding LengthText}" FontFamily="Consolas" FontSize="11"
+                             Foreground="White"/>
+                </Border>
+              </Grid>
+            </Border>
+
+            <StackPanel Grid.Column="1" Margin="14,2,16,0" VerticalAlignment="Top">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding MapText}" FontSize="15" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Text="{Binding ResultText}" FontSize="13" FontWeight="Bold" Margin="10,0,0,0"
+                           VerticalAlignment="Bottom" Foreground="{Binding ResultBrush}"/>
+              </StackPanel>
+              <TextBlock Text="{Binding InfoLine}" FontSize="12" Margin="0,4,0,0"
+                         Foreground="{StaticResource TextSecondary}" TextTrimming="CharacterEllipsis"/>
+              <Border Width="220" Height="6" CornerRadius="3" HorizontalAlignment="Left" Margin="0,8,0,0"
+                      Background="{StaticResource SurfaceSunken}" Visibility="{Binding StripVisibility}">
+                <ItemsControl ItemsSource="{Binding Ticks}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <Canvas/>
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemContainerStyle>
+                    <Style TargetType="ContentPresenter">
+                      <Setter Property="Canvas.Left" Value="{Binding Left}"/>
+                    </Style>
+                  </ItemsControl.ItemContainerStyle>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Rectangle Width="3" Height="6" RadiusX="1" RadiusY="1" Fill="{Binding Fill}"/>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </Border>
+              <ItemsControl ItemsSource="{Binding Chapters}" Margin="0,8,0,0"
+                            Visibility="{Binding ChaptersVisibility}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal"/>
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Button Width="{Binding Width}" Height="24" Margin="0,0,3,3" Padding="4,0" MinWidth="0"
+                            Background="{Binding Background}" BorderBrush="{Binding Border}" BorderThickness="1"
+                            Foreground="{Binding Foreground}" FontSize="11" FontWeight="SemiBold"
+                            Content="{Binding Label}" ToolTip="{Binding Tip}" Cursor="Hand"
+                            Tag="{Binding}" Click="OnReplayWatchChapter"/>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <ItemsControl ItemsSource="{Binding Clips}" Visibility="{Binding ClipsVisibility}" Margin="0,6,0,0">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                      <Button Style="{StaticResource GhostButton}" MinWidth="0" Height="24" Padding="8,0"
+                              FontSize="11" Content="{loc:T replays_watch_clip}"
+                              Tag="{Binding}" Click="OnReplayWatchClip"/>
+                      <TextBlock Text="{Binding Label}" FontSize="12" Margin="8,0,0,0" VerticalAlignment="Center"
+                                 Foreground="{StaticResource TextSecondary}"/>
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Text="{Binding BookmarksText}" Visibility="{Binding BookmarksVisibility}"
+                         FontSize="12" Margin="0,6,0,0" Foreground="{StaticResource TextMuted}"
+                         TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="2" VerticalAlignment="Top" HorizontalAlignment="Right">
+              <TextBlock Text="{Binding TimeText}" FontSize="12" HorizontalAlignment="Right" Margin="0,2,0,8"
+                         Foreground="{StaticResource TextMuted}"/>
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Width="32" Height="32" Style="{StaticResource GhostButton}" Padding="0" MinWidth="0"
+                        ToolTip="{Binding PinTip}" Tag="{Binding}" Click="OnReplayPin">
+                  <Path Data="M8,1.5 L9.9,5.6 L14.3,6 L11,9 L12,13.4 L8,11.2 L4,13.4 L5,9 L1.7,6 L6.1,5.6 Z"
+                        Fill="{Binding PinFill}" Stroke="{StaticResource PingFair}" StrokeThickness="1.2"
+                        Width="15" Height="15" Stretch="Uniform"/>
+                </Button>
+                <Button Width="32" Height="32" Margin="4,0,0,0" Style="{StaticResource GhostButton}"
+                        Padding="0" MinWidth="0" ToolTip="{loc:T replays_delete}"
+                        Tag="{Binding}" Click="OnReplayDelete">
+                  <Path Data="M3,4 H13 M6,4 V2.5 H10 V4 M4.5,4 L5.2,14 H10.8 L11.5,4 M7,6.5 V11.5 M9,6.5 V11.5"
+                        Stroke="{StaticResource DangerFg}" StrokeThickness="1.3" Fill="Transparent"
+                        Width="14" Height="14" Stretch="Uniform"/>
+                </Button>
+                <Button Style="{StaticResource AccentButton}" Content="{loc:T replays_watch}"
+                        Width="96" Height="32" Margin="8,0,0,0" Tag="{Binding}" Click="OnReplayWatch"/>
+              </StackPanel>
+            </StackPanel>
+          </Grid>
+        </Border>
+      </StackPanel>
     </DataTemplate>
 
     <DataTemplate x:Key="BrowseModRowTemplate">
@@ -905,6 +1035,9 @@
                   <Button x:Name="BtnTabLeaderboards" Content="{loc:T tab_leaderboards}"
                           Style="{StaticResource TabButton}" Click="OnSimpleTabLeaderboards"
                           ToolTip="{loc:T tip_leaderboards}"/>
+                  <Button x:Name="BtnTabReplays" Content="{loc:T tab_replays}"
+                          Style="{StaticResource TabButton}" Click="OnSimpleTabReplays"
+                          ToolTip="{loc:T tip_replays}"/>
                   <Button x:Name="BtnTabConsole" Content="{loc:T tab_console}"
                           Style="{StaticResource TabButton}" Click="OnSimpleTabConsole"/>
                   <Button x:Name="BtnTabMods" Content="{loc:T tab_mods}"
@@ -1081,6 +1214,18 @@
                           VerticalAlignment="Center"
                           ToolTip="{loc:T tip_launch_args}"
                           Click="OnLaunchArgsClick"/>
+                  <Border x:Name="SepSimpleHostSettings" Width="1" Height="16" Margin="16,0,16,0"
+                          VerticalAlignment="Center" Visibility="Collapsed"
+                          Background="{StaticResource BorderSoft}"/>
+                  <Button x:Name="BtnSimpleHostSettings"
+                          Style="{StaticResource GhostButton}"
+                          Content="{loc:T host_settings_button}"
+                          MinWidth="0" Height="30" Padding="10,0"
+                          FontSize="13"
+                          VerticalAlignment="Center"
+                          Visibility="Collapsed"
+                          ToolTip="{loc:T tip_host_settings}"
+                          Click="OnHostSettingsClick"/>
                   <Border Width="1" Height="16" Margin="16,0,16,0" VerticalAlignment="Center"
                           Background="{StaticResource BorderSoft}"/>
                   <CheckBox x:Name="ChkSimpleOffline" Content="{loc:T offline}"
@@ -1089,6 +1234,12 @@
                             VerticalAlignment="Center"
                             Checked="OnSimpleOfflineChanged"
                             Unchecked="OnSimpleOfflineChanged"/>
+                  <TextBox x:Name="TxtOfflineName" Width="140" Height="30" Margin="0,0,16,0"
+                           VerticalAlignment="Center"
+                           Visibility="Collapsed"
+                           MaxLength="32"
+                           ToolTip="{loc:T tip_offline_name}"
+                           LostFocus="OnOfflineNameLostFocus"/>
                   <CheckBox x:Name="ChkSimplePassword" Content="{loc:T password}"
                             Style="{StaticResource QuietCheck}"
                             ToolTip="{loc:T tip_password_lock}"
@@ -1932,6 +2083,83 @@
               </DockPanel>
             </Grid>
           </DockPanel>
+          <DockPanel x:Name="PanelSimpleReplays" Margin="16,14,16,14" Visibility="Collapsed">
+            <DockPanel DockPanel.Dock="Top" Margin="2,0,0,12" LastChildFill="True">
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                          VerticalAlignment="Center">
+                <Grid Width="220" Height="32" Margin="0,0,8,0">
+                  <TextBox x:Name="TxtReplaysSearch" VerticalContentAlignment="Center"
+                           TextChanged="OnReplaysSearchChanged"/>
+                  <TextBlock Text="{loc:T replays_search}" IsHitTestVisible="False" FontSize="12"
+                             Margin="9,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding Text, ElementName=TxtReplaysSearch}" Value="">
+                            <Setter Property="Visibility" Value="Visible"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                </Grid>
+                <ComboBox x:Name="CmbReplaysMode" Width="150" Height="32" Margin="0,0,12,0"
+                          Style="{StaticResource DarkCombo}" SelectionChanged="OnReplaysModeChanged"/>
+                <TextBlock x:Name="TxtReplaysStorage" FontSize="12" Margin="0,0,12,0" VerticalAlignment="Center"
+                           Foreground="{StaticResource TextSecondary}"/>
+                <Button x:Name="BtnReplaysSettings" Content="{loc:T replays_settings}"
+                        Style="{StaticResource GhostButton}" MinWidth="0" Height="32"
+                        Padding="12,0" Margin="0,0,8,0" FontSize="12"
+                        Click="OnReplaysSettings"/>
+                <Popup x:Name="PopReplaysSettings" PlacementTarget="{Binding ElementName=BtnReplaysSettings}"
+                       Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
+                  <Border Background="{StaticResource SurfaceRaised}" BorderBrush="{StaticResource BorderStrong}"
+                          BorderThickness="1" CornerRadius="8" Padding="16" Width="320">
+                    <StackPanel>
+                      <CheckBox x:Name="ChkReplayRecord" Content="{loc:T replays_setting_record}" Margin="0,0,0,12"
+                                Checked="OnReplaySettingChanged" Unchecked="OnReplaySettingChanged"/>
+                      <DockPanel Margin="0,0,0,10">
+                        <ComboBox x:Name="CmbReplayKeep" DockPanel.Dock="Right" Width="120" Height="30"
+                                  Style="{StaticResource DarkCombo}" SelectionChanged="OnReplaySettingChanged"/>
+                        <TextBlock Text="{loc:T replays_setting_keep}" VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextPrimary}"/>
+                      </DockPanel>
+                      <DockPanel Margin="0,0,0,10">
+                        <ComboBox x:Name="CmbReplayMax" DockPanel.Dock="Right" Width="120" Height="30"
+                                  Style="{StaticResource DarkCombo}" SelectionChanged="OnReplaySettingChanged"/>
+                        <TextBlock Text="{loc:T replays_setting_max}" VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextPrimary}"/>
+                      </DockPanel>
+                      <TextBlock Text="{loc:T replays_setting_note}" FontSize="12" TextWrapping="Wrap"
+                                 Foreground="{StaticResource TextMuted}"/>
+                    </StackPanel>
+                  </Border>
+                </Popup>
+                <Button x:Name="BtnReplaysOpenFolder" Content="{loc:T replays_open_folder}"
+                        Style="{StaticResource GhostButton}" MinWidth="0" Height="32"
+                        Padding="12,0" Margin="0,0,8,0" FontSize="12"
+                        Click="OnReplaysOpenFolder"/>
+                <Button x:Name="BtnReplaysRefresh" Content="{loc:T refresh}"
+                        Style="{StaticResource GhostButton}" MinWidth="0" Height="32"
+                        Padding="12,0" FontSize="12"
+                        Click="OnReplaysRefresh"/>
+              </StackPanel>
+              <TextBlock Text="{loc:T replays_hint}" FontSize="12" TextWrapping="Wrap"
+                         Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+            </DockPanel>
+            <TextBlock x:Name="TxtReplaysStatus" DockPanel.Dock="Bottom"
+                       FontSize="12" Foreground="{StaticResource TextSecondary}"
+                       TextWrapping="Wrap" Margin="0,8,0,0"/>
+            <ProgressBar x:Name="BarReplays" DockPanel.Dock="Bottom" Height="6"
+                         Minimum="0" Maximum="100" Value="0" Margin="0,8,0,0"
+                         Visibility="Collapsed"/>
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+              <ItemsControl x:Name="ListReplays"
+                            ItemTemplate="{StaticResource ReplayRowTemplate}"/>
+            </ScrollViewer>
+          </DockPanel>
           <Grid x:Name="PanelSimpleCredits" Margin="16,14,16,14" Visibility="Collapsed">
             <Image Source="Assets/logo.png" Width="340" Opacity="0.05"
                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
@@ -2344,16 +2572,22 @@
                         Content="{loc:T refresh}" Width="92"
                         Style="{StaticResource GhostButton}" Click="OnBrowserRefresh"
                         ToolTip="{loc:T tip_refresh_servers}"/>
+                <Button x:Name="BtnAdvServersToggle" DockPanel.Dock="Right"
+                        Content="&#x25BE;" Width="32" Margin="0,0,8,0"
+                        Style="{StaticResource GhostButton}" Click="OnToggleAdvServers"
+                        ToolTip="{loc:T tip_toggle_servers}"/>
                 <TextBlock Text="{loc:T section_servers}" Style="{StaticResource SectionLabel}"
                            Margin="0" VerticalAlignment="Center"/>
               </DockPanel>
-              <TextBlock x:Name="TxtAdvBrowserStatus" Text="{loc:T servers_refresh_hint}"
-                         Style="{StaticResource MonoNote}" Margin="0,0,0,12"/>
-              <ItemsControl x:Name="ListServersAdvanced"
-                            ItemTemplate="{StaticResource ServerRowTemplate}"/>
-              <TextBlock Margin="0,10,0,0" HorizontalAlignment="Center" FontSize="12">
-                <Hyperlink Click="OnReadEula"><Run Text="{loc:T read_eula}"/></Hyperlink>
-              </TextBlock>
+              <StackPanel x:Name="PanelAdvServersBody">
+                <TextBlock x:Name="TxtAdvBrowserStatus" Text="{loc:T servers_refresh_hint}"
+                           Style="{StaticResource MonoNote}" Margin="0,0,0,12"/>
+                <ItemsControl x:Name="ListServersAdvanced"
+                              ItemTemplate="{StaticResource ServerRowTemplate}"/>
+                <TextBlock Margin="0,10,0,0" HorizontalAlignment="Center" FontSize="12">
+                  <Hyperlink Click="OnReadEula"><Run Text="{loc:T read_eula}"/></Hyperlink>
+                </TextBlock>
+              </StackPanel>
             </StackPanel>
           </Border>
 
@@ -2453,6 +2687,10 @@
                           Checked="OnFilterMapsChanged" Unchecked="OnFilterMapsChanged"/>
                 <Button Content="{loc:T reload_playlists}" Margin="0,0,8,0"
                         Style="{StaticResource GhostButton}" Click="OnReloadPlaylists"/>
+                <Button x:Name="BtnDediHostSettings" Content="{loc:T host_settings_button}" Margin="0,0,8,0"
+                        Style="{StaticResource GhostButton}" Visibility="Collapsed"
+                        ToolTip="{loc:T tip_host_settings}"
+                        Click="OnHostSettingsClick"/>
                 <Button x:Name="BtnChangeMapAdvanced" Content="{loc:T change_map}" Margin="0,0,12,0"
                         Style="{StaticResource AccentButton}"
                         Visibility="Collapsed" Click="OnChangeMap"/>

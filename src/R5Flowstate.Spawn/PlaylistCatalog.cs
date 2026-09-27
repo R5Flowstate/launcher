@@ -41,7 +41,8 @@ public sealed class PlaylistEntry
 
     /// <summary>vars r5f_mode_group -- "apex" for a retail mode. Anything else,
     /// including absent, is ours: retail is a closed set we tag once, so a mode
-    /// nobody classified is a Flowstate mode by construction.</summary>
+    /// nobody classified is a Flowstate mode by construction. A playlist a mod
+    /// adds is always "custom".</summary>
     public string Group { get; init; } = ModeGroups.Flowstate;
 
     /// <summary>vars r5f_mode_family -- groups the mode-per-map entries Apex ships
@@ -61,6 +62,9 @@ public sealed class PlaylistEntry
     /// set once rather than repeated on all seven of TDM's per-map entries.</summary>
     public string FamilyBlurb { get; init; } = string.Empty;
 
+    /// <summary>Host settings declared by r5f_setting_* vars, in file order, own block first.</summary>
+    public IReadOnlyList<PlaylistSetting> Settings { get; init; } = Array.Empty<PlaylistSetting>();
+
     // DisplayName already includes "Label  (id)" when localized.
     public override string ToString() =>
         string.IsNullOrWhiteSpace(DisplayName) ? Id : DisplayName;
@@ -70,14 +74,41 @@ public static class ModeGroups
 {
     public const string Apex = "apex";
     public const string Flowstate = "flowstate";
+    public const string Custom = "custom";
 
-    /// <summary>Rail order. Apex is the bulk of the list, so it reads first.</summary>
-    public static readonly IReadOnlyList<string> Order = new[] { Apex, Flowstate };
+    /// <summary>Rail order. Apex is the bulk of the list, so it reads first; what
+    /// mods add goes last.</summary>
+    public static readonly IReadOnlyList<string> Order = new[] { Apex, Flowstate, Custom };
 
-    public static string Normalize(string? raw) =>
-        string.Equals(raw?.Trim(), Apex, StringComparison.OrdinalIgnoreCase)
-            ? Apex
-            : Flowstate;
+    public static string Normalize(string? raw)
+    {
+        var v = raw?.Trim();
+        if (string.Equals(v, Apex, StringComparison.OrdinalIgnoreCase))
+            return Apex;
+        if (string.Equals(v, Custom, StringComparison.OrdinalIgnoreCase))
+            return Custom;
+        return Flowstate;
+    }
+
+    public static int Rank(string? group)
+    {
+        var normalized = Normalize(group);
+        for (var i = 0; i < Order.Count; i++)
+        {
+            if (string.Equals(Order[i], normalized, StringComparison.Ordinal))
+                return i;
+        }
+        return Order.Count;
+    }
+}
+
+/// <summary>An enabled mod that ships maps: its folder holds the playlist patch,
+/// and only the maps it declares may appear in its playlists.</summary>
+public sealed class ModPlaylistSource
+{
+    public required string Id { get; init; }
+    public required string Folder { get; init; }
+    public IReadOnlyList<string> Maps { get; init; } = Array.Empty<string>();
 }
 
 /// <summary>One map a family can be played on, and the playlist that runs it.</summary>
@@ -381,7 +412,8 @@ public static class PlaylistCatalogLoader
         string installRoot,
         string? language = null,
         bool includeUnlistedMaps = false,
-        Func<string, string?>? uiLoc = null)
+        Func<string, string?>? uiLoc = null,
+        IReadOnlyList<ModPlaylistSource>? mods = null)
     {
         var path = FindPlaylistFile(installRoot);
         var lang = string.IsNullOrWhiteSpace(language) ? "english" : language.Trim();
@@ -401,6 +433,8 @@ public static class PlaylistCatalogLoader
                 // keep empty
             }
         }
+
+        var modMapNames = MergeModPlaylists(mods, entries);
 
         var onDisk = DiscoverMapsOnDisk(installRoot).ToList();
         var curation = LoadMapCuration(installRoot);
@@ -450,7 +484,8 @@ public static class PlaylistCatalogLoader
             AllMaps = allMaps.ToList(),
             MapsOnDisk = onDisk,
             MapOrder = curation.Order,
-            MapNames = LocalizeMapNames(MergeMapNames(curation.Names, wip.Names), loc, uiLoc),
+            MapNames = WithModMapNames(
+                LocalizeMapNames(MergeMapNames(curation.Names, wip.Names), loc, uiLoc), modMapNames),
             WipOrder = wip.Order,
             IncludeUnlistedMaps = includeUnlistedMaps,
             MapsByPlaylist = byPl,
@@ -461,6 +496,124 @@ public static class PlaylistCatalogLoader
 
         catalog.Families = BuildFamilies(catalog);
         return catalog;
+    }
+
+    const long ModPlaylistPatchMaxBytes = 1 << 20;
+    static readonly string[] s_modPlaylistPatchNames = { "playlists_r5_patch.txt", "playlist_r5_patch.txt" };
+
+    /// <summary>
+    /// Adds each enabled mod's playlists the way the game merges them: only
+    /// playlists whose for_mod names that mod, never one that replaces a base or
+    /// another mod's playlist, and only the maps the mod declares. Every playlist
+    /// a mod adds is its own mode in the custom group; one map means the mode is
+    /// that map. Returns stem -> display name from each playlist's map_name.
+    /// </summary>
+    private static Dictionary<string, string> MergeModPlaylists(
+        IReadOnlyList<ModPlaylistSource>? mods,
+        Dictionary<string, PlaylistEntryBuilder> entries)
+    {
+        // The dedicated server writes enabled mods' playlists into the base file
+        // (the engine only reads that file), so the copy found there can belong to
+        // a mod that is now disabled or be older than the mod. The mod's own patch
+        // is the truth.
+        foreach (var id in entries.Where(kv => IsModPlaylist(kv.Value)).Select(kv => kv.Key).ToList())
+            entries.Remove(id);
+
+        var mapNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (mods is null)
+            return mapNames;
+
+        foreach (var mod in mods)
+        {
+            if (mod.Maps.Count == 0 || string.IsNullOrWhiteSpace(mod.Folder))
+                continue;
+
+            var text = ReadModPlaylistPatch(mod.Folder);
+            if (text is null)
+                continue;
+
+            var declared = new HashSet<string>(mod.Maps, StringComparer.OrdinalIgnoreCase);
+            var parsed = new Dictionary<string, PlaylistEntryBuilder>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                ParsePlaylistsSection(text, parsed, new SortedSet<string>(StringComparer.OrdinalIgnoreCase), declared.Contains);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var b in parsed.Values)
+            {
+                if (!string.Equals(ForMod(b), mod.Id, StringComparison.Ordinal))
+                    continue;
+                if (entries.ContainsKey(b.Id) || b.Maps.Count == 0)
+                    continue;
+
+                b.IsMode = true;
+                b.IsOverlay = false;
+                b.GroupRaw = ModeGroups.Custom;
+                // Namespaced so a mod family can never join a base family.
+                b.FamilyRaw = mod.Id + "/" + (string.IsNullOrWhiteSpace(b.FamilyRaw) ? b.Id : NormalizeLiteral(b.FamilyRaw));
+                // Mods name their modes the way they should read.
+                if (string.IsNullOrWhiteSpace(b.FamilyTitleRaw))
+                    b.FamilyTitleRaw = !string.IsNullOrWhiteSpace(b.TitleRaw) ? b.TitleRaw : b.NameKey;
+                if (b.Maps.Count == 1 && string.IsNullOrWhiteSpace(b.PinnedMapRaw))
+                    b.PinnedMapRaw = b.Maps.Min;
+
+                var mapName = NormalizeLiteral(b.MapNameKey);
+                if (mapName.Length > 0 && !mapName.StartsWith('#'))
+                {
+                    foreach (var stem in b.Maps)
+                        mapNames.TryAdd(stem, mapName);
+                }
+
+                entries[b.Id] = b;
+            }
+        }
+
+        return mapNames;
+    }
+
+    private static string ForMod(PlaylistEntryBuilder b) =>
+        NormalizeLiteral(b.OwnVars.FirstOrDefault(kv =>
+            string.Equals(kv.Key, "for_mod", StringComparison.OrdinalIgnoreCase)).Value);
+
+    private static bool IsModPlaylist(PlaylistEntryBuilder b) => ForMod(b).Length > 0;
+
+    private static string? ReadModPlaylistPatch(string folder)
+    {
+        foreach (var name in s_modPlaylistPatchNames)
+        {
+            try
+            {
+                var path = Path.Combine(folder, name);
+                var info = new FileInfo(path);
+                if (!info.Exists || info.Length > ModPlaylistPatchMaxBytes ||
+                    (info.Attributes & FileAttributes.ReparsePoint) != 0)
+                    continue;
+                return File.ReadAllText(path);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                continue;
+            }
+        }
+        return null;
+    }
+
+    private static IReadOnlyDictionary<string, string> WithModMapNames(
+        IReadOnlyDictionary<string, string> names,
+        Dictionary<string, string> modNames)
+    {
+        if (modNames.Count == 0)
+            return names;
+        var merged = new Dictionary<string, string>(names.Count + modNames.Count, StringComparer.OrdinalIgnoreCase);
+        foreach (var kv in names)
+            merged[kv.Key] = kv.Value;
+        foreach (var kv in modNames)
+            merged.TryAdd(kv.Key, kv.Value);
+        return merged;
     }
 
     /// <summary>Pinned maps belonging to a mode that is alone in its family.</summary>
@@ -858,6 +1011,9 @@ public static class PlaylistCatalogLoader
         public string? FamilyBlurbRaw { get; set; }
         public int FamilyOrder { get; set; }
 
+        /// <summary>Every var of the own vars block, in file order.</summary>
+        public List<KeyValuePair<string, string>> OwnVars { get; } = new();
+
         public PlaylistEntry Build(
             IReadOnlyDictionary<string, string> loc,
             IReadOnlyDictionary<string, PlaylistEntryBuilder> all,
@@ -939,8 +1095,58 @@ public static class PlaylistCatalogLoader
                 FamilyOrder = FamilyOrder,
                 Icon = NormalizeLiteral(IconRaw),
                 FamilyBlurb = familyBlurb,
+                Settings = ResolveSettings(this, all),
             };
         }
+    }
+
+    /// <summary>
+    /// Declarations and values both follow the inherit chain, nearest block
+    /// first, which is how the engine resolves a playlist var.
+    /// </summary>
+    private static IReadOnlyList<PlaylistSetting> ResolveSettings(
+        PlaylistEntryBuilder start,
+        IReadOnlyDictionary<string, PlaylistEntryBuilder> all)
+    {
+        var chain = new List<PlaylistEntryBuilder>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (PlaylistEntryBuilder? cur = start; cur is not null && seen.Add(cur.Id);)
+        {
+            chain.Add(cur);
+            if (string.IsNullOrWhiteSpace(cur.Inherit) || !all.TryGetValue(cur.Inherit.Trim(), out cur))
+                break;
+        }
+
+        string? Lookup(string var)
+        {
+            foreach (var b in chain)
+            {
+                foreach (var kv in b.OwnVars)
+                {
+                    if (string.Equals(kv.Key, var, StringComparison.OrdinalIgnoreCase))
+                        return kv.Value;
+                }
+            }
+            return null;
+        }
+
+        var result = new List<PlaylistSetting>();
+        var declared = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var b in chain)
+        {
+            foreach (var kv in b.OwnVars)
+            {
+                if (!kv.Key.StartsWith(PlaylistSetting.DeclPrefix, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                var var = kv.Key[PlaylistSetting.DeclPrefix.Length..];
+                if (!declared.Add(var))
+                    continue;
+                var setting = PlaylistSetting.Parse(var, kv.Value, Lookup(var));
+                if (setting is not null)
+                    result.Add(setting);
+            }
+        }
+        return result;
     }
 
     /// <summary>Walk inherit chain for first usable field value (name / map_name).</summary>
@@ -1126,8 +1332,10 @@ public static class PlaylistCatalogLoader
     private static void ParsePlaylistsSection(
         string text,
         Dictionary<string, PlaylistEntryBuilder> entries,
-        SortedSet<string> allMaps)
+        SortedSet<string> allMaps,
+        Func<string, bool>? isMap = null)
     {
+        isMap ??= IsMapStem;
         var tokens = Tokenize(StripLineComments(text));
         var depth = 0;
         string? pendingId = null;
@@ -1225,7 +1433,7 @@ public static class PlaylistCatalogLoader
             // maps { mp_rr_x 1 } — only level stems, never mp_ability_* / mp_weapon_*.
             if (inMaps && depth >= mapsDepth)
             {
-                if (IsMapStem(t))
+                if (isMap(t))
                 {
                     allMaps.Add(t);
                     if (currentPlaylist is not null &&
@@ -1264,6 +1472,9 @@ public static class PlaylistCatalogLoader
                 {
                     if (entries.TryGetValue(currentPlaylist, out var b))
                     {
+                        if (depth == varsDepth)
+                            b.OwnVars.Add(new KeyValuePair<string, string>(t, val));
+
                         if (string.Equals(t, "name", StringComparison.OrdinalIgnoreCase) &&
                             string.IsNullOrEmpty(b.NameKey))
                         {
@@ -1393,6 +1604,14 @@ public static class PlaylistCatalogLoader
                         {
                             if (int.TryParse(val, out var famOrder))
                                 b.FamilyOrder = famOrder;
+                            i++;
+                            pendingId = null;
+                            continue;
+                        }
+
+                        // Any other var: consume its value so it is never read as the next name.
+                        if (depth == varsDepth)
+                        {
                             i++;
                             pendingId = null;
                             continue;

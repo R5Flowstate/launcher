@@ -18,13 +18,12 @@ public sealed class ServerRowViewModel : INotifyPropertyChanged
         PlayersLabel = listing.MaxPlayers > 0
             ? $"{listing.NumPlayers}/{listing.MaxPlayers}"
             : listing.NumPlayers.ToString();
-        AddressLabel = LaunchArgsSafe(listing.Ip, listing.Port);
         CanJoin = listing.CanJoin;
         HasPassword = listing.HasPassword;
         JoinHint = listing.HasPassword
             ? Loc.Get("join_hint_password")
             : listing.CanJoin
-                ? Loc.Format("join_hint_ok", listing.Ip + ":" + listing.Port)
+                ? Loc.Format("join_hint_ok", Name)
                 : Loc.Get("join_hint_no");
     }
 
@@ -33,10 +32,9 @@ public sealed class ServerRowViewModel : INotifyPropertyChanged
     public string MapLabel { get; }
     public string PlaylistLabel { get; }
     public string PlayersLabel { get; }
-    public string AddressLabel { get; }
     public bool HasPassword { get; }
     public string Detail =>
-        $"{MapLabel}  ·  {PlaylistLabel}  ·  {PlayersLabel}  ·  {AddressLabel}";
+        $"{MapLabel}  ·  {PlaylistLabel}  ·  {PlayersLabel}";
     public bool CanJoin { get; }
     public string JoinHint { get; }
     public string JoinCaption => CanJoin ? Loc.Get("join") : Loc.Get("join_dash");
@@ -116,10 +114,4 @@ public sealed class ServerRowViewModel : INotifyPropertyChanged
 
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-
-    private static string LaunchArgsSafe(string ip, int port)
-    {
-        try { return R5Flowstate.Spawn.LaunchArgs.FormatConnectTarget(ip, port); }
-        catch { return ip + ":" + port; }
-    }
 }

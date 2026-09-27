@@ -1,4 +1,5 @@
 using System.Runtime;
+using R5Flowstate.Contracts;
 
 namespace R5Flowstate.Content.Rpak;
 
@@ -59,7 +60,11 @@ public static class LoadscreenResolver
         }
 
         if (stems.Count > 0)
+        {
             Add(Path.Combine(dir, stems[0] + "_loadscreen.rpak"));
+            foreach (var modPak in ModLoadscreenPaks(installRoot, stems[0]))
+                Add(modPak);
+        }
 
         var artPaks = ListArtPaks(installRoot);
         foreach (var token in stems.Select(LocationToken).Where(t => t.Length >= 4).Distinct(StringComparer.OrdinalIgnoreCase))
@@ -76,6 +81,34 @@ public static class LoadscreenResolver
             Add(Path.Combine(dir, stem + "_loadscreen.rpak"));
 
         return ordered;
+    }
+
+    /// <summary>A mod map's loadscreen ships inside the enabled mod that declares the map.</summary>
+    private static List<string> ModLoadscreenPaks(string installRoot, string mapStem)
+    {
+        var found = new List<string>();
+        if (!mapStem.Contains(ModOwnership.Separator, StringComparison.Ordinal))
+            return found;
+
+        string modsDir;
+        try
+        {
+            modsDir = ModsStore.ModsDirectory(installRoot);
+        }
+        catch
+        {
+            return found;
+        }
+
+        foreach (var mod in ModsStore.Discover(installRoot))
+        {
+            if (!mod.Enabled || !mod.Maps.Contains(mapStem, StringComparer.OrdinalIgnoreCase))
+                continue;
+            if (SafePath.TryJoin(modsDir, mod.FolderName, out var folder) &&
+                SafePath.TryJoin(folder, Path.Combine("paks", "Win64", mapStem + "_loadscreen.rpak"), out var pak))
+                found.Add(pak);
+        }
+        return found;
     }
 
     /// <summary>"mp_rr_divided_moon_mu1" -&gt; "divided_moon_mu1".</summary>
@@ -198,6 +231,15 @@ public static class LoadscreenResolver
         {
             pixels = found;
             return true;
+        }
+
+        foreach (var modPak in ModLoadscreenPaks(installRoot, stems[0]))
+        {
+            if (File.Exists(modPak) && Take(modPak))
+            {
+                pixels = found;
+                return true;
+            }
         }
 
         var tokens = stems

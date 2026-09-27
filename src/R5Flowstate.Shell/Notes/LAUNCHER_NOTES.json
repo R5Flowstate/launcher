@@ -3,6 +3,21 @@
   "kind": "notes",
   "entries": [
     {
+      "date": "26 Sep 2026",
+      "title": "Launcher 0.1.56",
+      "items": [
+        "Add Server Settings per mode, with presets and sharing",
+        "Add Replays tab with chapters, clips, pins and search",
+        "Add Thunderstore mod catalog with dependency installs",
+        "Install a server's missing mods when joining from the game",
+        "Show a mod map's loading screen",
+        "Refuse mod packages with files outside their folder",
+        "Add collapse button to the server list",
+        "Use DX12 by default on new installs",
+        "Widen the launcher window"
+      ]
+    },
+    {
       "date": "15 Sep 2026",
       "title": "Launcher 0.1.55",
       "items": [

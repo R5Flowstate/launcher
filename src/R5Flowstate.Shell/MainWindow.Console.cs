@@ -307,7 +307,9 @@ public partial class MainWindow
     /// empty with a command box that reaches nothing.
     /// </summary>
     private bool ConsoleServerPaneOpen() =>
-        _joinedServer is null || LocalDediAlive();
+        LocalDediAlive() || (_joinedServer is null && !WatchingReplay());
+
+    private bool WatchingReplay() => _replayClientPid is not null;
 
     private void ApplyConsoleView()
     {
