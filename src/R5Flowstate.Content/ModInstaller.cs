@@ -21,7 +21,7 @@ public sealed class ModInstaller
     {
         "", ".nut", ".gnut", ".rson", ".txt", ".vdf", ".cfg", ".json", ".md", ".csv", ".res", ".menu",
         ".png", ".jpg", ".jpeg", ".webp", ".dds",
-        ".rpak", ".starpak", ".mbnk", ".mstr", ".mprj",
+        ".rpak", ".starpak", ".mbnk", ".mstr", ".mprj", ".raw_hdr",
         ".bsp", ".bsp_lump", ".ent", ".kv", ".vpk", ".nm", ".ain",
         ".ttf", ".otf",
     };
