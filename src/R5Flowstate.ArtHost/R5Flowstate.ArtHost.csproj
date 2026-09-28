@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The art decoder that runs inside the prefix, through Proton.
+
+    Why this project exists: retail loadscreens are Oodle-encoded and the decoder
+    is oo2core_8_win64.dll, a PE DLL that a native Linux process cannot load
+    (glibc's dlopen: "invalid ELF header"). The one place it does load is a
+    Windows process in a prefix, so this is that process: it decodes the
+    loadscreens the launcher asks for and writes them into the launcher's cache
+    directory, which is on the host filesystem through the prefix's Z: drive. The
+    launcher reads them back and draws them.
+
+    Target: win-x64, self-contained, trimmed, and NOT single-file — a single-file
+    host unpacks itself into a temp directory on every run, which is a needless
+    thing to ask Proton to do. The folder is what install.sh copies.
+
+    OutputType is WinExe, which is a PE subsystem, not a language choice: WinExe
+    writes subsystem 2 (GUI) into the optional header and Exe writes 3 (console).
+    A console-subsystem binary gets a console allocated for it on Windows — under
+    Proton, a dark Wine console window per run — which is what the player saw
+    appear whenever a batch of loadscreens was decoded. Nothing here needs one:
+    the launcher reads the records file, never this process's stdout. See
+    WinHost.SubsystemOf for the byte this is, and the check in EaSelfTest that
+    holds it.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishTrimmed>true</PublishTrimmed>
+    <PublishSingleFile>false</PublishSingleFile>
+    <AssemblyName>r5f-arthost</AssemblyName>
+    <RootNamespace>R5Flowstate.ArtHost</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Version>2.0.0</Version>
+    <InformationalVersion>Linux-2.00</InformationalVersion>
+    <!-- The rpak reader reaches the Oodle DLL with NativeLibrary.Load and a
+         delegate over the export, so nothing here is rooted by reflection. -->
+    <TrimMode>partial</TrimMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\R5Flowstate.Content\R5Flowstate.Content.csproj" />
+  </ItemGroup>
+
+  <!-- The DLL beside the exe: where OodleNative looks, and the only place it can
+       work — under Wine, in this folder. -->
+  <ItemGroup>
+    <None Include="..\..\tools\oo2core\oo2core_8_win64.dll" Link="oo2core_8_win64.dll"
+          CopyToOutputDirectory="PreserveNewest"
+          Condition="Exists('..\..\tools\oo2core\oo2core_8_win64.dll')" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,55 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <!-- Test-line version: Windows updater (Velopack) never touches this;
+         numeric Version satisfies MSBuild, InformationalVersion is the display. -->
+    <Version>2.0.0</Version>
+    <InformationalVersion>Linux-2.00</InformationalVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+    <!-- Ported 1:1 from the Windows Shell Loc tables. -->
+    <EmbeddedResource Include="Loc\*.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- NotesSource reads these from AppContext.BaseDirectory, so they have to
+         land in the output root, not under Notes/ — same Link trick as the
+         Windows Shell. NOTES.json is the bundled fallback for the game feed
+         (the CDN copy wins); LAUNCHER_NOTES.json is the launcher changelog,
+         which has no published feed. -->
+    <None Include="Notes\NOTES.json" Link="NOTES.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Notes\LAUNCHER_NOTES.json" Link="LAUNCHER_NOTES.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <!-- Assets are embedded resources, but the menu entry needs a real file on
+         disk to point its Icon= at, so this one also lands next to the binary. -->
+    <None Include="Assets\icon-mark.png" Link="icon-mark.png"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.3" />
+    <!-- Headless platform: lets the "selftest" mode instantiate the real
+         MainWindow (XAML, templates, bindings) without opening a visible GUI. -->
+    <PackageReference Include="Avalonia.Headless" Version="11.2.3" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!-- F12 inspector for the ported theme. Debug-only, and only Debug, because
+         it is referenced from the #if DEBUG block in Program.cs. -->
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.2.3"
+                      Condition="'$(Configuration)' == 'Debug'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\R5Flowstate.Linux.Core\R5Flowstate.Linux.Core.csproj" />
+    <ProjectReference Include="..\R5Flowstate.Contracts\R5Flowstate.Contracts.csproj" />
+    <ProjectReference Include="..\R5Flowstate.Content\R5Flowstate.Content.csproj" />
+  </ItemGroup>
+</Project>

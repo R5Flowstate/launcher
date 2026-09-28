@@ -33,6 +33,12 @@ public static class LoadscreenResolver
     /// </summary>
     public const int DisplayMaxWidth = 960;
 
+    /// <summary>Retail paks are Oodle-encoded and the decoder looks for
+    /// oo2core_8_win64.dll beside the launcher. False here means only
+    /// uncompressed paks will decode, which is worth saying out loud: the shell
+    /// that shows the art can name the missing piece instead of showing nothing.</summary>
+    public static bool OodleAvailable => RpakFile.OodleAvailable;
+
     public static string? FindPak(string installRoot, string mapStem) =>
         CandidatePaks(installRoot, mapStem).FirstOrDefault();
 
