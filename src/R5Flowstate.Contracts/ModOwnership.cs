@@ -25,7 +25,8 @@ public static class ModOwnership
     {
         "mod.vdf", "manifest.json", "icon.png", "readme.md", "changelog.md",
         "license", "license.md", "license.txt",
-        "scripts/vscripts/scripts.rson", "paks/win64/preload.rson", "playlists_r5_patch.txt",
+        "scripts/vscripts/scripts.rson", "paks/win64/preload.rson", "paks/win64_server/preload.rson",
+        "playlists_r5_patch.txt",
     };
 
     static readonly Regex s_mapChars = new(

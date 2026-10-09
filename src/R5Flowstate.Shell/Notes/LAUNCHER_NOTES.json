@@ -4,6 +4,13 @@
   "entries": [
     {
       "date": "9 Oct 2026",
+      "title": "Launcher 0.1.62",
+      "items": [
+        "Fix custom heirlooms failing to install"
+      ]
+    },
+    {
+      "date": "9 Oct 2026",
       "title": "Launcher 0.1.61",
       "items": [
         "Switch between Live and Playtest from the top bar",
