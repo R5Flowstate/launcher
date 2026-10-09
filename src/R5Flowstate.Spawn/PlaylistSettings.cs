@@ -8,6 +8,7 @@ public enum PlaylistSettingKind
     Float,
     Bool,
     Choice,
+    Weapon,
 }
 
 /// <summary>
@@ -48,6 +49,8 @@ public sealed class PlaylistSetting
         {
             case "bool":
                 return new PlaylistSetting { Var = var, Label = label, Kind = PlaylistSettingKind.Bool, Default = def };
+            case "weapon":
+                return new PlaylistSetting { Var = var, Label = label, Kind = PlaylistSettingKind.Weapon, Default = def };
             case "choice":
                 if (tok.Length < 2)
                     return null;
@@ -109,6 +112,11 @@ public sealed class PlaylistSetting
                 if (Choices.Contains(v, StringComparer.Ordinal))
                     return true;
                 reason = "not one of: " + string.Join(", ", Choices);
+                return false;
+            case PlaylistSettingKind.Weapon:
+                if (v == SettingOptions.None || v.StartsWith("mp_weapon_", StringComparison.Ordinal))
+                    return true;
+                reason = "expected none or an mp_weapon_ class";
                 return false;
             default:
             {

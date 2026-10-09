@@ -46,16 +46,14 @@ public partial class MainWindow
             Log("Host online cleared: an offline launch skips the auth path Spire listing needs");
         }
 
-        ApplyOfflineNameVisibility();
+        SyncOfflineNameText();
         OnLaunchOptionsChanged(sender, e);
     }
 
-    // The name only reaches the game on an offline launch; online the account name is used.
-    private void ApplyOfflineNameVisibility()
+    private void SyncOfflineNameText()
     {
         if (TxtOfflineName is null)
             return;
-        TxtOfflineName.Visibility = IsOfflineOn() ? Visibility.Visible : Visibility.Collapsed;
         if (!TxtOfflineName.IsKeyboardFocusWithin)
             TxtOfflineName.Text = _settings.OfflineName;
     }
@@ -85,7 +83,7 @@ public partial class MainWindow
             SyncDeveloperChecks();
             if (ChkSimpleOffline is not null)
                 ChkSimpleOffline.IsChecked = _settings.OfflineNoAuth;
-            ApplyOfflineNameVisibility();
+            SyncOfflineNameText();
             if (ChkSimplePassword is not null)
                 ChkSimplePassword.IsChecked = IsPasswordProtectOn();
             if (ChkUseDx12 is not null)

@@ -296,6 +296,7 @@ public static class ContentInstallService
         ArgumentNullException.ThrowIfNull(channel);
         if (string.IsNullOrWhiteSpace(installPath))
             throw new ArgumentException("Install path is required.", nameof(installPath));
+        InstallPathPolicy.ThrowIfDevTree(installPath);
 
         var hdOptIn = TryLoadState(installPath)?.HdEnabled ?? false;
         var plan = InstallPlanner.Build(channel, mode, installPath, includeHd: hdOptIn);
@@ -1105,6 +1106,7 @@ public static class ContentInstallService
     {
         if (string.IsNullOrWhiteSpace(installPath))
             throw new ArgumentException("Install path is required.", nameof(installPath));
+        InstallPathPolicy.ThrowIfDevTree(installPath);
 
         var statePath = Path.Combine(installPath, ProductConstants.InstallStateFileName);
         if (!File.Exists(statePath))

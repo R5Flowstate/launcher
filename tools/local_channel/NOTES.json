@@ -3,6 +3,46 @@
   "kind": "notes",
   "entries": [
     {
+      "date": "3 Oct 2026",
+      "title": "1.25 hotfix 1",
+      "items": [
+        "Fix UI error"
+      ]
+    },
+    {
+      "date": "3 Oct 2026",
+      "title": "1.25",
+      "items": [
+        "Fix enemy weapon trails.",
+        "Update Mantle animations to S30.",
+        "Improve Replays UI.",
+        "Fix major bugs in Replays.",
+        "Add Camera path feature in Replays.",
+        "Fix Nitro Gate perma crouch.",
+        "Fix reported Arena bugs.",
+        "Fix a bug with Alter void string when fully vertical.",
+        "Improve Fuse's Motherlode logic."
+      ]
+    },
+    {
+      "date": "27 Sep 2026",
+      "title": "1.2 - hotfix 1",
+      "items": [
+        "## Arenas",
+        "Fix visuals and major bugs in the game loop",
+        "## Legends",
+        "Unlock Valkyrie and Newcastle",
+        "Revenant is now an Assault legend",
+        "Movement Ability bind now works for dashes, double jumps, jets and glide",
+        "## Lab",
+        "Add bot health and shield options to the recorder",
+        "## Other",
+        "Fix missing translations and key icons in replay hints",
+        "## Hosting",
+        "Fix mods rewriting the host's playlist file"
+      ]
+    },
+    {
       "date": "26 Sep 2026",
       "title": "1.2",
       "items": [

@@ -42,6 +42,10 @@ public static class ProductConstants
     public const string DefaultChannelUrl =
         "https://cdn.r5flowstate.org/channel/CHANNEL_MANIFEST.json";
 
+    /// <summary>Opt-in ring: builds under test, with their own wire gate and server list.</summary>
+    public const string PlaytestChannelUrl =
+        "https://cdn.r5flowstate.org/channel/playtest/CHANNEL_MANIFEST.json";
+
     public const string DefaultLauncherFeedUrl =
         "https://cdn.r5flowstate.org/launcher-feed/";
 

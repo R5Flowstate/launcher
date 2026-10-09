@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>R5FlowstateServer</AssemblyName>
+    <RootNamespace>R5Flowstate.HostGui</RootNamespace>
+    <ApplicationIcon>..\R5Flowstate.Shell\Assets\app.ico</ApplicationIcon>
+    <Version>0.1.0</Version>
+    <InformationalVersion>$(Version)</InformationalVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\R5Flowstate.Host.Core\R5Flowstate.Host.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Same look as the player launcher: the theme and its one helper are shared, not copied. -->
+  <ItemGroup>
+    <Page Include="..\R5Flowstate.Shell\Themes\Theme.xaml" Link="Themes\Theme.xaml" />
+    <Compile Include="..\R5Flowstate.Shell\RoundedClip.cs" Link="Themes\RoundedClip.cs" />
+    <Resource Include="..\R5Flowstate.Shell\Assets\icon-mark.png" Link="Assets\icon-mark.png" />
+  </ItemGroup>
+
+</Project>

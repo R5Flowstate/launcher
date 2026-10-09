@@ -204,6 +204,7 @@ public static class SettingsStore
             s.InitialInstallAccepted = ReadBool(key, "InitialInstallAccepted", defaultValue: false);
             s.AutoApplyUpdates = ReadBool(key, "AutoApplyUpdates", defaultValue: false);
             s.KeepLocalFiles = ReadBool(key, "KeepLocalFiles", defaultValue: false);
+            s.JoinPlaytests = ReadBool(key, "JoinPlaytests", defaultValue: false);
             // A resolution is always sent, so an absent or nonsense saved value
             // resolves to the default rather than to "unset".
             s.ClientWidth = ResolutionCatalog.ClampDimension(
@@ -284,6 +285,7 @@ public static class SettingsStore
         key.SetValue("InitialInstallAccepted", settings.InitialInstallAccepted ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("AutoApplyUpdates", settings.AutoApplyUpdates ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("KeepLocalFiles", settings.KeepLocalFiles ? 1 : 0, RegistryValueKind.DWord);
+        key.SetValue("JoinPlaytests", settings.JoinPlaytests ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("ClientWidth",
             ResolutionCatalog.ClampDimension(settings.ClientWidth, ResolutionCatalog.DefaultWidth),
             RegistryValueKind.DWord);
@@ -506,4 +508,7 @@ public sealed class LauncherSettings
     /// PLAY does not hash the whole tree after each change.
     /// </summary>
     public bool KeepLocalFiles { get; set; }
+
+    /// <summary>Install from the playtest CHANNEL instead of live.</summary>
+    public bool JoinPlaytests { get; set; }
 }

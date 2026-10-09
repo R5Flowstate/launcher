@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>R5Flowstate.Host</RootNamespace>
+    <AssemblyName>R5Flowstate.Host.Core</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\R5Flowstate.Contracts\R5Flowstate.Contracts.csproj" />
+    <ProjectReference Include="..\R5Flowstate.Content\R5Flowstate.Content.csproj" />
+    <ProjectReference Include="..\R5Flowstate.Spawn\R5Flowstate.Spawn.csproj" />
+  </ItemGroup>
+
+</Project>

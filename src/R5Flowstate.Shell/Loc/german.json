@@ -75,6 +75,7 @@
   "tip_github": "GitHub",
   "tip_update": "Das Launcher-Update wird im Hintergrund geladen",
   "tip_offline_name": "Dein Name in Offline-Spielen. Nur Buchstaben, Zahlen, - und _ (max. 32).",
+  "label_offline_name": "Offline-Name",
   "tip_refresh_servers": "Öffentliche Serverliste neu laden",
   "tip_refresh_lb": "1v1-Rangliste neu laden",
   "tip_stop": "Laufendes Spiel beenden",
@@ -571,7 +572,7 @@
   "mode_blurb.fs_scenarios": "Trupp-Kämpfe mit Legenden, Beute und einem sich schließenden Ring.",
   "mode_blurb.control": "Neun gegen neun um drei Zonen. Halten gibt Punkte; wer zuerst 1000 hat, gewinnt.",
   "mode_blurb.tdm": "Zwei Teams zu sechs. Wer zuerst 50 Kills hat, gewinnt.",
-  "mode_blurb.ffa": "Jeder gegen jeden. Wer zuerst 30 Kills hat.",
+  "mode_blurb.ffa": "Jeder gegen jeden. Wer bei Ablauf der Zeit die meisten Kills hat, gewinnt die Runde.",
   "mode_blurb.btdm": "Team-Deathmatch, zwölf gegen zwölf. Wer zuerst 60 Kills hat.",
   "mode_blurb.gungame": "Vier Trupps zu dritt durch 25 Waffen. Die letzte ist ein Wurfmesser.",
   "mode_blurb.lockdown": "Vier Trupps kämpfen um jeweils eine offene Zone. Wer zuerst 500 Punkte hat.",
@@ -764,5 +765,10 @@
   "replays_gb": "{0} GB",
   "replays_launch_failed": "Das Spiel konnte nicht gestartet werden.",
   "replays_today": "Heute",
-  "replays_yesterday": "Gestern"
+  "replays_yesterday": "Gestern",
+  "join_playtests": "Join playtests",
+  "tip_join_playtests": "Get builds before they go live and help test them. Playtest servers are separate from live servers. Turn off to go back to the live version.",
+  "playtest_badge": "PLAYTEST",
+  "playtest_confirm_on": "Playtest builds are unfinished and can break. You will only see playtest servers until you turn this off. Switch to the playtest version?",
+  "playtest_busy": "Close the game and wait for downloads to finish before switching between playtest and live."
 }

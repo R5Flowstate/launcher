@@ -75,6 +75,7 @@
   "tip_github": "GitHub",
   "tip_update": "L'aggiornamento del launcher si scarica in background",
   "tip_offline_name": "Il tuo nome nelle partite offline. Solo lettere, numeri, - e _ (max 32).",
+  "label_offline_name": "Nome offline",
   "tip_refresh_servers": "Ricarica l'elenco dei server pubblici",
   "tip_refresh_lb": "Ricarica la classifica 1v1",
   "tip_stop": "Chiudi la partita in corso",
@@ -571,7 +572,7 @@
   "mode_blurb.fs_scenarios": "Scontri tra squadre con leggende, bottino e un anello che si chiude.",
   "mode_blurb.control": "Nove contro nove su tre zone. Tenetele per fare punti; vince chi arriva a 1000.",
   "mode_blurb.tdm": "Due squadre da sei. Vince chi arriva a 50 kill.",
-  "mode_blurb.ffa": "Tutti contro tutti. Vince chi arriva a 30 kill.",
+  "mode_blurb.ffa": "Tutti contro tutti. Chi ha più kill allo scadere del tempo vince il round.",
   "mode_blurb.btdm": "Deathmatch a squadre, dodici contro dodici. Vince chi arriva a 60 kill.",
   "mode_blurb.gungame": "Quattro squadre da tre corrono attraverso 25 armi. L'ultima è un coltello da lancio.",
   "mode_blurb.lockdown": "Quattro squadre si contendono una zona aperta alla volta. Vince chi arriva a 500 punti.",
@@ -764,5 +765,10 @@
   "replays_gb": "{0} GB",
   "replays_launch_failed": "Impossibile avviare il gioco.",
   "replays_today": "Oggi",
-  "replays_yesterday": "Ieri"
+  "replays_yesterday": "Ieri",
+  "join_playtests": "Join playtests",
+  "tip_join_playtests": "Get builds before they go live and help test them. Playtest servers are separate from live servers. Turn off to go back to the live version.",
+  "playtest_badge": "PLAYTEST",
+  "playtest_confirm_on": "Playtest builds are unfinished and can break. You will only see playtest servers until you turn this off. Switch to the playtest version?",
+  "playtest_busy": "Close the game and wait for downloads to finish before switching between playtest and live."
 }

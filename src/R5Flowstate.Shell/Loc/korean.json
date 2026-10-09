@@ -75,6 +75,7 @@
   "tip_github": "GitHub",
   "tip_update": "런처 업데이트는 백그라운드에서 받습니다",
   "tip_offline_name": "오프라인 게임에서 쓸 이름. 영문, 숫자, - 와 _ 만 가능 (최대 32자).",
+  "label_offline_name": "오프라인 이름",
   "tip_refresh_servers": "공개 서버 목록 다시 불러오기",
   "tip_refresh_lb": "1v1 리더보드 다시 불러오기",
   "tip_stop": "실행 중인 게임 종료",
@@ -571,7 +572,7 @@
   "mode_blurb.fs_scenarios": "레전드와 전리품, 좁혀지는 링이 있는 분대전.",
   "mode_blurb.control": "9대9로 구역 3개를 두고 싸웁니다. 점령하면 점수, 1000점 선취승.",
   "mode_blurb.tdm": "6인 2팀. 50킬 선취승.",
-  "mode_blurb.ffa": "개인전. 30킬 선취승.",
+  "mode_blurb.ffa": "개인전. 시간 종료 시 킬이 가장 많은 플레이어가 라운드 승리.",
   "mode_blurb.btdm": "12대12 팀 데스매치. 60킬 선취승.",
   "mode_blurb.gungame": "3인 4스쿼드가 무기 25종을 겨룹니다. 마지막은 투척 나이프.",
   "mode_blurb.lockdown": "4스쿼드가 열린 구역 하나를 두고 싸웁니다. 500점 선취승.",
@@ -764,5 +765,10 @@
   "replays_gb": "{0} GB",
   "replays_launch_failed": "게임을 시작할 수 없습니다.",
   "replays_today": "오늘",
-  "replays_yesterday": "어제"
+  "replays_yesterday": "어제",
+  "join_playtests": "Join playtests",
+  "tip_join_playtests": "Get builds before they go live and help test them. Playtest servers are separate from live servers. Turn off to go back to the live version.",
+  "playtest_badge": "PLAYTEST",
+  "playtest_confirm_on": "Playtest builds are unfinished and can break. You will only see playtest servers until you turn this off. Switch to the playtest version?",
+  "playtest_busy": "Close the game and wait for downloads to finish before switching between playtest and live."
 }

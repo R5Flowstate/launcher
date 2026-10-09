@@ -1,0 +1,109 @@
+<Window x:Class="R5Flowstate.Shell.ModPlanWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:R5Flowstate.Shell"
+        Title="{loc:T mods_title}"
+        Icon="Assets/app.ico"
+        SizeToContent="Height" Width="600" MaxHeight="760"
+        ResizeMode="NoResize"
+        Background="{StaticResource SurfaceBg}" Foreground="{StaticResource TextPrimary}"
+        FontFamily="Segoe UI"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+  <Window.Resources>
+    <BooleanToVisibilityConverter x:Key="BoolVis"/>
+  </Window.Resources>
+  <DockPanel Margin="26,22,26,20">
+    <StackPanel DockPanel.Dock="Top">
+      <TextBlock x:Name="TxtKicker" FontSize="11.5" Foreground="{StaticResource TextMuted}"
+                 Visibility="Collapsed"/>
+      <TextBlock x:Name="TxtHeadline" FontSize="19" FontWeight="SemiBold" Margin="0,3,0,0"
+                 Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap"/>
+      <TextBlock x:Name="TxtBody" Margin="0,8,0,0" FontSize="13"
+                 Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+    </StackPanel>
+
+    <DockPanel DockPanel.Dock="Bottom" Margin="0,18,0,0" LastChildFill="False">
+      <Button x:Name="BtnPrimary" DockPanel.Dock="Right" MinWidth="140" Height="38"
+              Style="{StaticResource FlatFillButton}" IsDefault="True" Click="OnPrimary"/>
+      <Button DockPanel.Dock="Right" Content="{loc:T cancel_title}" Height="38" Margin="0,0,22,0"
+              Style="{StaticResource TextButton}" FontSize="13" IsCancel="True" Click="OnCancel"/>
+    </DockPanel>
+
+    <TextBlock x:Name="TxtWarning" DockPanel.Dock="Bottom" Margin="0,12,0,0" FontSize="12.5"
+               Foreground="{StaticResource DangerFg}" TextWrapping="Wrap" Visibility="Collapsed"/>
+
+    <Grid x:Name="PanelTotals" DockPanel.Dock="Bottom" Margin="0,16,0,0" Visibility="Collapsed">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+      <StackPanel Grid.Column="0">
+        <TextBlock Text="{loc:T mods_plan_download}" FontSize="11.5" Foreground="{StaticResource TextMuted}"/>
+        <TextBlock x:Name="TxtTotalDownload" FontSize="16" Margin="0,2,0,0"/>
+      </StackPanel>
+      <StackPanel Grid.Column="1">
+        <TextBlock Text="{loc:T mods_plan_space}" FontSize="11.5" Foreground="{StaticResource TextMuted}"/>
+        <TextBlock x:Name="TxtTotalSpace" FontSize="16" Margin="0,2,0,0"/>
+      </StackPanel>
+      <StackPanel Grid.Column="2">
+        <TextBlock Text="{loc:T mods_plan_free}" FontSize="11.5" Foreground="{StaticResource TextMuted}"/>
+        <TextBlock x:Name="TxtTotalFree" FontSize="16" Margin="0,2,0,0"/>
+      </StackPanel>
+    </Grid>
+
+    <ScrollViewer Margin="0,14,0,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                  MaxHeight="360">
+      <ItemsControl x:Name="ListRows">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <Border BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,0,0,1" Padding="0,10">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Text="{Binding SizeText}" Width="84" TextAlignment="Right"
+                           FontSize="13" VerticalAlignment="Center" Foreground="{StaticResource TextPrimary}"/>
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Tag}" FontSize="11" FontWeight="SemiBold"
+                           Padding="7,1" Margin="12,0,0,0" VerticalAlignment="Center">
+                  <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                      <Setter Property="Background" Value="{StaticResource SurfaceRaised}"/>
+                      <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding TagKind}" Value="new">
+                          <Setter Property="Background" Value="{StaticResource AccentDim}"/>
+                          <Setter Property="Foreground" Value="{StaticResource AccentBright}"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding TagKind}" Value="update">
+                          <Setter Property="Background" Value="{StaticResource UpdateFill}"/>
+                          <Setter Property="Foreground" Value="{StaticResource UpdateText}"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding TagKind}" Value="remove">
+                          <Setter Property="Background" Value="{StaticResource DangerBg}"/>
+                          <Setter Property="Foreground" Value="{StaticResource DangerFg}"/>
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </TextBlock.Style>
+                </TextBlock>
+                <Grid DockPanel.Dock="Left" Width="36" Height="36" Margin="0,0,12,0"
+                      Background="{StaticResource SurfaceRaised}">
+                  <TextBlock Text="{Binding Initials}" FontWeight="Bold" FontSize="12"
+                             HorizontalAlignment="Center" VerticalAlignment="Center"
+                             Foreground="{StaticResource TextSecondary}"/>
+                  <Image Source="{Binding IconSource}" Stretch="UniformToFill"
+                         Visibility="{Binding HasIcon, Converter={StaticResource BoolVis}}"/>
+                </Grid>
+                <StackPanel VerticalAlignment="Center">
+                  <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold"
+                             TextTrimming="CharacterEllipsis"/>
+                  <TextBlock Text="{Binding Detail}" FontSize="12" Margin="0,2,0,0"
+                             Foreground="{StaticResource TextSecondary}" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </DockPanel>
+</Window>

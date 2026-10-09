@@ -71,7 +71,7 @@ public static class OverlayLeftoverWipe
         foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
         {
             var rel = OverlayPaths.Norm(Path.GetRelativePath(installPath, file));
-            if (!OverlayPaths.IsOverlayOwned(rel))
+            if (!OverlayPaths.IsOverlayOwned(rel) || OverlayPaths.IsPlayerOwned(rel))
                 continue;
             if (keep.Contains(rel))
                 continue;

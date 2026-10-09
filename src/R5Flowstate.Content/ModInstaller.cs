@@ -83,7 +83,7 @@ public sealed class ModInstaller
         var modsDir = ModsStore.ModsDirectory(installPath);
         Directory.CreateDirectory(modsDir);
         var stamp = NewStamp();
-        if (!SafePath.TryJoin(modsDir, ".__mod_" + stamp + ".zip", out var zipPath))
+        if (!SafePath.TryJoin(modsDir, ModsStore.StagingPrefix + stamp + ".zip", out var zipPath))
             throw new InvalidOperationException("Refusing staging zip path.");
 
         try
@@ -129,7 +129,7 @@ public sealed class ModInstaller
         var modsDir = ModsStore.ModsDirectory(installPath);
         Directory.CreateDirectory(modsDir);
         var stamp = NewStamp();
-        if (!SafePath.TryJoin(modsDir, ".__mod_" + stamp, out var staging))
+        if (!SafePath.TryJoin(modsDir, ModsStore.StagingPrefix + stamp, out var staging))
             throw new InvalidOperationException("Refusing staging directory path.");
 
         try
@@ -143,6 +143,12 @@ public sealed class ModInstaller
 
             var nestedName = ExtractValidated(zipPath, staging, progress, cancel);
             PromoteIfNested(staging);
+            cancel.ThrowIfCancellationRequested();
+            progress?.Report(new ContentInstallProgress
+            {
+                Phase = "check",
+                Message = "Checking mod package",
+            });
             if (!SafePath.TryJoin(staging, ModsStore.ModSettingsFileName, out var vdfPath) ||
                 !File.Exists(vdfPath))
             {
@@ -177,6 +183,7 @@ public sealed class ModInstaller
             if (!string.Equals(destParent, Path.GetFullPath(modsDir), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Mod folder must be a direct child of mods/.");
 
+            cancel.ThrowIfCancellationRequested();
             progress?.Report(new ContentInstallProgress
             {
                 Phase = "commit",
@@ -211,11 +218,45 @@ public sealed class ModInstaller
                     }
                 }
 
-                ModsStore.DeleteDirectoryNoReparse(dest);
             }
 
-            Directory.Move(staging, dest);
+            // Swap by rename so a failure leaves either the old copy or the new one, never a
+            // half-deleted folder: a file the game holds open fails the first move, not a delete.
+            string? backup = null;
+            if (Directory.Exists(dest))
+            {
+                if (!SafePath.TryJoin(modsDir, ModsStore.BackupPrefix + stamp, out var backupPath))
+                    throw new InvalidOperationException("Refusing backup path.");
+                try
+                {
+                    Directory.Move(dest, backupPath);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    throw new InvalidOperationException(
+                        "Could not replace '" + destName + "': a file in it is in use. Close the game and try again.", e);
+                }
+
+                backup = backupPath;
+            }
+
+            try
+            {
+                Directory.Move(staging, dest);
+            }
+            catch
+            {
+                if (backup is not null && !Directory.Exists(dest))
+                {
+                    try { Directory.Move(backup, dest); } catch { /* sweep reports it */ }
+                }
+
+                throw;
+            }
+
             ModsStore.AddOrEnable(installPath, id);
+            if (backup is not null)
+                TryDeleteTree(backup);
 
             var installed = ModsStore.Discover(installPath)
                 .FirstOrDefault(m => string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase));
@@ -439,6 +480,7 @@ public sealed class ModInstaller
 
         long written = 0;
         var fileIndex = 0;
+        var lastReport = DateTime.UtcNow;
         var fileCount = zip.Entries.Count(e => !IsDirectory(e));
         foreach (var entry in zip.Entries)
         {
@@ -463,6 +505,7 @@ public sealed class ModInstaller
             int read;
             while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
             {
+                cancel.ThrowIfCancellationRequested();
                 // A decompressor may hand back one byte at a time; judge the full magic.
                 if (headLen < head.Length)
                 {
@@ -480,6 +523,13 @@ public sealed class ModInstaller
                 if (written > MaxUncompressedBytes)
                     throw new InvalidOperationException("Archive uncompressed size exceeds 2 GiB cap.");
                 output.Write(buffer, 0, read);
+
+                var now = DateTime.UtcNow;
+                if ((now - lastReport).TotalMilliseconds >= 250)
+                {
+                    lastReport = now;
+                    progress?.Report(ExtractProgress(written, totalUncompressed, fileIndex, fileCount, relative));
+                }
             }
 
             if (ModsStore.IsReparsePoint(dest))
@@ -493,19 +543,25 @@ public sealed class ModInstaller
             // names come from the package.
             if (fileIndex == fileCount || fileIndex % 50 == 1)
             {
-                progress?.Report(new ContentInstallProgress
-                {
-                    Phase = "extract",
-                    Unit = ProgressUnit.Items,
-                    Current = fileIndex,
-                    Total = fileCount,
-                    Message = relative.Length > 120 ? relative[..120] + "..." : relative,
-                });
+                lastReport = DateTime.UtcNow;
+                progress?.Report(ExtractProgress(written, totalUncompressed, fileIndex, fileCount, relative));
             }
         }
 
         return nestedAmbiguous ? string.Empty : nested ?? string.Empty;
     }
+
+    static ContentInstallProgress ExtractProgress(long written, long total, int fileIndex, int fileCount, string relative) =>
+        new()
+        {
+            Phase = "extract",
+            Unit = ProgressUnit.Bytes,
+            Current = written,
+            Total = total,
+            JobCurrent = fileIndex,
+            JobTotal = fileCount,
+            Message = relative.Length > 120 ? relative[..120] + "..." : relative,
+        };
 
     static void PromoteIfNested(string staging)
     {
@@ -565,7 +621,7 @@ public sealed class ModInstaller
             fromZip = fromZip[..^4];
         fromZip = StripVersionSuffix(fromZip);
         if (!string.IsNullOrWhiteSpace(fromZip) &&
-            !fromZip.StartsWith(".__mod_", StringComparison.OrdinalIgnoreCase) &&
+            !fromZip.StartsWith(ModsStore.StagingPrefix, StringComparison.OrdinalIgnoreCase) &&
             SafePath.IsSafeRelative(fromZip, out _))
         {
             return fromZip;

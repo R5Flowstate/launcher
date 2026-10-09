@@ -1197,6 +1197,41 @@ public static class PlaylistCatalogLoader
         return raw.Trim();
     }
 
+    /// <summary>Localized text for each #token found in the install's localization file.</summary>
+    public static IReadOnlyDictionary<string, string> ResolveLocTokens(
+        string installRoot, IEnumerable<string> tokens, string language = "english")
+    {
+        var wanted = tokens.Where(t => IsUsableNameKey(t)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (wanted.Count == 0)
+            return result;
+
+        var needles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in wanted)
+        {
+            var key = NormalizeRawToken(t);
+            if (key.Length == 0)
+                continue;
+            needles.Add(key);
+            var hex = RtechHash.LocKeyFromToken(key);
+            if (hex.Length > 0)
+            {
+                needles.Add(hex);
+                if (hex.Length < 16)
+                    needles.Add(hex.PadLeft(16, '0'));
+            }
+        }
+
+        var path = FindLocalizationFile(installRoot, language) ?? FindLocalizationFile(installRoot, "english");
+        var loc = LoadLocalization(path, needles);
+        foreach (var t in wanted)
+        {
+            if (TryResolveToken(t, loc) is { Length: > 0 } text)
+                result[t] = text;
+        }
+        return result;
+    }
+
     /// <summary>
     /// Resolve a playlist token to localized text, or null if unknown.
     /// Does not fall back to the playlist id.

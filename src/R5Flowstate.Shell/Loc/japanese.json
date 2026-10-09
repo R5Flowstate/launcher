@@ -75,6 +75,7 @@
   "tip_github": "GitHub",
   "tip_update": "ランチャーの更新はバックグラウンドでダウンロードされます",
   "tip_offline_name": "オフラインでの名前。英字・数字・- と _ のみ（最大32文字）。",
+  "label_offline_name": "オフライン名",
   "tip_refresh_servers": "公開サーバー一覧を再読込",
   "tip_refresh_lb": "1v1 リーダーボードを再読込",
   "tip_stop": "実行中のゲームを終了",
@@ -571,7 +572,7 @@
   "mode_blurb.fs_scenarios": "レジェンドと物資、縮小するリングで戦う部隊戦。",
   "mode_blurb.control": "9対9で3つのゾーンを奪い合う。ゾーンを保持して得点。先に1000点で勝利。",
   "mode_blurb.tdm": "6対6。先に50キルしたチームの勝ち。",
-  "mode_blurb.ffa": "全員敵。先に30キル。",
+  "mode_blurb.ffa": "全員敵。時間切れ時点で最多キルのプレイヤーがラウンド勝利。",
   "mode_blurb.btdm": "12対12のチームデスマッチ。先に60キル。",
   "mode_blurb.gungame": "3人×4部隊で25種の武器を競う。最後は投げナイフ。",
   "mode_blurb.lockdown": "4部隊が1つの開放ゾーンを奪い合う。先に500点。",
@@ -764,5 +765,10 @@
   "replays_gb": "{0} GB",
   "replays_launch_failed": "ゲームを起動できませんでした。",
   "replays_today": "今日",
-  "replays_yesterday": "昨日"
+  "replays_yesterday": "昨日",
+  "join_playtests": "Join playtests",
+  "tip_join_playtests": "Get builds before they go live and help test them. Playtest servers are separate from live servers. Turn off to go back to the live version.",
+  "playtest_badge": "PLAYTEST",
+  "playtest_confirm_on": "Playtest builds are unfinished and can break. You will only see playtest servers until you turn this off. Switch to the playtest version?",
+  "playtest_busy": "Close the game and wait for downloads to finish before switching between playtest and live."
 }

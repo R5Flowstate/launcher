@@ -117,6 +117,12 @@ public sealed class DediArgOptions
     public IReadOnlyList<string>? ExtraTokens { get; init; }
 
     /// <summary>
+    /// cfg under platform/cfg exec'd before the playlist and map, so hostname
+    /// and passwords are set when the server first publishes.
+    /// </summary>
+    public string? ExecCfg { get; init; }
+
+    /// <summary>
     /// Host settings as playlist_override_set pairs. Emitted after +launchplaylist
     /// (the dedi checks each against the current playlist's declarations) and
     /// before +map (the level loads with them).
@@ -317,6 +323,9 @@ public static class LaunchArgs
         if (options.Cheats)
             AppendPair(tokens, "+sv_cheats", "1");
 
+        if (!string.IsNullOrWhiteSpace(options.ExecCfg) && IsSafeCfgPath(options.ExecCfg))
+            AppendPair(tokens, "+exec", options.ExecCfg);
+
         if (!string.IsNullOrWhiteSpace(options.Password))
         {
             var pw = options.Password.Trim();
@@ -355,6 +364,12 @@ public static class LaunchArgs
         AppendExtras(tokens, options.Extra, options.ExtraTokens);
         return tokens;
     }
+
+    /// <summary>Relative cfg path: letters, digits, '_' and single '/' separators.</summary>
+    public static bool IsSafeCfgPath(string path) =>
+        path.Length is > 0 and <= 96 &&
+        !path.StartsWith('/') && !path.EndsWith('/') && !path.Contains("//", StringComparison.Ordinal) &&
+        path.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '/');
 
     /// <summary>Playlist var names: ASCII letters, digits and underscores, at most 127.</summary>
     public static bool IsSafeOverrideName(string name) =>

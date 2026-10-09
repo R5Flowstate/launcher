@@ -231,6 +231,7 @@ internal static class NetconPlaintext
                 return LocalRconResult.Fail("auth refused");
 
             WriteFrame(stream, sendSeq, session, BuildRequest(verb, requestType: 0, extra: fullLine));
+            CloseGracefully(client.Client, stream);
             return LocalRconResult.Pass();
         }
         catch (SocketException ex)
@@ -337,30 +338,54 @@ internal static class NetconPlaintext
         stream.Flush();
     }
 
+    // The server greets every accept with an empty AUTH frame before it has
+    // read anything, so only the explicit verdict counts.
     private static bool ReadAuthOk(NetworkStream stream)
     {
         var header = new byte[8];
-        if (!ReadExact(stream, header))
-            return false;
-        var magic = BinaryPrimitives.ReadUInt32BigEndian(header);
-        if (magic != FrameMagic)
-            return false;
-        var len = BinaryPrimitives.ReadUInt32BigEndian(header.AsSpan(4));
-        if (len == 0 || len > 4096)
-            return false;
-        var payload = new byte[len];
-        if (!ReadExact(stream, payload))
-            return false;
+        for (var frames = 0; frames < 8; frames++)
+        {
+            if (!ReadExact(stream, header))
+                return false;
+            var magic = BinaryPrimitives.ReadUInt32BigEndian(header);
+            if (magic != FrameMagic)
+                return false;
+            var len = BinaryPrimitives.ReadUInt32BigEndian(header.AsSpan(4));
+            if (len == 0 || len > 65536)
+                return false;
+            var payload = new byte[len];
+            if (!ReadExact(stream, payload))
+                return false;
 
-        if (!TryExtractData(payload, out var data))
-            return false;
+            if (!TryExtractData(payload, out var data))
+                continue;
 
-        var msg = Encoding.UTF8.GetString(data);
-        if (msg.Contains("incorrect", StringComparison.OrdinalIgnoreCase))
-            return false;
-        if (msg.Contains("successful", StringComparison.OrdinalIgnoreCase))
-            return true;
-        return data.Length > 0;
+            var msg = Encoding.UTF8.GetString(data);
+            if (msg.Contains("incorrect", StringComparison.OrdinalIgnoreCase)
+                || msg.Contains("Go away", StringComparison.OrdinalIgnoreCase))
+                return false;
+            if (msg.Contains("successful", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    // Closing with unread inbound data makes Windows send RST, and the server
+    // then drops the command still sitting in its receive buffer.
+    private static void CloseGracefully(Socket socket, NetworkStream stream)
+    {
+        try
+        {
+            socket.Shutdown(SocketShutdown.Send);
+            stream.ReadTimeout = 1500;
+            var sink = new byte[4096];
+            while (stream.Read(sink, 0, sink.Length) > 0)
+            {
+            }
+        }
+        catch (Exception ex) when (ex is SocketException or IOException or ObjectDisposedException)
+        {
+        }
     }
 
     private static bool TryExtractData(byte[] envelope, out byte[] data)

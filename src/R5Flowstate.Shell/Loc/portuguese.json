@@ -75,6 +75,7 @@
   "tip_github": "GitHub",
   "tip_update": "A atualização do launcher baixa em segundo plano",
   "tip_offline_name": "Seu nome nas partidas offline. Apenas letras, números, - e _ (máx. 32).",
+  "label_offline_name": "Nome offline",
   "tip_refresh_servers": "Recarregar a lista de servidores públicos",
   "tip_refresh_lb": "Recarregar o ranking 1v1",
   "tip_stop": "Encerrar o jogo em execução",
@@ -571,7 +572,7 @@
   "mode_blurb.fs_scenarios": "Combates de esquadrões com lendas, saque e um anel que se fecha.",
   "mode_blurb.control": "Nove contra nove em tres zonas. Segura-as para pontuar; o primeiro a 1000 ganha.",
   "mode_blurb.tdm": "Duas equipas de seis. O primeiro a 50 kills ganha.",
-  "mode_blurb.ffa": "Cada um por si. O primeiro a 30 kills.",
+  "mode_blurb.ffa": "Cada um por si. Quem tiver mais kills quando o tempo acabar vence a ronda.",
   "mode_blurb.btdm": "Team deathmatch a doze contra doze. O primeiro a 60 kills.",
   "mode_blurb.gungame": "Quatro esquadras de tres correm por 25 armas. A ultima e uma faca de arremesso.",
   "mode_blurb.lockdown": "Quatro esquadras lutam por uma zona aberta de cada vez. O primeiro a 500 pontos.",
@@ -764,5 +765,10 @@
   "replays_gb": "{0} GB",
   "replays_launch_failed": "Não foi possível iniciar o jogo.",
   "replays_today": "Hoje",
-  "replays_yesterday": "Ontem"
+  "replays_yesterday": "Ontem",
+  "join_playtests": "Join playtests",
+  "tip_join_playtests": "Get builds before they go live and help test them. Playtest servers are separate from live servers. Turn off to go back to the live version.",
+  "playtest_badge": "PLAYTEST",
+  "playtest_confirm_on": "Playtest builds are unfinished and can break. You will only see playtest servers until you turn this off. Switch to the playtest version?",
+  "playtest_busy": "Close the game and wait for downloads to finish before switching between playtest and live."
 }

@@ -75,6 +75,7 @@
   "tip_github": "GitHub",
   "tip_update": "启动器更新会在后台下载",
   "tip_offline_name": "离线游戏中的名字。仅限英文字母、数字、- 和 _（最多 32 个）。",
+  "label_offline_name": "离线名称",
   "tip_refresh_servers": "重新加载公共服务器列表",
   "tip_refresh_lb": "重新加载 1v1 排行榜",
   "tip_stop": "退出正在运行的游戏",
@@ -571,7 +572,7 @@
   "mode_blurb.fs_scenarios": "小队对战，含传奇、物资与收缩的光圈。",
   "mode_blurb.control": "九对九争夺三个区域。占领得分，先到 1000 获胜。",
   "mode_blurb.tdm": "两队各六人。先到 50 击杀获胜。",
-  "mode_blurb.ffa": "各自为战。先到 30 击杀。",
+  "mode_blurb.ffa": "各自为战。计时结束时击杀最多者赢得本回合。",
   "mode_blurb.btdm": "十二对十二团队死斗。先到 60 击杀。",
   "mode_blurb.gungame": "四支三人小队比拼 25 种武器。最后一把是飞刀。",
   "mode_blurb.lockdown": "四支小队争夺同一开放区域。先到 500 分。",
@@ -764,5 +765,10 @@
   "replays_gb": "{0} GB",
   "replays_launch_failed": "无法启动游戏。",
   "replays_today": "今天",
-  "replays_yesterday": "昨天"
+  "replays_yesterday": "昨天",
+  "join_playtests": "Join playtests",
+  "tip_join_playtests": "Get builds before they go live and help test them. Playtest servers are separate from live servers. Turn off to go back to the live version.",
+  "playtest_badge": "PLAYTEST",
+  "playtest_confirm_on": "Playtest builds are unfinished and can break. You will only see playtest servers until you turn this off. Switch to the playtest version?",
+  "playtest_busy": "Close the game and wait for downloads to finish before switching between playtest and live."
 }

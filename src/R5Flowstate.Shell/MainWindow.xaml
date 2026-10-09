@@ -69,82 +69,292 @@
       </Border>
     </DataTemplate>
 
+    <DataTemplate x:Key="ModBadgeTemplate">
+      <TextBlock Text="{Binding Label}" FontSize="11" FontWeight="SemiBold" Padding="7,1" Margin="8,0,0,0"
+                 VerticalAlignment="Center">
+        <TextBlock.Style>
+          <Style TargetType="TextBlock">
+            <Setter Property="Background" Value="{StaticResource SurfaceRaised}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding IsWarning}" Value="True">
+                <Setter Property="Background" Value="{StaticResource DangerBg}"/>
+                <Setter Property="Foreground" Value="{StaticResource DangerFg}"/>
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </TextBlock.Style>
+      </TextBlock>
+    </DataTemplate>
+
     <DataTemplate x:Key="ModRowTemplate">
-      <Border Background="{StaticResource SurfaceBg}"
-              CornerRadius="4" Padding="14,11" Margin="0,0,0,8">
+      <Border BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,0,0,1" Padding="4,12">
+        <Border.Style>
+          <Style TargetType="Border">
+            <Setter Property="Opacity" Value="1"/>
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding Enabled}" Value="False">
+                <Setter Property="Opacity" Value="0.62"/>
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </Border.Style>
         <DockPanel>
-          <Button DockPanel.Dock="Right"
-                  Style="{StaticResource DangerButtonSmall}"
-                  Content="{loc:T mods_uninstall}"
-                  MinWidth="88" Height="30" Margin="8,0,0,0"
-                  VerticalAlignment="Center"
-                  IsEnabled="{Binding ActionsEnabled}"
-                  Tag="{Binding}"
-                  Click="OnModUninstall"/>
-          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
-                      VerticalAlignment="Center" Margin="8,0,0,0">
-            <Button Content="&#x25B2;" Width="30" Height="28" MinWidth="0"
-                    Padding="0" FontSize="10" Margin="0,0,4,0"
-                    Style="{StaticResource GhostButton}"
-                    IsEnabled="{Binding ActionsEnabled}"
-                    Tag="{Binding}" Click="OnModMoveUp"
-                    ToolTip="{loc:T mods_move_up}"/>
-            <Button Content="&#x25BC;" Width="30" Height="28" MinWidth="0"
-                    Padding="0" FontSize="10"
-                    Style="{StaticResource GhostButton}"
-                    IsEnabled="{Binding ActionsEnabled}"
-                    Tag="{Binding}" Click="OnModMoveDown"
-                    ToolTip="{loc:T mods_move_down}"/>
-          </StackPanel>
-          <CheckBox DockPanel.Dock="Right"
-                    Style="{StaticResource QuietCheck}"
-                    Margin="10,0,0,0" VerticalAlignment="Center"
+          <Button DockPanel.Dock="Right" Style="{StaticResource TextButton}" Width="30" Height="30"
+                  Margin="14,0,0,0" VerticalAlignment="Center"
+                  IsEnabled="{Binding ActionsEnabled}" Tag="{Binding}" Click="OnModMore"
+                  ToolTip="{loc:T mods_more}">
+            <Path Data="M2,8 a1.6,1.6 0 1,0 3.2,0 a1.6,1.6 0 1,0 -3.2,0 M6.4,8 a1.6,1.6 0 1,0 3.2,0 a1.6,1.6 0 1,0 -3.2,0 M10.8,8 a1.6,1.6 0 1,0 3.2,0 a1.6,1.6 0 1,0 -3.2,0"
+                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                  Width="16" Height="16" Stretch="Uniform"/>
+          </Button>
+          <CheckBox DockPanel.Dock="Right" Style="{StaticResource FlatSwitch}"
+                    Margin="16,0,0,0" VerticalAlignment="Center"
                     IsChecked="{Binding Enabled, Mode=OneWay}"
                     IsEnabled="{Binding ActionsEnabled}"
                     Tag="{Binding}"
                     Checked="OnModEnabledChanged"
                     Unchecked="OnModEnabledChanged"
                     ToolTip="{loc:T mods_enable}"/>
-          <Grid DockPanel.Dock="Left" Width="36" Height="36" Margin="0,0,12,0"
-                VerticalAlignment="Center">
-            <Image Source="Assets/logo.png" Opacity="0.28" Stretch="Uniform"
-                   IsHitTestVisible="False"/>
-            <Image Source="{Binding IconSource}" Stretch="UniformToFill">
-              <Image.Style>
-                <Style TargetType="Image">
-                  <Setter Property="Visibility" Value="Visible"/>
+          <Button DockPanel.Dock="Right" Style="{StaticResource FlatUpdateButton}" Height="30" FontSize="12.5"
+                  Padding="12,0" Margin="16,0,0,0" VerticalAlignment="Center"
+                  Content="{Binding UpdateCaption}" Tag="{Binding}" Click="OnModRowUpdate"
+                  IsEnabled="{Binding ActionsEnabled}"
+                  Visibility="{Binding HasUpdate, Converter={StaticResource BoolVis}}"/>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+            <Button Content="&#x25B2;" Width="24" Height="28" FontSize="9" Style="{StaticResource TextButton}"
+                    IsEnabled="{Binding ActionsEnabled}" Tag="{Binding}" Click="OnModMoveUp"
+                    ToolTip="{loc:T mods_move_up}"/>
+            <Button Content="&#x25BC;" Width="24" Height="28" FontSize="9" Style="{StaticResource TextButton}"
+                    IsEnabled="{Binding ActionsEnabled}" Tag="{Binding}" Click="OnModMoveDown"
+                    ToolTip="{loc:T mods_move_down}"/>
+          </StackPanel>
+          <Grid DockPanel.Dock="Left" Width="44" Height="44" Margin="0,0,14,0" VerticalAlignment="Center"
+                Background="{StaticResource SurfaceRaised}">
+            <TextBlock Text="{Binding Initials}" FontSize="14" FontWeight="Bold"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Foreground="{StaticResource TextSecondary}"/>
+            <Image Source="{Binding IconSource}" Stretch="UniformToFill"
+                   Visibility="{Binding HasIcon, Converter={StaticResource BoolVis}}"/>
+          </Grid>
+          <StackPanel VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
+                         Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
+              <TextBlock Text="{Binding Version, StringFormat=v{0}}" FontSize="12" Margin="8,0,0,0"
+                         VerticalAlignment="Center" Foreground="{StaticResource TextSecondary}"/>
+              <ItemsControl ItemsSource="{Binding Badges}" ItemTemplate="{StaticResource ModBadgeTemplate}"
+                            VerticalAlignment="Center">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal"/>
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+              </ItemsControl>
+            </StackPanel>
+            <TextBlock Text="{Binding Detail}" FontSize="12" Margin="0,4,0,0"
+                       Foreground="{StaticResource TextSecondary}" TextTrimming="CharacterEllipsis"/>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="ModFilterChipTemplate">
+      <Button Content="{Binding Label}" Tag="{Binding}" Click="OnBrowseCategoryClick">
+        <Button.Style>
+          <Style TargetType="Button" BasedOn="{StaticResource FilterTab}">
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding IsOn}" Value="True">
+                <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </Button.Style>
+      </Button>
+    </DataTemplate>
+
+    <DataTemplate x:Key="BrowseModCardTemplate">
+      <Button Margin="0,0,12,12" Tag="{Binding}" Click="OnBrowseCardClick" MouseDoubleClick="OnBrowseCardDoubleClick">
+        <Button.Style>
+          <Style TargetType="Button" BasedOn="{StaticResource ModCard}">
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                <Setter Property="Background" Value="{StaticResource FieldBg}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </Button.Style>
+        <StackPanel>
+          <Grid Height="120" Background="{StaticResource SurfaceSunken}" ClipToBounds="True">
+            <TextBlock Text="{Binding Initials}" FontSize="30" FontWeight="Bold"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Foreground="{StaticResource TextMuted}"/>
+            <Image Source="{Binding IconSource}" Stretch="UniformToFill"
+                   Visibility="{Binding HasIcon, Converter={StaticResource BoolVis}}"/>
+            <TextBlock Text="{Binding StateLabel}" FontSize="11" FontWeight="Bold" Padding="7,2"
+                       HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8"
+                       Visibility="{Binding ShowState, Converter={StaticResource BoolVis}}">
+              <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                  <Setter Property="Background" Value="{StaticResource AccentDim}"/>
+                  <Setter Property="Foreground" Value="{StaticResource AccentBright}"/>
                   <Style.Triggers>
-                    <DataTrigger Binding="{Binding HasIcon}" Value="False">
-                      <Setter Property="Visibility" Value="Collapsed"/>
+                    <DataTrigger Binding="{Binding HasUpdate}" Value="True">
+                      <Setter Property="Background" Value="{StaticResource UpdateFill}"/>
+                      <Setter Property="Foreground" Value="{StaticResource UpdateText}"/>
                     </DataTrigger>
                   </Style.Triggers>
                 </Style>
-              </Image.Style>
-            </Image>
+              </TextBlock.Style>
+            </TextBlock>
           </Grid>
-          <StackPanel VerticalAlignment="Center">
+          <StackPanel Margin="12,10,12,12">
             <DockPanel>
-              <Border DockPanel.Dock="Right" Margin="8,0,0,0" Padding="6,1" CornerRadius="3"
-                      Background="{StaticResource UpdateFill}" VerticalAlignment="Center"
-                      Visibility="{Binding HasUpdate, Converter={StaticResource BoolVis}}">
-                <TextBlock Text="{Binding UpdateLabel}" FontSize="11" FontWeight="SemiBold"
-                           Foreground="{StaticResource UpdateText}"/>
-              </Border>
-              <Border DockPanel.Dock="Right" Margin="8,0,0,0" Padding="6,1" CornerRadius="3"
-                      Background="{StaticResource DangerBg}" VerticalAlignment="Center"
-                      Visibility="{Binding HasWarning, Converter={StaticResource BoolVis}}">
-                <TextBlock Text="{Binding WarningLabel}" FontSize="11" FontWeight="SemiBold"
-                           Foreground="{StaticResource DangerFg}"/>
-              </Border>
+              <TextBlock DockPanel.Dock="Right" Text="{Binding LatestVersion, StringFormat=v{0}}" FontSize="11"
+                         Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource TextSecondary}"/>
               <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
                          Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
             </DockPanel>
-            <TextBlock Text="{Binding Detail}" FontSize="12"
-                       Margin="0,3,0,0" Foreground="{StaticResource TextMuted}"
-                       TextTrimming="CharacterEllipsis"/>
-            <TextBlock Text="{Binding ProgressText}" FontSize="11"
-                       Margin="0,3,0,0" Foreground="{StaticResource AccentBright}"
-                       Visibility="{Binding HasProgress, Converter={StaticResource BoolVis}}"/>
+            <TextBlock Text="{Binding OwnerLine}" FontSize="12" Margin="0,2,0,0"
+                       Foreground="{StaticResource TextSecondary}" TextTrimming="CharacterEllipsis"/>
+            <TextBlock Text="{Binding MetaLine}" FontSize="11.5" Margin="0,6,0,0"
+                       Foreground="{StaticResource TextSecondary}" TextTrimming="CharacterEllipsis"/>
+          </StackPanel>
+        </StackPanel>
+      </Button>
+    </DataTemplate>
+
+    <Style x:Key="QueueStepRun" TargetType="Run">
+      <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
+    </Style>
+
+    <DataTemplate x:Key="ModQueueTemplate">
+      <Border BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,0,0,1" Padding="0,14">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,4,0,0">
+            <TextBlock Text="{loc:T mods_browse_installed}" FontSize="12.5" Foreground="{StaticResource Accent}"
+                       Visibility="{Binding IsDone, Converter={StaticResource BoolVis}}"/>
+            <Button Content="{loc:T mods_q_copy}" Style="{StaticResource TextButton}" Margin="0,0,16,0"
+                    Tag="{Binding}" Click="OnModQueueCopy"
+                    Visibility="{Binding IsFailed, Converter={StaticResource BoolVis}}"/>
+            <Button Content="{loc:T mods_q_retry}" Style="{StaticResource TextButtonAccent}"
+                    Tag="{Binding}" Click="OnModQueueRetry"
+                    Visibility="{Binding CanRetry, Converter={StaticResource BoolVis}}"/>
+            <Button Content="{loc:T cancel_title}" Style="{StaticResource TextButton}"
+                    Tag="{Binding}" Click="OnModQueueCancel"
+                    Visibility="{Binding IsActive, Converter={StaticResource BoolVis}}"/>
+          </StackPanel>
+          <Grid DockPanel.Dock="Left" Width="40" Height="40" Margin="0,0,16,0" VerticalAlignment="Top"
+                Background="{StaticResource SurfaceRaised}">
+            <TextBlock Text="{Binding Initials}" FontSize="13" FontWeight="Bold"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Foreground="{StaticResource TextSecondary}"/>
+            <Image Source="{Binding IconSource}" Stretch="UniformToFill"
+                   Visibility="{Binding HasIcon, Converter={StaticResource BoolVis}}"/>
+          </Grid>
+          <StackPanel>
+            <TextBlock FontSize="14" TextTrimming="CharacterEllipsis">
+              <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
+              <Run Text="  "/>
+              <Run Text="{Binding Subtitle, Mode=OneWay}" Foreground="{StaticResource TextSecondary}"/>
+            </TextBlock>
+            <TextBlock FontSize="12" Margin="0,4,0,0"
+                       Visibility="{Binding IsRunning, Converter={StaticResource BoolVis}}">
+              <Run Text="{loc:T mods_step_download}">
+                <Run.Style>
+                  <Style TargetType="Run" BasedOn="{StaticResource QueueStepRun}">
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding StepDownload}" Value="True">
+                        <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+                        <Setter Property="FontWeight" Value="SemiBold"/>
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </Run.Style>
+              </Run>
+              <Run Text="   /   " Foreground="{StaticResource TextMuted}"/>
+              <Run Text="{loc:T mods_step_unpack}">
+                <Run.Style>
+                  <Style TargetType="Run" BasedOn="{StaticResource QueueStepRun}">
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding StepUnpack}" Value="True">
+                        <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+                        <Setter Property="FontWeight" Value="SemiBold"/>
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </Run.Style>
+              </Run>
+              <Run Text="   /   " Foreground="{StaticResource TextMuted}"/>
+              <Run Text="{loc:T mods_step_check}">
+                <Run.Style>
+                  <Style TargetType="Run" BasedOn="{StaticResource QueueStepRun}">
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding StepCheck}" Value="True">
+                        <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+                        <Setter Property="FontWeight" Value="SemiBold"/>
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </Run.Style>
+              </Run>
+              <Run Text="   /   " Foreground="{StaticResource TextMuted}"/>
+              <Run Text="{loc:T mods_step_install}">
+                <Run.Style>
+                  <Style TargetType="Run" BasedOn="{StaticResource QueueStepRun}">
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding StepInstall}" Value="True">
+                        <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+                        <Setter Property="FontWeight" Value="SemiBold"/>
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </Run.Style>
+              </Run>
+            </TextBlock>
+            <TextBlock Text="{Binding StatusLine}" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap">
+              <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                  <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                      <Setter Property="Visibility" Value="Collapsed"/>
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding IsFailed}" Value="True">
+                      <Setter Property="Foreground" Value="{StaticResource DangerFg}"/>
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+            <ProgressBar Value="{Binding Percent, Mode=OneWay}" Margin="0,10,0,0"
+                         Visibility="{Binding IsRunning, Converter={StaticResource BoolVis}}">
+              <ProgressBar.Style>
+                <Style TargetType="ProgressBar" BasedOn="{StaticResource FlatBar}">
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding StepDownload}" Value="False">
+                      <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </ProgressBar.Style>
+            </ProgressBar>
+            <DockPanel Margin="0,8,0,0" Visibility="{Binding IsRunning, Converter={StaticResource BoolVis}}">
+              <TextBlock DockPanel.Dock="Right" Text="{Binding DetailLine}" FontSize="12" Margin="16,0,0,0"
+                         MaxWidth="360" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TextMuted}"/>
+              <TextBlock FontSize="12.5" Foreground="{StaticResource TextSecondary}">
+                <Run Text="{Binding PercentText, Mode=OneWay}" Foreground="{StaticResource TextPrimary}"/>
+                <Run Text="      "/>
+                <Run Text="{Binding BytesLine, Mode=OneWay}"/>
+                <Run Text="      "/>
+                <Run Text="{Binding RateText, Mode=OneWay}"/>
+                <Run Text="      "/>
+                <Run Text="{Binding EtaText, Mode=OneWay}"/>
+              </TextBlock>
+            </DockPanel>
           </StackPanel>
         </DockPanel>
       </Border>
@@ -278,49 +488,6 @@
           </Grid>
         </Border>
       </StackPanel>
-    </DataTemplate>
-
-    <DataTemplate x:Key="BrowseModRowTemplate">
-      <Border Background="{StaticResource SurfaceBg}"
-              CornerRadius="4" Padding="14,11" Margin="0,0,0,8">
-        <DockPanel>
-          <Button DockPanel.Dock="Right"
-                  Style="{StaticResource AccentButton}"
-                  Content="{Binding InstallCaption}"
-                  MinWidth="96" Height="34" Padding="12,0" Margin="14,0,0,0"
-                  VerticalAlignment="Center"
-                  IsEnabled="{Binding InstallEnabled}"
-                  Tag="{Binding}"
-                  Click="OnBrowseModInstall"/>
-          <Grid DockPanel.Dock="Left" Width="48" Height="48" Margin="0,0,12,0"
-                VerticalAlignment="Center">
-            <Image Source="Assets/logo.png" Opacity="0.28" Stretch="Uniform"
-                   IsHitTestVisible="False"/>
-            <Image Source="{Binding IconSource}" Stretch="UniformToFill">
-              <Image.Style>
-                <Style TargetType="Image">
-                  <Setter Property="Visibility" Value="Visible"/>
-                  <Style.Triggers>
-                    <DataTrigger Binding="{Binding HasIcon}" Value="False">
-                      <Setter Property="Visibility" Value="Collapsed"/>
-                    </DataTrigger>
-                  </Style.Triggers>
-                </Style>
-              </Image.Style>
-            </Image>
-          </Grid>
-          <StackPanel VerticalAlignment="Center">
-            <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
-                       Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
-            <TextBlock Text="{Binding Detail}" FontSize="12"
-                       Margin="0,3,0,0" Foreground="{StaticResource TextMuted}"
-                       TextWrapping="Wrap"/>
-            <TextBlock Text="{Binding ProgressText}" FontSize="11"
-                       Margin="0,3,0,0" Foreground="{StaticResource AccentBright}"
-                       Visibility="{Binding HasProgress, Converter={StaticResource BoolVis}}"/>
-          </StackPanel>
-        </DockPanel>
-      </Border>
     </DataTemplate>
 
     <DataTemplate x:Key="DediModPolicyRowTemplate">
@@ -839,6 +1006,14 @@
           </Canvas>
         </Viewbox>
       </Button>
+      <Border x:Name="HdrRingSwitch" DockPanel.Dock="Right" Background="{StaticResource SurfaceSunken}" BorderBrush="{StaticResource BorderLine}"
+              BorderThickness="1" CornerRadius="6" Padding="2" Margin="0,0,12,0"
+              VerticalAlignment="Center" ToolTip="{loc:T tip_join_playtests}">
+        <StackPanel Orientation="Horizontal">
+          <Button x:Name="BtnHdrRingLive" Style="{StaticResource RingSegment}" Content="LIVE" Click="OnRingLive"/>
+          <Button x:Name="BtnHdrRingPlaytest" Style="{StaticResource RingSegment}" Content="PLAYTEST" Click="OnRingPlaytest"/>
+        </StackPanel>
+      </Border>
       <Button x:Name="BtnHeaderOpenFolder" DockPanel.Dock="Right"
               Style="{StaticResource GhostButton}"
               Width="40" Height="36" Padding="0" Margin="0,0,6,0"
@@ -949,6 +1124,14 @@
                  set for advanced mode, where this tab strip is hidden. -->
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
                         VerticalAlignment="Center" Margin="12,0,0,0">
+              <Border Background="{StaticResource SurfaceSunken}" BorderBrush="{StaticResource BorderLine}"
+                      BorderThickness="1" CornerRadius="6" Padding="2" Margin="0,0,12,0"
+                      VerticalAlignment="Center" ToolTip="{loc:T tip_join_playtests}">
+                <StackPanel Orientation="Horizontal">
+                  <Button x:Name="BtnRingLive" Style="{StaticResource RingSegment}" Content="LIVE" Click="OnRingLive"/>
+                  <Button x:Name="BtnRingPlaytest" Style="{StaticResource RingSegment}" Content="PLAYTEST" Click="OnRingPlaytest"/>
+                </StackPanel>
+              </Border>
               <Button x:Name="BtnTabToolFolder"
                       Style="{StaticResource GhostButton}"
                       Width="34" Height="30" Padding="0" Margin="0,0,4,0"
@@ -1145,6 +1328,19 @@
           </Grid>
         </DockPanel>
         </Border>
+        <Border x:Name="BarModQueueStrip" DockPanel.Dock="Bottom" Height="40" Padding="20,0"
+                Background="{StaticResource SurfaceSunken}" Visibility="Collapsed">
+          <DockPanel>
+            <Button DockPanel.Dock="Right" Content="{loc:T mods_q_details}" Style="{StaticResource TextButton}"
+                    Margin="16,0,0,0" Click="OnModQueueStripDetails"/>
+            <TextBlock x:Name="TxtQStripStats" DockPanel.Dock="Right" FontSize="12.5" VerticalAlignment="Center"
+                       Foreground="{StaticResource TextSecondary}"/>
+            <TextBlock x:Name="TxtQStripName" DockPanel.Dock="Left" FontSize="13" Margin="0,0,16,0"
+                       VerticalAlignment="Center" MaxWidth="320" TextTrimming="CharacterEllipsis"/>
+            <ProgressBar x:Name="BarQStrip" Style="{StaticResource FlatBar}" Height="3" Margin="0,0,16,0"
+                         VerticalAlignment="Center"/>
+          </DockPanel>
+        </Border>
         <Grid Background="{StaticResource SurfaceBg}">
           <DockPanel x:Name="PanelSimpleLocal">
             <ProgressBar x:Name="BarSimpleInstall" DockPanel.Dock="Bottom"
@@ -1251,12 +1447,6 @@
                             VerticalAlignment="Center"
                             Checked="OnSimpleOfflineChanged"
                             Unchecked="OnSimpleOfflineChanged"/>
-                  <TextBox x:Name="TxtOfflineName" Width="140" Height="30" Margin="0,0,16,0"
-                           VerticalAlignment="Center"
-                           Visibility="Collapsed"
-                           MaxLength="32"
-                           ToolTip="{loc:T tip_offline_name}"
-                           LostFocus="OnOfflineNameLostFocus"/>
                   <CheckBox x:Name="ChkSimplePassword" Content="{loc:T password}"
                             Style="{StaticResource QuietCheck}"
                             ToolTip="{loc:T tip_password_lock}"
@@ -2037,65 +2227,239 @@
                             ItemTemplate="{StaticResource PatchNoteRowTemplate}"/>
             </ScrollViewer>
           </DockPanel>
-          <DockPanel x:Name="PanelSimpleMods" Margin="16,14,16,14" Visibility="Collapsed">
-            <DockPanel DockPanel.Dock="Top" Margin="2,0,0,12" LastChildFill="True">
-              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
-                          VerticalAlignment="Center">
+          <DockPanel x:Name="PanelSimpleMods" Margin="20,12,20,12" Visibility="Collapsed">
+            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10" LastChildFill="True">
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <Grid Width="250" Height="32" Margin="0,0,20,0">
+                  <TextBox x:Name="TxtModsSearch" VerticalContentAlignment="Center"
+                           TextChanged="OnModsSearchChanged"/>
+                  <TextBlock x:Name="TxtModsSearchHint" Text="{loc:T mods_search}" IsHitTestVisible="False"
+                             FontSize="12" Margin="9,0,0,0" VerticalAlignment="Center"
+                             Foreground="{StaticResource TextMuted}">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding Text, ElementName=TxtModsSearch}" Value="">
+                            <Setter Property="Visibility" Value="Visible"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                </Grid>
                 <Button x:Name="BtnModsInstallFile" Content="{loc:T mods_install_file}"
-                        Style="{StaticResource GhostButton}" MinWidth="0" Height="32"
-                        Padding="12,0" Margin="0,0,8,0" FontSize="12"
-                        Click="OnModsInstallFile"/>
+                        Style="{StaticResource TextButton}" Margin="0,0,20,0" Click="OnModsInstallFile"/>
+                <Button x:Name="BtnModsOpenFolder" Content="{loc:T mods_open_folder}"
+                        Style="{StaticResource TextButton}" Margin="0,0,20,0" Click="OnModsOpenFolder"/>
+                <Button x:Name="BtnModsShare" Content="{loc:T mods_share}"
+                        Style="{StaticResource TextButton}" Margin="0,0,20,0" Click="OnModsShare"/>
+                <Popup x:Name="PopModsShare" PlacementTarget="{Binding ElementName=BtnModsShare}"
+                       Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
+                  <Border Background="{StaticResource SurfaceRaised}" Padding="16" Width="360">
+                    <StackPanel>
+                      <TextBlock Text="{loc:T mods_profile}" FontSize="13" FontWeight="SemiBold"/>
+                      <TextBlock Text="{loc:T mods_profile_about}" FontSize="12" Margin="0,4,0,10"
+                                 TextWrapping="Wrap" Foreground="{StaticResource TextSecondary}"/>
+                      <TextBox x:Name="TxtModsProfile" Height="32" ToolTip="{loc:T mods_profile_hint}"/>
+                      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                        <Button x:Name="BtnModsExport" Content="{loc:T mods_export}"
+                                Style="{StaticResource TextButton}" Margin="0,0,20,0" Click="OnModsExport"/>
+                        <Button x:Name="BtnModsImport" Content="{loc:T mods_import}"
+                                Style="{StaticResource TextButtonAccent}" Click="OnModsImport"/>
+                      </StackPanel>
+                    </StackPanel>
+                  </Border>
+                </Popup>
                 <Button x:Name="BtnModsRefresh" Content="{loc:T refresh}"
-                        Style="{StaticResource GhostButton}" MinWidth="0" Height="32"
-                        Padding="12,0" FontSize="12"
-                        Click="OnModsRefresh"/>
+                        Style="{StaticResource TextButton}" Click="OnModsRefresh"/>
               </StackPanel>
-              <StackPanel x:Name="PanelModsSections" Orientation="Horizontal" Visibility="Collapsed">
+              <StackPanel x:Name="PanelModsSections" Orientation="Horizontal">
                 <Button x:Name="BtnModsSectionInstalled" Content="{loc:T mods_installed}"
                         Style="{StaticResource TabButtonOn}" Click="OnModsSectionInstalled"/>
                 <Button x:Name="BtnModsSectionBrowse" Content="{loc:T mods_browse_tab}"
                         Style="{StaticResource TabButton}" Click="OnModsSectionBrowse"/>
+                <Button x:Name="BtnModsSectionDownloads" Content="{loc:T mods_downloads_tab}"
+                        Style="{StaticResource TabButton}" Click="OnModsSectionDownloads"
+                        Visibility="Collapsed"/>
               </StackPanel>
             </DockPanel>
-            <DockPanel x:Name="PanelModsProfile" DockPanel.Dock="Bottom" Margin="0,12,0,0" Visibility="Collapsed">
-              <TextBlock DockPanel.Dock="Left" Text="{loc:T mods_profile}"
-                         FontSize="12" Foreground="{StaticResource TextSecondary}"
-                         VerticalAlignment="Center" Margin="0,0,10,0"/>
-              <Button x:Name="BtnModsExport" DockPanel.Dock="Right"
-                      Content="{loc:T mods_export}"
-                      Style="{StaticResource GhostButton}" MinWidth="0" Height="32"
-                      Padding="12,0" FontSize="12" Margin="8,0,0,0"
-                      Click="OnModsExport"/>
-              <Button x:Name="BtnModsImport" DockPanel.Dock="Right"
-                      Content="{loc:T mods_import}"
-                      Style="{StaticResource GhostButton}" MinWidth="0" Height="32"
-                      Padding="12,0" FontSize="12"
-                      Click="OnModsImport"/>
-              <TextBox x:Name="TxtModsProfile" Height="32"
-                       ToolTip="{loc:T mods_profile_hint}"/>
-            </DockPanel>
+            <Border x:Name="BarModsGameRunning" DockPanel.Dock="Top" Background="#2A2210" Padding="12,8"
+                    Margin="0,0,0,10" Visibility="Collapsed">
+              <TextBlock Text="{loc:T mods_game_running}" FontSize="12.5" Foreground="#F0DFA8" TextWrapping="Wrap"/>
+            </Border>
             <TextBlock x:Name="TxtModsStatus" DockPanel.Dock="Bottom"
                        FontSize="12" Foreground="{StaticResource TextSecondary}"
                        TextWrapping="Wrap" Margin="0,8,0,0"/>
             <Grid>
               <DockPanel x:Name="PanelModsInstalled">
-                <TextBox x:Name="TxtModsSearch" DockPanel.Dock="Top" Height="32"
-                         Margin="0,0,0,10" ToolTip="{loc:T mods_search}"
-                         TextChanged="OnModsSearchChanged"/>
-                <ScrollViewer VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                  <ItemsControl x:Name="ListModsInstalled"
-                                ItemTemplate="{StaticResource ModRowTemplate}"/>
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                  <Button x:Name="BtnModsUpdateAll" DockPanel.Dock="Right" Style="{StaticResource FlatUpdateButton}"
+                          Height="30" FontSize="12.5" Padding="14,0" Margin="18,0,0,0"
+                          Click="OnModsUpdateAll" Visibility="Collapsed"/>
+                  <TextBlock x:Name="TxtModsOrderHint" DockPanel.Dock="Right" Text="{loc:T mods_order_hint}"
+                             FontSize="12" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"/>
+                  <StackPanel Orientation="Horizontal">
+                    <Button x:Name="BtnModsFilterAll" Style="{StaticResource FilterTabOn}" Tag="all" Click="OnModsFilter"/>
+                    <Button x:Name="BtnModsFilterOn" Style="{StaticResource FilterTab}" Tag="on" Click="OnModsFilter"/>
+                    <Button x:Name="BtnModsFilterOff" Style="{StaticResource FilterTab}" Tag="off" Click="OnModsFilter"/>
+                    <Button x:Name="BtnModsFilterUpd" Style="{StaticResource FilterTab}" Tag="upd" Click="OnModsFilter"/>
+                  </StackPanel>
+                </DockPanel>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                  <ItemsControl x:Name="ListModsInstalled" ItemTemplate="{StaticResource ModRowTemplate}"/>
                 </ScrollViewer>
               </DockPanel>
+
               <DockPanel x:Name="PanelModsBrowse" Visibility="Collapsed">
-                <TextBox x:Name="TxtModsBrowseSearch" DockPanel.Dock="Top" Height="32"
-                         Margin="0,0,0,10" ToolTip="{loc:T mods_search}"
-                         TextChanged="OnModsBrowseSearchChanged"/>
-                <ScrollViewer VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                  <ItemsControl x:Name="ListModsBrowse"
-                                ItemTemplate="{StaticResource BrowseModRowTemplate}"/>
+                <Border x:Name="PanelModDetail" DockPanel.Dock="Right" Width="360" Margin="16,0,0,0"
+                        Background="{StaticResource SurfaceSunken}" Visibility="Collapsed">
+                  <DockPanel>
+                    <Grid DockPanel.Dock="Top" Height="180" Background="{StaticResource SurfaceRaised}" ClipToBounds="True">
+                      <TextBlock Text="{Binding Initials}" FontSize="48" FontWeight="Bold"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                                 Foreground="{StaticResource TextMuted}"/>
+                      <Image Source="{Binding IconSource}" Stretch="UniformToFill"
+                             Visibility="{Binding HasIcon, Converter={StaticResource BoolVis}}"/>
+                    </Grid>
+                    <StackPanel DockPanel.Dock="Bottom" Margin="20,12,20,18">
+                      <Button Height="42" FontSize="14" Content="{Binding CtaCaption}" IsEnabled="{Binding CtaEnabled}"
+                              Tag="{Binding}" Click="OnBrowseModInstall">
+                        <Button.Style>
+                          <Style TargetType="Button" BasedOn="{StaticResource FlatFillButton}">
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding CtaIsUpdate}" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource UpdateText}"/>
+                                <Setter Property="Background" Value="{StaticResource UpdateFill}"/>
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </Button.Style>
+                      </Button>
+                      <TextBlock Text="{Binding CtaNote}" FontSize="11.5" Margin="0,8,0,0" TextAlignment="Center"
+                                 TextWrapping="Wrap" Foreground="{StaticResource TextMuted}"/>
+                    </StackPanel>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                      <StackPanel Margin="20,16,20,8">
+                        <TextBlock Text="{Binding Name}" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                        <TextBlock FontSize="12.5" Margin="0,3,0,0" Foreground="{StaticResource TextSecondary}"
+                                   TextWrapping="Wrap">
+                          <Run Text="{Binding OwnerLine, Mode=OneWay}"/>
+                          <Run Text="  ·  "/>
+                          <Run Text="{Binding CategoriesText, Mode=OneWay}"/>
+                        </TextBlock>
+                        <TextBlock Text="{Binding Description}" FontSize="13" Margin="0,14,0,0" LineHeight="20"
+                                   TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}"/>
+                        <Grid Margin="0,16,0,0">
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                          </Grid.ColumnDefinitions>
+                          <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                          </Grid.RowDefinitions>
+                          <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,12,12">
+                            <TextBlock Text="{loc:T mods_d_latest}" FontSize="11.5" Foreground="{StaticResource TextMuted}"/>
+                            <TextBlock Text="{Binding LatestLine}" FontSize="13"/>
+                          </StackPanel>
+                          <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,12">
+                            <TextBlock Text="{loc:T mods_d_download}" FontSize="11.5" Foreground="{StaticResource TextMuted}"/>
+                            <TextBlock Text="{Binding SizeText}" FontSize="13"/>
+                          </StackPanel>
+                          <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,12,12">
+                            <TextBlock Text="{loc:T mods_d_downloads}" FontSize="11.5" Foreground="{StaticResource TextMuted}"/>
+                            <TextBlock Text="{Binding DownloadsText}" FontSize="13"/>
+                          </StackPanel>
+                          <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,12">
+                            <TextBlock Text="{loc:T mods_d_updated}" FontSize="11.5" Foreground="{StaticResource TextMuted}"/>
+                            <TextBlock Text="{Binding UpdatedText}" FontSize="13"/>
+                          </StackPanel>
+                          <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,12,12">
+                            <TextBlock Text="{loc:T mods_d_installed}" FontSize="11.5" Foreground="{StaticResource TextMuted}"/>
+                            <TextBlock Text="{Binding InstalledText}" FontSize="13"/>
+                          </StackPanel>
+                          <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,12">
+                            <TextBlock Text="{loc:T mods_d_deps}" FontSize="11.5" Foreground="{StaticResource TextMuted}"/>
+                            <TextBlock Text="{Binding DependenciesText}" FontSize="13" TextWrapping="Wrap"/>
+                          </StackPanel>
+                        </Grid>
+                        <TextBlock FontSize="12.5" Margin="0,4,0,0">
+                          <Hyperlink Click="OnModDetailOpenPage">
+                            <Run Text="{loc:T mods_view_page}"/>
+                          </Hyperlink>
+                        </TextBlock>
+                      </StackPanel>
+                    </ScrollViewer>
+                  </DockPanel>
+                </Border>
+                <DockPanel>
+                  <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                      <TextBlock Text="{loc:T mods_sort}" FontSize="12" Margin="0,0,14,0" VerticalAlignment="Center"
+                                 Foreground="{StaticResource TextMuted}"/>
+                      <Button x:Name="BtnModsSortPopular" Content="{loc:T mods_sort_popular}" Style="{StaticResource FilterTabOn}"
+                              Tag="popular" Click="OnBrowseSort"/>
+                      <Button x:Name="BtnModsSortUpdated" Content="{loc:T mods_sort_updated}" Style="{StaticResource FilterTab}"
+                              Tag="updated" Click="OnBrowseSort"/>
+                      <Button x:Name="BtnModsSortName" Content="{loc:T mods_sort_name}" Style="{StaticResource FilterTab}"
+                              Tag="name" Click="OnBrowseSort" Margin="0"/>
+                    </StackPanel>
+                    <ItemsControl x:Name="ListModsCategories" ItemTemplate="{StaticResource ModFilterChipTemplate}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                  </DockPanel>
+                  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl x:Name="ListModsBrowse" ItemTemplate="{StaticResource BrowseModCardTemplate}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <UniformGrid Columns="3" VerticalAlignment="Top"/>
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                  </ScrollViewer>
+                </DockPanel>
+              </DockPanel>
+
+              <DockPanel x:Name="PanelModsDownloads" Visibility="Collapsed">
+                <StackPanel DockPanel.Dock="Top">
+                  <DockPanel>
+                    <Button x:Name="BtnModsQueueCancelAll" DockPanel.Dock="Right" Content="{loc:T mods_q_cancel_all}"
+                            Style="{StaticResource TextButtonDanger}" Margin="20,0,0,0" Click="OnModQueueCancelAll"/>
+                    <Button x:Name="BtnModsQueueClear" DockPanel.Dock="Right" Content="{loc:T mods_q_clear}"
+                            Style="{StaticResource TextButton}" Click="OnModQueueClear"/>
+                    <TextBlock x:Name="TxtQSummary" FontSize="13" VerticalAlignment="Center"
+                               Foreground="{StaticResource TextSecondary}"/>
+                  </DockPanel>
+                  <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                    <TextBlock x:Name="TxtQPercent" FontSize="36" FontWeight="Light" VerticalAlignment="Bottom"
+                               Margin="0,0,40,0"/>
+                    <StackPanel Margin="0,0,40,2" VerticalAlignment="Bottom">
+                      <TextBlock x:Name="TxtQBytes" FontSize="16"/>
+                      <TextBlock Text="{loc:T mods_q_label_downloaded}" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+                    </StackPanel>
+                    <StackPanel Margin="0,0,40,2" VerticalAlignment="Bottom">
+                      <TextBlock x:Name="TxtQRate" FontSize="16"/>
+                      <TextBlock Text="{loc:T mods_q_label_speed}" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+                    </StackPanel>
+                    <StackPanel Margin="0,0,40,2" VerticalAlignment="Bottom">
+                      <TextBlock x:Name="TxtQEta" FontSize="16"/>
+                      <TextBlock Text="{loc:T mods_q_label_remaining}" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+                    </StackPanel>
+                    <StackPanel Margin="0,0,0,2" VerticalAlignment="Bottom">
+                      <TextBlock x:Name="TxtQDisk" FontSize="16"/>
+                      <TextBlock Text="{loc:T mods_q_label_drive}" FontSize="11" Foreground="{StaticResource TextMuted}"/>
+                    </StackPanel>
+                  </StackPanel>
+                  <ProgressBar x:Name="BarQOverall" Style="{StaticResource FlatBar}" Margin="0,14,0,8"/>
+                </StackPanel>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                  <ItemsControl x:Name="ListModsQueue" ItemTemplate="{StaticResource ModQueueTemplate}"/>
                 </ScrollViewer>
               </DockPanel>
             </Grid>
@@ -2518,6 +2882,15 @@
                              Foreground="{StaticResource TextSecondary}"/>
                 </StackPanel>
               </DockPanel>
+              <DockPanel Margin="0,12,0,0" LastChildFill="False">
+                <TextBlock Text="{loc:T label_offline_name}" VerticalAlignment="Center"
+                           Foreground="{StaticResource TextSecondary}"/>
+                <TextBox x:Name="TxtOfflineName" DockPanel.Dock="Right" Width="200" Height="30"
+                         VerticalAlignment="Center"
+                         MaxLength="32"
+                         ToolTip="{loc:T tip_offline_name}"
+                         LostFocus="OnOfflineNameLostFocus"/>
+              </DockPanel>
               <TextBlock x:Name="TxtIdentity" Visibility="Collapsed"/>
 
             </StackPanel>
@@ -2554,6 +2927,11 @@
                         Unchecked="OnHdTexturesChanged"/>
               <TextBlock x:Name="TxtHdTextures" Text="—" Margin="0,0,0,12"
                          Style="{StaticResource MonoNote}"/>
+              <CheckBox x:Name="ChkJoinPlaytests" Margin="0,0,0,12"
+                        Content="{loc:T join_playtests}"
+                        ToolTip="{loc:T tip_join_playtests}"
+                        Checked="OnJoinPlaytestsChanged"
+                        Unchecked="OnJoinPlaytestsChanged"/>
               <ProgressBar x:Name="BarInstall" Height="6" Minimum="0" Maximum="100" Value="0"
                            Margin="0,0,0,10"/>
               <TextBlock x:Name="TxtInstallStatus" Text="{loc:T idle}"

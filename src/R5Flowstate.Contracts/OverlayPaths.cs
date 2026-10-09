@@ -59,6 +59,13 @@ public static class OverlayPaths
         "mods/mod_policy.txt",
     };
 
+    // Host config (stats keys, per-instance cfgs) lives under platform/cfg, which
+    // the platform tip owns; without this a script update deletes it.
+    static readonly string[] PlayerOwnedPrefixes =
+    {
+        "platform/cfg/user/",
+    };
+
     // Disk maps. The client track owns platform/ (scripts live there) and
     // classifies this prefix as Fat, so leftover-sweep would delete every
     // custom map a player drops. Not overlay-owned: that class is packed
@@ -135,6 +142,11 @@ public static class OverlayPaths
         foreach (var e in PlayerOwnedExact)
         {
             if (r == e)
+                return true;
+        }
+        foreach (var p in PlayerOwnedPrefixes)
+        {
+            if (r.StartsWith(p, StringComparison.Ordinal))
                 return true;
         }
         return false;

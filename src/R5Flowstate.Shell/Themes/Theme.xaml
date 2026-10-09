@@ -292,6 +292,32 @@
     </Setter>
   </Style>
 
+  <!-- One half of the LIVE | PLAYTEST channel switch; the selected half is filled from code. -->
+  <Style x:Key="RingSegment" TargetType="Button" BasedOn="{StaticResource BaseButton}">
+    <Setter Property="Height" Value="26"/>
+    <Setter Property="MinWidth" Value="74"/>
+    <Setter Property="Padding" Value="10,0"/>
+    <Setter Property="FontSize" Value="11"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border Background="{TemplateBinding Background}" CornerRadius="4">
+            <ContentPresenter Margin="{TemplateBinding Padding}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <Style x:Key="TabButtonOn" TargetType="Button" BasedOn="{StaticResource TabButton}">
     <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
     <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
@@ -1170,6 +1196,171 @@
             <TextBlock Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
                        TextWrapping="Wrap"/>
           </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- ============================ MODS ============================ -->
+
+  <Style x:Key="FilterTab" TargetType="Button" BasedOn="{StaticResource TabButton}">
+    <Setter Property="Height" Value="30"/>
+    <Setter Property="Margin" Value="0,0,18,0"/>
+    <Setter Property="FontSize" Value="12.5"/>
+  </Style>
+
+  <Style x:Key="FilterTabOn" TargetType="Button" BasedOn="{StaticResource FilterTab}">
+    <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+
+  <!-- Plain text action: no fill, no outline. -->
+  <Style x:Key="TextButton" TargetType="Button">
+    <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+    <Setter Property="FontSize" Value="12.5"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" RecognizesAccessKey="True"/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.38"/>
+              <Setter Property="Cursor" Value="Arrow"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="TextButtonAccent" TargetType="Button" BasedOn="{StaticResource TextButton}">
+    <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+
+  <Style x:Key="TextButtonDanger" TargetType="Button" BasedOn="{StaticResource TextButton}">
+    <Setter Property="Foreground" Value="{StaticResource DangerFg}"/>
+  </Style>
+
+  <!-- Square solid fills for the one main action per surface. -->
+  <Style x:Key="FlatFillButton" TargetType="Button">
+    <Setter Property="Height" Value="34"/>
+    <Setter Property="Padding" Value="16,0"/>
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="FontWeight" Value="Bold"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="Foreground" Value="{StaticResource PrimaryText}"/>
+    <Setter Property="Background" Value="{StaticResource PrimaryFill}"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Grid>
+            <Border Background="{TemplateBinding Background}"/>
+            <Border x:Name="Sheen" Opacity="0" Background="{StaticResource OverlayLight}"/>
+            <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center"
+                              VerticalAlignment="Center" RecognizesAccessKey="True"/>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Sheen" Property="Opacity" Value="0.08"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.38"/>
+              <Setter Property="Cursor" Value="Arrow"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="FlatUpdateButton" TargetType="Button" BasedOn="{StaticResource FlatFillButton}">
+    <Setter Property="Foreground" Value="{StaticResource UpdateText}"/>
+    <Setter Property="Background" Value="{StaticResource UpdateFill}"/>
+  </Style>
+
+  <Style x:Key="FlatQuietButton" TargetType="Button" BasedOn="{StaticResource FlatFillButton}">
+    <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+    <Setter Property="Background" Value="{StaticResource SurfaceRaised}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+
+  <Style x:Key="FlatBar" TargetType="ProgressBar">
+    <Setter Property="Height" Value="4"/>
+    <Setter Property="Minimum" Value="0"/>
+    <Setter Property="Maximum" Value="100"/>
+    <Setter Property="Background" Value="#1A2420"/>
+    <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ProgressBar">
+          <Grid>
+            <Border Background="{TemplateBinding Background}"/>
+            <Border x:Name="PART_Track"/>
+            <Border x:Name="PART_Indicator" HorizontalAlignment="Left" Background="{TemplateBinding Foreground}"/>
+          </Grid>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- Catalog card: flat; the selected card gets a lighter ground and an accent edge. -->
+  <Style x:Key="ModCard" TargetType="Button">
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="Background" Value="{StaticResource SurfaceRaised}"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Grid>
+            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="0,0,0,2"/>
+            <Border x:Name="Sheen" Opacity="0" Background="{StaticResource OverlayLight}"/>
+            <ContentPresenter Margin="0,0,0,2"/>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Sheen" Property="Opacity" Value="0.04"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- Square on/off switch. -->
+  <Style x:Key="FlatSwitch" TargetType="CheckBox">
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="Width" Value="40"/>
+    <Setter Property="Height" Value="22"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="CheckBox">
+          <Grid Background="Transparent">
+            <Border x:Name="Track" Background="{StaticResource BorderStrong}"/>
+            <Border x:Name="Knob" Width="16" Height="16" Margin="3,0" HorizontalAlignment="Left"
+                    Background="{StaticResource TextPrimary}"/>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+              <Setter TargetName="Track" Property="Background" Value="{StaticResource PrimaryFill}"/>
+              <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.38"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
     </Setter>

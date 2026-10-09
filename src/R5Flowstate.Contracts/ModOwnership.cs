@@ -117,6 +117,20 @@ public static class ModOwnership
         return tokens;
     }
 
+    /// <summary>
+    /// True when a declared localization override names the mod's own text (its namespace or a
+    /// map it adds), so it cannot change anything the game ships.
+    /// </summary>
+    public static bool OwnsLocKey(string nameSpace, IReadOnlyList<string> maps, string token)
+    {
+        var key = token.ToLowerInvariant();
+        if (nameSpace.Length > 0 && key.StartsWith(nameSpace + Separator, StringComparison.Ordinal))
+            return true;
+        if (key.StartsWith("mp_" + nameSpace + Separator, StringComparison.Ordinal))
+            return true;
+        return maps.Any(m => key == m || key.StartsWith(m + "_", StringComparison.Ordinal));
+    }
+
     static IEnumerable<string> BlockEntries(ModVdfDocument doc, string name) =>
         doc.Blocks
             .Where(b => string.Equals(b.Name, name, StringComparison.OrdinalIgnoreCase))

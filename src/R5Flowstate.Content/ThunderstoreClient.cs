@@ -675,6 +675,10 @@ public sealed class ThunderstoreClient : IDisposable
                 IconUrl = icon,
                 IsDeprecated = p.IsDeprecated,
                 IsNsfw = p.IsNsfw,
+                PackageUrl = p.PackageUrl is { Length: <= MaxListingUrlChars } url ? url : string.Empty,
+                RatingScore = p.RatingScore,
+                IsPinned = p.IsPinned,
+                Updated = p.Updated,
                 Categories = p.Categories ?? Array.Empty<string>(),
                 Versions = versions,
             });

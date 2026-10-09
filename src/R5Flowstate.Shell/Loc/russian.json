@@ -75,6 +75,7 @@
   "tip_github": "GitHub",
   "tip_update": "Обновление лаунчера качается в фоне",
   "tip_offline_name": "Ваше имя в офлайн-играх. Только латинские буквы, цифры, - и _ (до 32).",
+  "label_offline_name": "Имя в офлайне",
   "tip_refresh_servers": "Обновить список публичных серверов",
   "tip_refresh_lb": "Обновить таблицу 1v1",
   "tip_stop": "Закрыть запущенную игру",
@@ -571,7 +572,7 @@
   "mode_blurb.fs_scenarios": "Бои отрядов с легендами, добычей и сужающимся кольцом.",
   "mode_blurb.control": "Девять на девять за три зоны. Удерживайте их для очков; кто первый наберёт 1000.",
   "mode_blurb.tdm": "Две команды по шесть. Первые 50 убийств побеждают.",
-  "mode_blurb.ffa": "Каждый сам за себя. Первые 30 убийств.",
+  "mode_blurb.ffa": "Каждый сам за себя. Раунд выигрывает тот, у кого больше всего убийств к концу времени.",
   "mode_blurb.btdm": "Командный deathmatch, двенадцать на двенадцать. Первые 60 убийств.",
   "mode_blurb.gungame": "Четыре отряда по трое проходят 25 видов оружия. Последнее — метательный нож.",
   "mode_blurb.lockdown": "Четыре отряда бьются за одну открытую зону. Первые 500 очков.",
@@ -764,5 +765,10 @@
   "replays_gb": "{0} ГБ",
   "replays_launch_failed": "Не удалось запустить игру.",
   "replays_today": "Сегодня",
-  "replays_yesterday": "Вчера"
+  "replays_yesterday": "Вчера",
+  "join_playtests": "Join playtests",
+  "tip_join_playtests": "Get builds before they go live and help test them. Playtest servers are separate from live servers. Turn off to go back to the live version.",
+  "playtest_badge": "PLAYTEST",
+  "playtest_confirm_on": "Playtest builds are unfinished and can break. You will only see playtest servers until you turn this off. Switch to the playtest version?",
+  "playtest_busy": "Close the game and wait for downloads to finish before switching between playtest and live."
 }

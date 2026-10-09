@@ -75,6 +75,7 @@
   "tip_github": "GitHub",
   "tip_update": "La actualización del launcher se descarga en segundo plano",
   "tip_offline_name": "Tu nombre en partidas sin conexión. Solo letras, números, - y _ (máx. 32).",
+  "label_offline_name": "Nombre sin conexión",
   "tip_refresh_servers": "Recargar la lista de servidores públicos",
   "tip_refresh_lb": "Recargar la clasificación 1v1",
   "tip_stop": "Cerrar la partida en curso",
@@ -571,7 +572,7 @@
   "mode_blurb.fs_scenarios": "Combates de escuadras con leyendas, botín y un anillo que se cierra.",
   "mode_blurb.control": "Nueve contra nueve por tres zonas. Mantenlas para puntuar; gana quien llegue a 1000.",
   "mode_blurb.tdm": "Dos equipos de seis. Gana quien llegue a 50 bajas.",
-  "mode_blurb.ffa": "Todos contra todos. Primero a 30 bajas.",
+  "mode_blurb.ffa": "Todos contra todos. Quien tenga más bajas al acabar el tiempo gana la ronda.",
   "mode_blurb.btdm": "Deathmatch por equipos, doce contra doce. Primero a 60 bajas.",
   "mode_blurb.gungame": "Cuatro escuadras de tres recorren 25 armas. La última es un cuchillo arrojadizo.",
   "mode_blurb.lockdown": "Cuatro escuadras pelean por una zona abierta a la vez. Primero a 500 puntos.",
@@ -764,5 +765,10 @@
   "replays_gb": "{0} GB",
   "replays_launch_failed": "No se pudo iniciar el juego.",
   "replays_today": "Hoy",
-  "replays_yesterday": "Ayer"
+  "replays_yesterday": "Ayer",
+  "join_playtests": "Join playtests",
+  "tip_join_playtests": "Get builds before they go live and help test them. Playtest servers are separate from live servers. Turn off to go back to the live version.",
+  "playtest_badge": "PLAYTEST",
+  "playtest_confirm_on": "Playtest builds are unfinished and can break. You will only see playtest servers until you turn this off. Switch to the playtest version?",
+  "playtest_busy": "Close the game and wait for downloads to finish before switching between playtest and live."
 }

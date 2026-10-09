@@ -63,7 +63,8 @@ public static class ModInstallPlanner
 
             if ((!isRoot || keepInstalledRoots) &&
                 installedVersion.TryGetValue(full, out var have) &&
-                CompareVersions(have, version.VersionNumber) >= 0)
+                !string.IsNullOrEmpty(have) &&
+                ModVersion.Compare(have, version.VersionNumber) >= 0)
             {
                 done.Add(full);
                 return;
@@ -136,10 +137,4 @@ public static class ModInstallPlanner
         return null;
     }
 
-    static int CompareVersions(string? a, string? b)
-    {
-        if (Version.TryParse(a, out var va) && Version.TryParse(b, out var vb))
-            return va.CompareTo(vb);
-        return string.Equals(a, b, StringComparison.OrdinalIgnoreCase) ? 0 : -1;
-    }
 }

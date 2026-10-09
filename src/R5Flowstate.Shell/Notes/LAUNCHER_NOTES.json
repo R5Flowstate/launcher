@@ -3,6 +3,24 @@
   "kind": "notes",
   "entries": [
     {
+      "date": "9 Oct 2026",
+      "title": "Launcher 0.1.61",
+      "items": [
+        "Switch between Live and Playtest from the top bar",
+        "Keep the game folder intact when switching rings",
+        "Rework Mod Manager with a download queue and real progress",
+        "Show mods as cards with categories and sorting",
+        "Install a server's missing mods in one step when joining",
+        "Make mod updates safer and clean up leftovers",
+        "Add weapon and choice options to server settings",
+        "Move offline name to Settings",
+        "Reload mod playlists before Play",
+        "Fix map changes on hosted servers not applying",
+        "Fix stacked connection-lost popups locking the launcher",
+        "Keep host config files through repairs"
+      ]
+    },
+    {
       "date": "27 Sep 2026",
       "title": "Launcher 0.1.60",
       "items": [

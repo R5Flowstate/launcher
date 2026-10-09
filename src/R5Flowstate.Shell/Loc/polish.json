@@ -75,6 +75,7 @@
   "tip_github": "GitHub",
   "tip_update": "Aktualizacja launchera pobiera się w tle",
   "tip_offline_name": "Twoja nazwa w grach offline. Tylko litery, cyfry, - i _ (maks. 32).",
+  "label_offline_name": "Nazwa offline",
   "tip_refresh_servers": "Odśwież listę serwerów publicznych",
   "tip_refresh_lb": "Odśwież ranking 1v1",
   "tip_stop": "Zamknij uruchomioną grę",
@@ -571,7 +572,7 @@
   "mode_blurb.fs_scenarios": "Walki oddzialow z legendami, lupem i zaciesniajacym sie pierscieniem.",
   "mode_blurb.control": "Dziewiec na dziewiec o trzy strefy. Trzymaj je, by zdobywac punkty; pierwszy do 1000.",
   "mode_blurb.tdm": "Dwie druzyny po szesc. Pierwsza do 50 zabojstw wygrywa.",
-  "mode_blurb.ffa": "Kazdy na kazdego. Pierwszy do 30 zabojstw.",
+  "mode_blurb.ffa": "Kazdy na kazdego. Runde wygrywa ten, kto ma najwiecej zabojstw, gdy skonczy sie czas.",
   "mode_blurb.btdm": "Team deathmatch, dwunastu na dwunastu. Pierwszy do 60 zabojstw.",
   "mode_blurb.gungame": "Cztery druzyny po trzech scigaja sie przez 25 broni. Ostatnia to noz do rzucania.",
   "mode_blurb.lockdown": "Cztery druzyny walcza o jedna otwarta strefe na raz. Pierwszy do 500 punktow.",
@@ -764,5 +765,10 @@
   "replays_gb": "{0} GB",
   "replays_launch_failed": "Nie udało się uruchomić gry.",
   "replays_today": "Dzisiaj",
-  "replays_yesterday": "Wczoraj"
+  "replays_yesterday": "Wczoraj",
+  "join_playtests": "Join playtests",
+  "tip_join_playtests": "Get builds before they go live and help test them. Playtest servers are separate from live servers. Turn off to go back to the live version.",
+  "playtest_badge": "PLAYTEST",
+  "playtest_confirm_on": "Playtest builds are unfinished and can break. You will only see playtest servers until you turn this off. Switch to the playtest version?",
+  "playtest_busy": "Close the game and wait for downloads to finish before switching between playtest and live."
 }

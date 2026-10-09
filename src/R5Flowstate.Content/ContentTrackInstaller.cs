@@ -31,6 +31,7 @@ public static class ContentTrackInstaller
         bool ignoreIndex = false)
     {
         _ = contentUnchanged;
+        InstallPathPolicy.ThrowIfDevTree(installPath);
         var result = new TrackInstallResult
         {
             Preset = preset,

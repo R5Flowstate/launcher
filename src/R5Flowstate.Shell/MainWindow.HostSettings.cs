@@ -68,7 +68,8 @@ public partial class MainWindow
             title,
             settings,
             id => _catalog.Find(id)?.Settings,
-            overrides => FormatHostArgs(playlist, overrides));
+            overrides => FormatHostArgs(playlist, overrides),
+            TxtInstallRoot.Text.Trim());
         dlg.ShowDialog();
         RefreshArgPreviews();
     }

@@ -27,6 +27,7 @@ public partial class HostSettingsWindow : Window
     IReadOnlyList<PlaylistSetting> _settings = Array.Empty<PlaylistSetting>();
     Func<string, IReadOnlyList<PlaylistSetting>?> _settingsFor = _ => null;
     Func<IReadOnlyList<KeyValuePair<string, string>>, string> _formatArgs = _ => string.Empty;
+    string _installRoot = string.Empty;
     bool _loading;
 
     public event Action? SettingsChanged;
@@ -42,9 +43,11 @@ public partial class HostSettingsWindow : Window
         string title,
         IReadOnlyList<PlaylistSetting> settings,
         Func<string, IReadOnlyList<PlaylistSetting>?> settingsFor,
-        Func<IReadOnlyList<KeyValuePair<string, string>>, string> formatArgs)
+        Func<IReadOnlyList<KeyValuePair<string, string>>, string> formatArgs,
+        string installRoot)
     {
         _store = store;
+        _installRoot = installRoot;
         _playlist = playlist;
         _settings = settings;
         _settingsFor = settingsFor;
@@ -96,7 +99,7 @@ public partial class HostSettingsWindow : Window
             FrameworkElement editor = s.Kind switch
             {
                 PlaylistSettingKind.Bool => MakeCheck(value),
-                PlaylistSettingKind.Choice => MakeChoice(s, value),
+                PlaylistSettingKind.Choice or PlaylistSettingKind.Weapon => MakeChoice(s, value),
                 _ => MakeText(value),
             };
             editor.Margin = new Thickness(0, 4, 0, 4);
@@ -124,7 +127,8 @@ public partial class HostSettingsWindow : Window
 
     ComboBox MakeChoice(PlaylistSetting s, string value)
     {
-        var combo = new ComboBox { ItemsSource = s.Choices, Height = 30, SelectedItem = s.Choices.FirstOrDefault(c => c == value) };
+        var options = SettingOptions.For(s, _installRoot, Loc.Code);
+        var combo = new ComboBox { ItemsSource = options, Height = 30, SelectedItem = options.FirstOrDefault(o => o.Value == value) };
         if (TryFindResource("DarkCombo") is Style style)
             combo.Style = style;
         combo.SelectionChanged += (_, _) => OnEdited();
@@ -143,7 +147,7 @@ public partial class HostSettingsWindow : Window
     static string ValueOf(Row row) => row.Editor switch
     {
         CheckBox c => c.IsChecked == true ? "1" : "0",
-        ComboBox c => c.SelectedItem as string ?? string.Empty,
+        ComboBox c => (c.SelectedItem as SettingOption)?.Value ?? string.Empty,
         TextBox t => t.Text?.Trim() ?? string.Empty,
         _ => string.Empty,
     };
@@ -171,8 +175,13 @@ public partial class HostSettingsWindow : Window
             : Loc.Format("host_setting_default_is", DisplayValue(row.Setting, row.Setting.Default));
     }
 
-    static string DisplayValue(PlaylistSetting s, string value) =>
-        s.Kind == PlaylistSettingKind.Bool ? (value == "1" ? Loc.Get("on") : Loc.Get("off")) : value;
+    string DisplayValue(PlaylistSetting s, string value) => s.Kind switch
+    {
+        PlaylistSettingKind.Bool => value == "1" ? Loc.Get("on") : Loc.Get("off"),
+        PlaylistSettingKind.Choice or PlaylistSettingKind.Weapon =>
+            SettingOptions.For(s, _installRoot, Loc.Code).FirstOrDefault(o => o.Value == value)?.Label ?? value,
+        _ => value,
+    };
 
     void OnEdited()
     {

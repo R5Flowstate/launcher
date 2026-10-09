@@ -19,6 +19,28 @@ public static class InstallPathPolicy
             "Games",
             DefaultRootName);
 
+    /// <summary>A build or master tree opts out of every launcher write with this file.</summary>
+    public const string DevTreeMarkerFileName = "DEV_TREE";
+
+    public static string DevTreeMarkerPath(string installPath) =>
+        Path.Combine(installPath, ProductConstants.ContentCacheDirName, DevTreeMarkerFileName);
+
+    public static bool IsDevTree(string? installPath)
+    {
+        if (string.IsNullOrWhiteSpace(installPath))
+            return false;
+        try { return File.Exists(DevTreeMarkerPath(installPath)); }
+        catch { return false; }
+    }
+
+    public static void ThrowIfDevTree(string installPath)
+    {
+        if (IsDevTree(installPath))
+            throw new InvalidOperationException(
+                $"{installPath} is a development tree ({ProductConstants.ContentCacheDirName}/{DevTreeMarkerFileName}); " +
+                "the launcher does not install, update or repair it.");
+    }
+
     public static bool IsForbidden(string? path, string? appBaseDirectory = null)
     {
         if (string.IsNullOrWhiteSpace(path))

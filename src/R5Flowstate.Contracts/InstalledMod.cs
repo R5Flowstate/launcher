@@ -21,4 +21,7 @@ public sealed class InstalledMod
 
     /// <summary>Maps the mod declares in <c>"Maps"</c>, e.g. <c>mp_team_mod__arena</c>.</summary>
     public IReadOnlyList<string> Maps { get; init; } = Array.Empty<string>();
+
+    /// <summary>Thunderstore <c>Owner-Name-Version</c> pins from manifest.json.</summary>
+    public IReadOnlyList<string> Dependencies { get; init; } = Array.Empty<string>();
 }

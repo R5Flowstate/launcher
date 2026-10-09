@@ -1,6 +1,11 @@
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using Microsoft.Win32;
 using R5Flowstate.Content;
 using R5Flowstate.Contracts;
@@ -13,11 +18,27 @@ public partial class MainWindow
     const int MaxModPolicyEntries = 64;
     const string SessionModsBackupName = "mods.vdf.launcher-bak";
     const string ModPolicyFileName = "mod_policy.txt";
+    const int MaxBrowseCategoryChips = 8;
+    static readonly TimeSpan CatalogMaxAge = TimeSpan.FromMinutes(10);
+
+    // Older than any install this or another launcher could still be writing.
+    static readonly TimeSpan StagingSweepAge = TimeSpan.FromMinutes(30);
+
+    enum ModsSection
+    {
+        Installed,
+        Browse,
+        Downloads,
+    }
 
     readonly List<ModRowViewModel> _modRows = new();
     readonly List<BrowseModRowViewModel> _browseRows = new();
     readonly List<DediModPolicyRowViewModel> _dediModRows = new();
+    readonly List<ModFilterChip> _browseChips = new();
+    readonly ObservableCollection<ModQueueItem> _modQueue = new();
     IReadOnlyList<ModPackage> _tsPackages = Array.Empty<ModPackage>();
+    DateTime _catalogLoadedUtc = DateTime.MinValue;
+    Task? _catalogLoad;
 
     // Which enabled map mods the mode rail was built from.
     string _catalogModsKey = string.Empty;
@@ -48,17 +69,42 @@ public partial class MainWindow
             .ToList();
     }
 
+    // Covers the patch files too: a mod update that renames a playlist keeps its id and maps.
     static string ModPlaylistSourcesKey(IReadOnlyList<ModPlaylistSource> mods) =>
-        string.Join("|", mods.Select(m => m.Id + ":" + string.Join(",", m.Maps)));
+        string.Join("|", mods.Select(m => m.Id + ":" + string.Join(",", m.Maps) + ":" + PlaylistPatchStamp(m.Folder)));
+
+    static string PlaylistPatchStamp(string folder)
+    {
+        foreach (var name in new[] { "playlists_r5_patch.txt", "playlist_r5_patch.txt" })
+        {
+            try
+            {
+                var info = new FileInfo(Path.Combine(folder, name));
+                if (info.Exists)
+                    return info.Length.ToString(CultureInfo.InvariantCulture) + "@" +
+                           info.LastWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+            }
+        }
+        return string.Empty;
+    }
 
     void ReloadCatalogIfModsChanged()
     {
         if (ModPlaylistSourcesKey(ModPlaylistSources(ModsInstallRoot())) != _catalogModsKey)
             ReloadPlaylistsAndMaps(selectSaved: true);
     }
+
     ThunderstoreClient? _thunderstore;
     ModInstaller? _modInstaller;
-    bool _modsSectionBrowse;
+    ModsSection _modsSection = ModsSection.Installed;
+    string _installedFilter = "all";
+    string _browseCategory = "all";
+    string _browseSort = "popular";
+    BrowseModRowViewModel? _browseSelected;
+    bool _modQueueRunning;
     bool _modsBusy;
     bool _suppressModEvents;
     bool _suppressDediModEvents;
@@ -83,6 +129,12 @@ public partial class MainWindow
 
     void DisposeModsServices()
     {
+        foreach (var item in _modQueue)
+        {
+            try { item.Cts?.Cancel(); }
+            catch { /* already disposed */ }
+        }
+
         _modInstaller = null;
         _thunderstore?.Dispose();
         _thunderstore = null;
@@ -110,9 +162,30 @@ public partial class MainWindow
 
     string ModsInstallRoot() => TxtInstallRoot?.Text?.Trim() ?? string.Empty;
 
+    static bool ModsRootUsable(string root) => !string.IsNullOrWhiteSpace(root) && Directory.Exists(root);
+
+    static bool GameRunning(string root) =>
+        !string.IsNullOrWhiteSpace(root)
+        && (ProcessSpawner.IsRoleAlive(LaunchRole.Client, root) || ProcessSpawner.IsRoleAlive(LaunchRole.Dedicated, root));
+
+    static long FreeBytes(string root)
+    {
+        try
+        {
+            var drive = Path.GetPathRoot(Path.GetFullPath(root));
+            return string.IsNullOrEmpty(drive) ? -1 : new DriveInfo(drive).AvailableFreeSpace;
+        }
+        catch
+        {
+            return -1;
+        }
+    }
+
+    // ------------------------------------------------------------------ sections
+
     void OnModsSectionInstalled(object sender, RoutedEventArgs e)
     {
-        _modsSectionBrowse = false;
+        _modsSection = ModsSection.Installed;
         ApplyModsSection();
     }
 
@@ -120,39 +193,110 @@ public partial class MainWindow
     {
         if (!ThunderstoreLive)
             return;
-        _modsSectionBrowse = true;
+        _modsSection = ModsSection.Browse;
         ApplyModsSection();
-        if (_browseRows.Count == 0 && !_modsBusy)
-            _ = RefreshBrowseModsAsync();
+        _ = EnsureCatalogAsync(force: false, reportErrors: true);
+    }
+
+    void OnModsSectionDownloads(object sender, RoutedEventArgs e)
+    {
+        _modsSection = ModsSection.Downloads;
+        ApplyModsSection();
     }
 
     void ApplyModsSection()
     {
-        if (!ThunderstoreLive)
-            _modsSectionBrowse = false;
+        if (!ThunderstoreLive && _modsSection == ModsSection.Browse)
+            _modsSection = ModsSection.Installed;
+        if (_modQueue.Count == 0 && _modsSection == ModsSection.Downloads)
+            _modsSection = ModsSection.Installed;
 
         var catalog = ThunderstoreLive ? Visibility.Visible : Visibility.Collapsed;
-        if (PanelModsSections is not null)
-            PanelModsSections.Visibility = catalog;
-        if (PanelModsProfile is not null)
-            PanelModsProfile.Visibility = catalog;
+        if (BtnModsSectionBrowse is not null)
+            BtnModsSectionBrowse.Visibility = catalog;
+        if (BtnModsShare is not null)
+            BtnModsShare.Visibility = catalog;
+        if (BtnModsSectionDownloads is not null)
+            BtnModsSectionDownloads.Visibility = _modQueue.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (ListModsQueue is not null && ListModsQueue.ItemsSource is null)
+            ListModsQueue.ItemsSource = _modQueue;
 
-        StyleTab(BtnModsSectionInstalled, !_modsSectionBrowse);
-        StyleTab(BtnModsSectionBrowse, _modsSectionBrowse);
+        StyleTab(BtnModsSectionInstalled, _modsSection == ModsSection.Installed);
+        StyleTab(BtnModsSectionBrowse, _modsSection == ModsSection.Browse);
+        StyleTab(BtnModsSectionDownloads, _modsSection == ModsSection.Downloads);
         if (PanelModsInstalled is not null)
-            PanelModsInstalled.Visibility = _modsSectionBrowse ? Visibility.Collapsed : Visibility.Visible;
+            PanelModsInstalled.Visibility = _modsSection == ModsSection.Installed ? Visibility.Visible : Visibility.Collapsed;
         if (PanelModsBrowse is not null)
-            PanelModsBrowse.Visibility = _modsSectionBrowse ? Visibility.Visible : Visibility.Collapsed;
+            PanelModsBrowse.Visibility = _modsSection == ModsSection.Browse ? Visibility.Visible : Visibility.Collapsed;
+        if (PanelModsDownloads is not null)
+            PanelModsDownloads.Visibility = _modsSection == ModsSection.Downloads ? Visibility.Visible : Visibility.Collapsed;
+        UpdateModsSectionLabels();
     }
 
-    void OnModsSearchChanged(object sender, TextChangedEventArgs e) => BindInstalledMods();
+    void UpdateModsSectionLabels()
+    {
+        var count = _modRows.Count;
+        var updates = _modRows.Count(r => r.HasUpdate);
+        if (BtnModsSectionInstalled is not null)
+        {
+            BtnModsSectionInstalled.Content = updates > 0
+                ? Loc.Format("mods_installed_n_upd", count, updates)
+                : Loc.Format("mods_installed_n", count);
+        }
 
-    void OnModsBrowseSearchChanged(object sender, TextChangedEventArgs e) => BindBrowseMods();
+        if (BtnModsSectionBrowse is not null)
+        {
+            BtnModsSectionBrowse.Content = _browseRows.Count > 0
+                ? Loc.Format("mods_browse_n", _browseRows.Count)
+                : Loc.Get("mods_browse_tab");
+        }
+
+        if (BtnModsSectionDownloads is not null)
+        {
+            var active = _modQueue.Count(i => i.IsActive);
+            BtnModsSectionDownloads.Content = active > 0
+                ? Loc.Format("mods_downloads_n", active)
+                : Loc.Get("mods_downloads_tab");
+        }
+
+        if (BtnModsFilterAll is not null)
+        {
+            BtnModsFilterAll.Content = Loc.Format("mods_filter_all", count);
+            BtnModsFilterOn.Content = Loc.Format("mods_filter_on", _modRows.Count(r => r.Enabled));
+            BtnModsFilterOff.Content = Loc.Format("mods_filter_off", _modRows.Count(r => !r.Enabled));
+            BtnModsFilterUpd.Content = Loc.Format("mods_filter_upd", updates);
+        }
+
+        if (BtnModsUpdateAll is not null)
+        {
+            var show = ThunderstoreLive && updates > 0;
+            BtnModsUpdateAll.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            if (show)
+            {
+                var bytes = _modRows.Where(r => r.HasUpdate).Sum(r => r.UpdateBytes);
+                BtnModsUpdateAll.Content = Loc.Format("mods_update_all", updates, FormatBytes(bytes));
+            }
+        }
+    }
+
+    static void StyleFilter(Button? btn, bool on)
+    {
+        if (btn is null)
+            return;
+        if (btn.TryFindResource(on ? "FilterTabOn" : "FilterTab") is Style style)
+            btn.Style = style;
+    }
+
+    void OnModsSearchChanged(object sender, TextChangedEventArgs e)
+    {
+        BindInstalledMods();
+        BindBrowseMods();
+    }
 
     void OnModsRefresh(object sender, RoutedEventArgs e)
     {
-        if (_modsSectionBrowse)
-            _ = RefreshBrowseModsAsync();
+        if (_modsSection == ModsSection.Browse)
+            _ = EnsureCatalogAsync(force: true, reportErrors: true);
         else
             _ = RefreshInstalledModsAsync();
     }
@@ -160,9 +304,44 @@ public partial class MainWindow
     async Task RefreshModsPanelAsync()
     {
         ApplyModsSection();
+        SweepModStaging();
         await RefreshInstalledModsAsync().ConfigureAwait(true);
         RefreshDediModPolicyUi();
+        UpdateGameRunningBar();
+        UpdateQueueUi();
+        _ = EnsureCatalogAsync(force: false, reportErrors: _modsSection == ModsSection.Browse);
     }
+
+    void SweepModStaging()
+    {
+        if (_modQueueRunning)
+            return;
+        var root = ModsInstallRoot();
+        if (!ModsRootUsable(root))
+            return;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                var n = ModsStore.SweepStaging(root, StagingSweepAge);
+                if (n > 0)
+                    Dispatcher.BeginInvoke(() => Log("Mods: removed " + n + " leftover install folder(s)."));
+            }
+            catch
+            {
+                // Best effort; the next tab open retries.
+            }
+        });
+    }
+
+    void UpdateGameRunningBar()
+    {
+        if (BarModsGameRunning is null)
+            return;
+        BarModsGameRunning.Visibility = GameRunning(ModsInstallRoot()) ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // ------------------------------------------------------------------ installed
 
     async Task RefreshInstalledModsAsync()
     {
@@ -182,11 +361,12 @@ public partial class MainWindow
     async Task LoadInstalledModsCoreAsync()
     {
         var root = ModsInstallRoot();
-        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+        if (!ModsRootUsable(root))
         {
             _modRows.Clear();
             BindInstalledMods();
             UpdateBrowseInstalledState();
+            UpdateModsSectionLabels();
             SetModsStatus(Loc.Get("mods_no_install"));
             return;
         }
@@ -195,47 +375,62 @@ public partial class MainWindow
         {
             var skipped = new List<string>();
             var found = await Task.Run(() => ModsStore.Discover(root, skipped)).ConfigureAwait(true);
-            var latestByFull = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var latestByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var pkg in _tsPackages)
-            {
-                var ver = pkg.Versions is { Count: > 0 } ? pkg.Versions[0].VersionNumber : string.Empty;
-                if (string.IsNullOrEmpty(ver))
-                    continue;
-                if (!string.IsNullOrEmpty(pkg.FullName))
-                    latestByFull[pkg.FullName] = ver;
-                if (!string.IsNullOrEmpty(pkg.Name) && !latestByName.ContainsKey(pkg.Name))
-                    latestByName[pkg.Name] = ver;
-            }
 
             _modRows.Clear();
             foreach (var mod in found)
-            {
-                string? latest = null;
-                if (!string.IsNullOrEmpty(mod.ThunderstoreFullName)
-                    && latestByFull.TryGetValue(mod.ThunderstoreFullName, out var byFull))
-                    latest = byFull;
-                else if (latestByName.TryGetValue(mod.Id, out var byId))
-                    latest = byId;
-                else if (latestByName.TryGetValue(mod.Name, out var byName))
-                    latest = byName;
-                _modRows.Add(new ModRowViewModel(mod, latest));
-            }
+                _modRows.Add(new ModRowViewModel(mod));
+            ApplyCatalogToInstalled();
 
             BindInstalledMods();
             UpdateBrowseInstalledState();
+            UpdateModsSectionLabels();
             if (skipped.Count > 0)
                 SetModsStatus(Loc.Format("mods_status_skipped", skipped.Count));
             else if (_modRows.Count == 0)
                 SetModsStatus(Loc.Get("mods_empty"));
-            else
+            else if (_modsSection == ModsSection.Installed)
                 SetModsStatus(string.Empty);
 
             ReloadCatalogIfModsChanged();
+            _ = FillModSizesAsync(root, _modRows.ToList());
         }
         catch (Exception ex)
         {
             SetModsStatus(ex.Message);
+        }
+    }
+
+    async Task FillModSizesAsync(string root, IReadOnlyList<ModRowViewModel> rows)
+    {
+        foreach (var row in rows)
+        {
+            var size = await Task.Run(() => ModsStore.FolderSizeBytes(root, row.FolderName)).ConfigureAwait(true);
+            row.SizeText = size > 0 ? FormatBytes(size) : string.Empty;
+        }
+    }
+
+    // An installed mod maps to a catalog package by its Owner-Name folder (manifest-backed
+    // installs) or by its Owner.Name id; never by display name.
+    void ApplyCatalogToInstalled()
+    {
+        var byFull = new Dictionary<string, ModPackage>(StringComparer.OrdinalIgnoreCase);
+        var byId = new Dictionary<string, ModPackage>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pkg in _tsPackages)
+        {
+            if (string.IsNullOrEmpty(pkg.FullName) || pkg.Versions.Count == 0)
+                continue;
+            byFull.TryAdd(pkg.FullName, pkg);
+            byId.TryAdd(ModInstaller.ExpectedCatalogId(pkg), pkg);
+        }
+
+        foreach (var row in _modRows)
+        {
+            ModPackage? pkg = null;
+            if (row.IsCatalog)
+                byFull.TryGetValue(row.FolderName, out pkg);
+            if (pkg is null)
+                byId.TryGetValue(row.Id, out pkg);
+            row.SetCatalog(pkg);
         }
     }
 
@@ -249,14 +444,7 @@ public partial class MainWindow
             var mod = _modRows.FirstOrDefault(r =>
                 string.Equals(r.Id, id, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(r.FolderName, row.FullName, StringComparison.OrdinalIgnoreCase));
-            string? version = null;
-            if (mod is not null)
-            {
-                version = string.IsNullOrWhiteSpace(mod.Mod.ThunderstoreVersion)
-                    ? mod.Mod.Version
-                    : mod.Mod.ThunderstoreVersion;
-            }
-            row.SetInstalledVersion(version);
+            row.SetInstalledVersion(mod?.InstalledVersion);
         }
     }
 
@@ -269,89 +457,47 @@ public partial class MainWindow
         IEnumerable<ModRowViewModel> rows = _modRows;
         if (q.Length > 0)
         {
-            rows = _modRows.Where(r =>
+            rows = rows.Where(r =>
                 r.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
                 || r.Author.Contains(q, StringComparison.OrdinalIgnoreCase)
                 || r.Id.Contains(q, StringComparison.OrdinalIgnoreCase)
                 || r.FolderName.Contains(q, StringComparison.OrdinalIgnoreCase));
         }
 
-        var list = rows.ToList();
+        rows = _installedFilter switch
+        {
+            "on" => rows.Where(r => r.Enabled),
+            "off" => rows.Where(r => !r.Enabled),
+            "upd" => rows.Where(r => r.HasUpdate),
+            _ => rows,
+        };
+
         _suppressModEvents = true;
         ListModsInstalled.ItemsSource = null;
-        ListModsInstalled.ItemsSource = list;
+        ListModsInstalled.ItemsSource = rows.ToList();
         _suppressModEvents = false;
     }
 
-    async Task RefreshBrowseModsAsync()
+    void OnModsFilter(object sender, RoutedEventArgs e)
     {
-        if (!ThunderstoreLive || _modsBusy)
+        if (sender is not Button { Tag: string key })
             return;
-
-        SetModsBusy(true);
-        SetModsStatus(Loc.Get("lb_refreshing"));
-        try
-        {
-            var packages = await ModsThunderstore().ListPackagesAsync().ConfigureAwait(true);
-            _tsPackages = packages;
-            _browseRows.Clear();
-            foreach (var pkg in packages)
-            {
-                if (pkg.IsDeprecated || pkg.IsNsfw)
-                    continue;
-                _browseRows.Add(new BrowseModRowViewModel(pkg));
-            }
-
-            UpdateBrowseInstalledState();
-            BindBrowseMods();
-            if (_browseRows.Count == 0)
-                SetModsStatus(Loc.Get("mods_browse_empty"));
-            else
-                SetModsStatus(string.Empty);
-
-            await LoadInstalledModsCoreAsync().ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            SetModsStatus(Loc.Format("mods_browse_failed", ex.Message));
-        }
-        finally
-        {
-            SetModsBusy(false);
-        }
-    }
-
-    void BindBrowseMods()
-    {
-        if (ListModsBrowse is null)
-            return;
-
-        var q = TxtModsBrowseSearch?.Text?.Trim() ?? string.Empty;
-        IEnumerable<BrowseModRowViewModel> rows = _browseRows;
-        if (q.Length > 0)
-        {
-            rows = _browseRows.Where(r =>
-                r.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
-                || r.Owner.Contains(q, StringComparison.OrdinalIgnoreCase)
-                || r.Description.Contains(q, StringComparison.OrdinalIgnoreCase)
-                || r.FullName.Contains(q, StringComparison.OrdinalIgnoreCase));
-        }
-
-        ListModsBrowse.ItemsSource = null;
-        ListModsBrowse.ItemsSource = rows.ToList();
+        _installedFilter = key;
+        StyleFilter(BtnModsFilterAll, key == "all");
+        StyleFilter(BtnModsFilterOn, key == "on");
+        StyleFilter(BtnModsFilterOff, key == "off");
+        StyleFilter(BtnModsFilterUpd, key == "upd");
+        BindInstalledMods();
     }
 
     void OnModEnabledChanged(object sender, RoutedEventArgs e)
     {
         if (_suppressModEvents)
             return;
-        if (sender is not CheckBox { Tag: ModRowViewModel row })
+        if (sender is not CheckBox { Tag: ModRowViewModel row } box)
             return;
 
-        var wanted = row.Enabled;
-        if (sender is CheckBox box)
-            wanted = box.IsChecked == true;
-
+        var wanted = box.IsChecked == true;
         var root = ModsInstallRoot();
         try
         {
@@ -359,14 +505,17 @@ public partial class MainWindow
             _suppressModEvents = true;
             row.Enabled = wanted;
             _suppressModEvents = false;
+            UpdateModsSectionLabels();
+            UpdateGameRunningBar();
+            if (_installedFilter is "on" or "off")
+                BindInstalledMods();
             ReloadCatalogIfModsChanged();
         }
         catch (Exception ex)
         {
             _suppressModEvents = true;
             row.Enabled = !wanted;
-            if (sender is CheckBox cb)
-                cb.IsChecked = !wanted;
+            box.IsChecked = !wanted;
             _suppressModEvents = false;
             SetModsStatus(Loc.Format("mods_enable_failed", ex.Message));
         }
@@ -374,16 +523,14 @@ public partial class MainWindow
 
     void OnModMoveUp(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { Tag: ModRowViewModel row })
-            return;
-        MoveMod(row, -1);
+        if (sender is FrameworkElement { Tag: ModRowViewModel row })
+            MoveMod(row, -1);
     }
 
     void OnModMoveDown(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { Tag: ModRowViewModel row })
-            return;
-        MoveMod(row, 1);
+        if (sender is FrameworkElement { Tag: ModRowViewModel row })
+            MoveMod(row, 1);
     }
 
     void MoveMod(ModRowViewModel row, int delta)
@@ -407,11 +554,125 @@ public partial class MainWindow
         }
     }
 
+    void OnModRowUpdate(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: ModRowViewModel { Package: { } pkg } })
+            return;
+        _ = QueueCatalogInstallAsync(new[] { (pkg, (string?)null) }, string.Empty, askAlways: false);
+    }
+
+    void OnModsUpdateAll(object sender, RoutedEventArgs e)
+    {
+        var roots = _modRows
+            .Where(r => r.HasUpdate && r.Package is not null)
+            .Select(r => (r.Package!, (string?)null))
+            .ToList();
+        if (roots.Count == 0)
+            return;
+        _ = QueueCatalogInstallAsync(roots, string.Empty, askAlways: roots.Count > 1);
+    }
+
+    void OnModMore(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: ModRowViewModel row } btn)
+            return;
+
+        var itemStyle = (Style)FindResource("DarkMenuItem");
+        var menu = new ContextMenu
+        {
+            Style = (Style)FindResource("DarkContextMenu"),
+            PlacementTarget = btn,
+            Placement = PlacementMode.Bottom,
+        };
+
+        MenuItem Item(string key, Action act)
+        {
+            var mi = new MenuItem { Header = Loc.Get(key), Style = itemStyle };
+            mi.Click += (_, _) => act();
+            menu.Items.Add(mi);
+            return mi;
+        }
+
+        Item("mods_menu_open_folder", () => OpenModFolder(row));
+        if (row.Package is { } pkg)
+        {
+            Item("mods_view_page", () => OpenPackagePage(pkg));
+            if (row.IsCatalog)
+            {
+                Item("mods_menu_reinstall", () =>
+                {
+                    var have = pkg.Versions.Any(v => string.Equals(v.VersionNumber, row.InstalledVersion, StringComparison.OrdinalIgnoreCase))
+                        ? row.InstalledVersion
+                        : null;
+                    _ = QueueCatalogInstallAsync(new[] { (pkg, have) }, string.Empty, askAlways: false);
+                });
+            }
+        }
+
+        menu.Items.Add(new Separator { Style = (Style)FindResource("DarkMenuSeparator") });
+        Item("mods_menu_uninstall", () => _ = UninstallModAsync(row));
+        menu.IsOpen = true;
+    }
+
+    void OpenModFolder(ModRowViewModel row)
+    {
+        try
+        {
+            var modsDir = ModsStore.ModsDirectory(ModsInstallRoot());
+            if (SafePath.TryJoin(modsDir, row.FolderName, out var dir) && Directory.Exists(dir))
+                Process.Start(new ProcessStartInfo("explorer.exe", "\"" + dir + "\"") { UseShellExecute = false });
+        }
+        catch (Exception ex)
+        {
+            SetModsStatus(ex.Message);
+        }
+    }
+
+    void OnModsOpenFolder(object sender, RoutedEventArgs e)
+    {
+        var root = ModsInstallRoot();
+        if (!ModsRootUsable(root))
+        {
+            SetModsStatus(Loc.Get("mods_no_install"));
+            return;
+        }
+
+        try
+        {
+            var modsDir = ModsStore.ModsDirectory(root);
+            Directory.CreateDirectory(modsDir);
+            Process.Start(new ProcessStartInfo("explorer.exe", "\"" + modsDir + "\"") { UseShellExecute = false });
+        }
+        catch (Exception ex)
+        {
+            SetModsStatus(ex.Message);
+        }
+    }
+
+    // Only Thunderstore pages open; the listing URL is remote data.
+    void OpenPackagePage(ModPackage pkg)
+    {
+        var url = pkg.PackageUrl;
+        if (string.IsNullOrWhiteSpace(url))
+            url = "https://thunderstore.io/c/" + ThunderstoreClient.Community + "/p/" + pkg.Owner + "/" + pkg.Name + "/";
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || uri.Scheme != Uri.UriSchemeHttps
+            || !ModArt.IsThunderstoreHost(uri))
+            return;
+        try
+        {
+            Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            SetModsStatus(ex.Message);
+        }
+    }
+
     void OnModUninstall(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { Tag: ModRowViewModel row })
-            return;
-        _ = UninstallModAsync(row);
+        if (sender is FrameworkElement { Tag: ModRowViewModel row })
+            _ = UninstallModAsync(row);
     }
 
     async Task UninstallModAsync(ModRowViewModel row)
@@ -419,16 +680,52 @@ public partial class MainWindow
         if (_modsBusy || row.Busy)
             return;
 
-        var confirm = MessageBox.Show(
-            this,
-            Loc.Format("mods_uninstall_confirm", row.Name),
-            Loc.Get("mods_uninstall_title"),
-            MessageBoxButton.OKCancel,
-            MessageBoxImage.Warning);
-        if (confirm != MessageBoxResult.OK)
+        var root = ModsInstallRoot();
+        if (GameRunning(root))
+        {
+            SetModsStatus(Loc.Get("mods_uninstall_game"));
+            return;
+        }
+
+        if (_modQueue.Any(q => q.IsActive && string.Equals(q.FullName, row.FolderName, StringComparison.OrdinalIgnoreCase)))
+        {
+            SetModsStatus(Loc.Format("mods_uninstall_queued", row.Name));
+            return;
+        }
+
+        var dependents = _modRows
+            .Where(r => r != row && r.Mod.Dependencies.Any(d =>
+                ModInstallPlanner.TrySplitPin(d, out var full, out _)
+                && string.Equals(full, row.FolderName, StringComparison.OrdinalIgnoreCase)))
+            .Select(r => r.Name)
+            .ToList();
+
+        var body = Loc.Format("mods_uninstall_confirm", row.Name);
+        if (dependents.Count > 0)
+            body += "\n\n" + Loc.Format("mods_uninstall_needed_by", string.Join(", ", dependents));
+
+        var ok = ModPlanWindow.Ask(this, new ModPlanSpec
+        {
+            Headline = Loc.Format("mods_uninstall_headline", row.Name),
+            Body = body,
+            Rows = new[]
+            {
+                new ModPlanRow
+                {
+                    Name = row.Name,
+                    Detail = row.Detail,
+                    Tag = Loc.Get("mods_tag_remove"),
+                    TagKind = "remove",
+                    SizeText = row.SizeText,
+                    IconSource = row.IconSource,
+                },
+            },
+            PrimaryText = Loc.Get("mods_uninstall"),
+            Danger = true,
+        });
+        if (!ok)
             return;
 
-        var root = ModsInstallRoot();
         row.Busy = true;
         SetModsBusy(true);
         try
@@ -457,7 +754,7 @@ public partial class MainWindow
             return;
 
         var root = ModsInstallRoot();
-        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+        if (!ModsRootUsable(root))
         {
             SetModsStatus(Loc.Get("mods_no_install"));
             return;
@@ -477,9 +774,8 @@ public partial class MainWindow
         SetModsStatus(Loc.Get("mods_installing"));
         try
         {
-            var progress = NewModsProgress(null);
-            var zip = dlg.FileName;
-            await ModsInstaller().InstallFromZipAsync(root, zip, folderName: null, progress)
+            var progress = new Progress<ContentInstallProgress>(p => SetModsStatus(FileInstallProgressText(p)));
+            await ModsInstaller().InstallFromZipAsync(root, dlg.FileName, folderName: null, progress)
                 .ConfigureAwait(true);
             SetModsStatus(Loc.Get("mods_install_ok"));
             await LoadInstalledModsCoreAsync().ConfigureAwait(true);
@@ -495,116 +791,618 @@ public partial class MainWindow
         }
     }
 
-    void OnBrowseModInstall(object sender, RoutedEventArgs e)
+    static string FileInstallProgressText(ContentInstallProgress p) => p.Phase switch
+    {
+        "extract" when p.Total > 0 => Loc.Format(
+            "mods_file_unpacking", $"{p.Current * 100.0 / p.Total:0}", p.JobCurrent, p.JobTotal),
+        "check" => Loc.Get("mods_step_check"),
+        "commit" => Loc.Get("mods_step_install"),
+        _ => Loc.Get("mods_installing"),
+    };
+
+    // ------------------------------------------------------------------ catalog
+
+    async Task EnsureCatalogAsync(bool force, bool reportErrors)
+    {
+        if (!ThunderstoreLive)
+            return;
+        if (_catalogLoad is { IsCompleted: false })
+        {
+            await _catalogLoad.ConfigureAwait(true);
+            return;
+        }
+
+        if (!force && _tsPackages.Count > 0 && DateTime.UtcNow - _catalogLoadedUtc < CatalogMaxAge)
+            return;
+
+        _catalogLoad = LoadCatalogCoreAsync(reportErrors);
+        await _catalogLoad.ConfigureAwait(true);
+    }
+
+    async Task LoadCatalogCoreAsync(bool reportErrors)
+    {
+        if (reportErrors)
+            SetModsStatus(Loc.Get("mods_catalog_loading"));
+        try
+        {
+            var packages = await ModsThunderstore().ListPackagesAsync().ConfigureAwait(true);
+            _tsPackages = packages;
+            _catalogLoadedUtc = DateTime.UtcNow;
+
+            var selected = _browseSelected?.FullName;
+            _browseRows.Clear();
+            foreach (var pkg in packages)
+            {
+                if (pkg.IsDeprecated || pkg.IsNsfw || pkg.Versions.Count == 0)
+                    continue;
+                _browseRows.Add(new BrowseModRowViewModel(pkg));
+            }
+
+            _browseSelected = null;
+            RebuildBrowseChips();
+            UpdateBrowseInstalledState();
+            SyncBrowseQueueStates();
+            ApplyCatalogToInstalled();
+            BindInstalledMods();
+            BindBrowseMods(selected);
+            UpdateModsSectionLabels();
+            if (reportErrors)
+                SetModsStatus(_browseRows.Count == 0 ? Loc.Get("mods_browse_empty") : string.Empty);
+        }
+        catch (Exception ex)
+        {
+            if (reportErrors)
+                SetModsStatus(Loc.Format("mods_browse_failed", ex.Message));
+            else
+                Log("Mods: catalog load failed: " + ex.Message);
+        }
+    }
+
+    void RebuildBrowseChips()
+    {
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in _browseRows)
+        {
+            foreach (var cat in row.Categories.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(cat) || cat.Length > 40)
+                    continue;
+                counts[cat] = counts.TryGetValue(cat, out var n) ? n + 1 : 1;
+            }
+        }
+
+        _browseChips.Clear();
+        _browseChips.Add(new ModFilterChip("all", Loc.Format("mods_filter_all", _browseRows.Count)));
+        foreach (var (cat, n) in counts.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key)
+                     .Take(MaxBrowseCategoryChips))
+            _browseChips.Add(new ModFilterChip(cat, cat + "  " + n));
+
+        if (!_browseChips.Any(c => string.Equals(c.Key, _browseCategory, StringComparison.OrdinalIgnoreCase)))
+            _browseCategory = "all";
+        foreach (var chip in _browseChips)
+            chip.IsOn = string.Equals(chip.Key, _browseCategory, StringComparison.OrdinalIgnoreCase);
+        if (ListModsCategories is not null)
+        {
+            ListModsCategories.ItemsSource = null;
+            ListModsCategories.ItemsSource = _browseChips;
+        }
+    }
+
+    void OnBrowseCategoryClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: ModFilterChip chip })
+            return;
+        _browseCategory = chip.Key;
+        foreach (var c in _browseChips)
+            c.IsOn = ReferenceEquals(c, chip);
+        BindBrowseMods(_browseSelected?.FullName);
+    }
+
+    void OnBrowseSort(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string key })
+            return;
+        _browseSort = key;
+        StyleFilter(BtnModsSortPopular, key == "popular");
+        StyleFilter(BtnModsSortUpdated, key == "updated");
+        StyleFilter(BtnModsSortName, key == "name");
+        if (BtnModsSortName is not null)
+            BtnModsSortName.Margin = new Thickness(0);
+        BindBrowseMods(_browseSelected?.FullName);
+    }
+
+    void BindBrowseMods(string? keepSelected = null)
+    {
+        if (ListModsBrowse is null)
+            return;
+
+        var q = TxtModsSearch?.Text?.Trim() ?? string.Empty;
+        IEnumerable<BrowseModRowViewModel> rows = _browseRows;
+        if (_browseCategory != "all")
+            rows = rows.Where(r => r.Categories.Contains(_browseCategory, StringComparer.OrdinalIgnoreCase));
+        if (q.Length > 0)
+        {
+            rows = rows.Where(r =>
+                r.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || r.Owner.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || r.Description.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || r.FullName.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || r.CategoriesText.Contains(q, StringComparison.OrdinalIgnoreCase));
+        }
+
+        rows = _browseSort switch
+        {
+            "updated" => rows.OrderByDescending(r => r.Package.Updated).ThenBy(r => r.Name),
+            "name" => rows.OrderBy(r => r.Name, StringComparer.CurrentCultureIgnoreCase),
+            _ => rows.OrderByDescending(r => r.Package.IsPinned).ThenByDescending(r => r.Downloads).ThenBy(r => r.Name),
+        };
+
+        var list = rows.ToList();
+        ListModsBrowse.ItemsSource = list;
+
+        var keep = keepSelected ?? _browseSelected?.FullName;
+        var pick = list.FirstOrDefault(r => string.Equals(r.FullName, keep, StringComparison.OrdinalIgnoreCase))
+                   ?? list.FirstOrDefault();
+        SelectBrowseRow(pick);
+    }
+
+    void SelectBrowseRow(BrowseModRowViewModel? row)
+    {
+        if (_browseSelected is not null && !ReferenceEquals(_browseSelected, row))
+            _browseSelected.IsSelected = false;
+        _browseSelected = row;
+        if (row is not null)
+            row.IsSelected = true;
+        if (PanelModDetail is null)
+            return;
+        PanelModDetail.DataContext = row;
+        PanelModDetail.Visibility = row is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    void OnBrowseCardClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: BrowseModRowViewModel row })
+            SelectBrowseRow(row);
+    }
+
+    void OnBrowseCardDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: BrowseModRowViewModel row })
             return;
-        _ = InstallBrowseModAsync(row);
+        SelectBrowseRow(row);
+        if (row.CtaEnabled)
+            _ = QueueCatalogInstallAsync(new[] { (row.Package, (string?)null) }, string.Empty, askAlways: false);
     }
 
-    async Task InstallBrowseModAsync(BrowseModRowViewModel row)
+    void OnModDetailOpenPage(object sender, RoutedEventArgs e)
     {
-        if (!ThunderstoreLive || _modsBusy || row.Busy)
-            return;
+        if (_browseSelected is { } row)
+            OpenPackagePage(row.Package);
+    }
 
+    void OnBrowseModInstall(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: BrowseModRowViewModel row } || !row.CtaEnabled)
+            return;
+        _ = QueueCatalogInstallAsync(new[] { (row.Package, (string?)null) }, string.Empty, askAlways: false);
+    }
+
+    void SyncBrowseQueueStates()
+    {
+        foreach (var row in _browseRows)
+        {
+            var item = _modQueue.LastOrDefault(q =>
+                q.IsActive && string.Equals(q.FullName, row.FullName, StringComparison.OrdinalIgnoreCase));
+            row.QueueState = item is null ? string.Empty
+                : item.IsQueued ? Loc.Get("mods_q_state_queued")
+                : Loc.Format("mods_q_state_running", item.PercentText);
+        }
+    }
+
+    // ------------------------------------------------------------------ queue
+
+    ModPlanRow PlanRow(ModInstallStep step)
+    {
+        var installed = _modRows.FirstOrDefault(r =>
+            string.Equals(r.FolderName, step.Package.FullName, StringComparison.OrdinalIgnoreCase));
+        var (tag, kind) = installed is null ? (Loc.Get("mods_tag_new"), "new")
+            : string.Equals(installed.InstalledVersion, step.Version.VersionNumber, StringComparison.OrdinalIgnoreCase)
+                ? (Loc.Get("mods_tag_reinstall"), "reinstall")
+                : (Loc.Get("mods_tag_update"), "update");
+        var detail = step.Package.Owner + "  ·  " + (installed is null
+            ? step.Version.VersionNumber
+            : installed.InstalledVersion + " > " + step.Version.VersionNumber);
+        return new ModPlanRow
+        {
+            Name = string.IsNullOrWhiteSpace(step.Package.Name) ? step.Package.FullName : step.Package.Name.Replace('_', ' '),
+            Detail = detail,
+            Tag = tag,
+            TagKind = kind,
+            SizeText = step.Version.FileSize > 0 ? FormatBytes(step.Version.FileSize) : Loc.Get("n_a"),
+            IconSource = IconFor(step.Package),
+        };
+    }
+
+    System.Windows.Media.ImageSource? IconFor(ModPackage pkg) =>
+        _browseRows.FirstOrDefault(r => string.Equals(r.FullName, pkg.FullName, StringComparison.OrdinalIgnoreCase))?.IconSource
+        ?? ModArt.LoadRemote(pkg.IconUrl);
+
+    string QueueKind(ModInstallStep step)
+    {
+        var installed = _modRows.FirstOrDefault(r =>
+            string.Equals(r.FolderName, step.Package.FullName, StringComparison.OrdinalIgnoreCase));
+        if (installed is null)
+            return Loc.Get("mods_kind_new");
+        return string.Equals(installed.InstalledVersion, step.Version.VersionNumber, StringComparison.OrdinalIgnoreCase)
+            ? Loc.Get("mods_kind_reinstall")
+            : Loc.Format("mods_kind_update", installed.InstalledVersion);
+    }
+
+    /// <summary>
+    /// Plans the packages (dependencies first), confirms when there is more than one or the
+    /// drive is short, and queues them. Returns the queued items, or null when nothing was queued.
+    /// </summary>
+    async Task<IReadOnlyList<ModQueueItem>?> QueueCatalogInstallAsync(
+        IReadOnlyList<(ModPackage Package, string? Version)> roots,
+        string reason,
+        bool askAlways)
+    {
+        if (!ThunderstoreLive)
+            return null;
         var root = ModsInstallRoot();
-        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+        if (!ModsRootUsable(root))
         {
             SetModsStatus(Loc.Get("mods_no_install"));
-            return;
+            return null;
         }
 
         var unresolved = new List<string>();
         IReadOnlyList<ModInstallStep> plan;
         try
         {
-            plan = ModInstallPlanner.Plan(
-                _tsPackages, new[] { (row.Package, (string?)null) }, ModsStore.Discover(root), unresolved);
+            var installed = await Task.Run(() => ModsStore.Discover(root)).ConfigureAwait(true);
+            plan = ModInstallPlanner.Plan(_tsPackages, roots, installed, unresolved);
         }
         catch (Exception ex)
         {
             SetModsStatus(Loc.Format("mods_install_failed", ex.Message));
-            return;
+            return null;
         }
 
         if (unresolved.Count > 0)
         {
             SetModsStatus(Loc.Format("mods_install_failed",
                 Loc.Format("mods_deps_unresolved", string.Join(", ", unresolved))));
-            return;
+            return null;
         }
 
-        if (plan.Count > 1)
+        plan = plan.Where(s => !_modQueue.Any(q =>
+            q.IsActive && string.Equals(q.FullName, s.Package.FullName, StringComparison.OrdinalIgnoreCase))).ToList();
+        if (plan.Count == 0)
         {
-            var ask = MessageBox.Show(
-                this,
-                Loc.Format("mods_install_plan", row.Name, PlanLines(plan)),
-                Loc.Get("mods_install_plan_title"),
-                MessageBoxButton.OKCancel,
-                MessageBoxImage.Question,
-                MessageBoxResult.Cancel);
-            if (ask != MessageBoxResult.OK)
-                return;
+            SetModsStatus(Loc.Get("mods_q_nothing"));
+            return null;
         }
 
-        row.Busy = true;
-        SetModsBusy(true);
-        SetModsStatus(Loc.Format("mods_join_installing", row.Name));
+        var download = plan.Sum(s => Math.Max(0, s.Version.FileSize));
+        var need = ModSpace.Needed(download);
+        var free = FreeBytes(root);
+        if (askAlways || plan.Count > 1 || (free >= 0 && free < need))
+        {
+            var first = plan[^1];
+            var ok = ModPlanWindow.Ask(this, new ModPlanSpec
+            {
+                Headline = plan.Count == 1
+                    ? Loc.Format("mods_plan_one", PlanRow(first).Name)
+                    : Loc.Format("mods_plan_many", plan.Count),
+                Body = plan.Count > 1 && !askAlways
+                    ? Loc.Format("mods_plan_deps", PlanRow(first).Name)
+                    : Loc.Get("mods_plan_trust"),
+                Rows = plan.Select(PlanRow).ToList(),
+                PrimaryText = Loc.Format("mods_plan_primary", FormatBytes(download)),
+                DownloadBytes = download,
+                NeededBytes = need,
+                FreeBytes = free,
+            });
+            if (!ok)
+                return null;
+        }
+
+        return EnqueueSteps(root, plan, reason);
+    }
+
+    IReadOnlyList<ModQueueItem> EnqueueSteps(string root, IReadOnlyList<ModInstallStep> plan, string reason)
+    {
+        var items = new List<ModQueueItem>(plan.Count);
+        foreach (var step in plan)
+        {
+            var existing = _modQueue.FirstOrDefault(q =>
+                q.IsActive && string.Equals(q.FullName, step.Package.FullName, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null)
+            {
+                items.Add(existing);
+                continue;
+            }
+
+            var item = new ModQueueItem(step, QueueKind(step), reason, IconFor(step.Package)) { Root = root };
+            _modQueue.Add(item);
+            items.Add(item);
+        }
+
+        SyncBrowseQueueStates();
+        ApplyModsSection();
+        UpdateQueueUi();
+        SetModsStatus(Loc.Format("mods_q_added", items.Count));
+        if (!_modQueueRunning)
+            _ = RunModQueueAsync();
+        return items;
+    }
+
+    async Task RunModQueueAsync()
+    {
+        if (_modQueueRunning)
+            return;
+        _modQueueRunning = true;
         try
         {
-            var progress = NewModsProgress(row);
-            await InstallPlanAsync(root, plan, progress, SetModsStatus).ConfigureAwait(true);
-            row.ProgressText = string.Empty;
-            await LoadInstalledModsCoreAsync().ConfigureAwait(true);
-            RefreshDediModPolicyUi();
-
-            var installedId = ModInstaller.ExpectedCatalogId(row.Package);
-            var replaces = _modRows
-                .Where(r => string.Equals(r.Id, installedId, StringComparison.OrdinalIgnoreCase))
-                .SelectMany(r => r.Mod.Replaces)
-                .ToList();
-            SetModsStatus(replaces.Count == 0
-                ? Loc.Format("mods_install_ok_named", row.Name)
-                : Loc.Format("mods_install_ok_replaces", row.Name, string.Join(", ", replaces)));
-        }
-        catch (Exception ex)
-        {
-            row.ProgressText = string.Empty;
-            SetModsStatus(Loc.Format("mods_install_failed", ex.Message));
+            while (_modQueue.FirstOrDefault(i => i.IsQueued) is { } next)
+                await RunQueueItemAsync(next).ConfigureAwait(true);
         }
         finally
         {
-            row.Busy = false;
-            SetModsBusy(false);
+            _modQueueRunning = false;
+            UpdateQueueUi();
         }
     }
 
-    async Task InstallPlanAsync(
-        string root,
-        IReadOnlyList<ModInstallStep> plan,
-        IProgress<ContentInstallProgress>? progress,
-        Action<string> status)
+    async Task RunQueueItemAsync(ModQueueItem item)
     {
-        foreach (var step in plan)
+        var root = item.Root;
+        var updating = false;
+        try
         {
-            status(Loc.Format("mods_join_installing", step.Pin));
-            await ModsInstaller().InstallAsync(root, step.Package, step.Version.VersionNumber, progress)
+            updating = SafePath.TryJoin(ModsStore.ModsDirectory(root), item.FullName, out var dir) && Directory.Exists(dir);
+        }
+        catch
+        {
+            // Install reports the bad root.
+        }
+
+        if (updating && GameRunning(root))
+        {
+            item.ErrorText = Loc.Format("mods_q_game_running", item.Name);
+            item.State = ModQueueState.Failed;
+            item.Completion.TrySetResult(false);
+            UpdateQueueUi();
+            return;
+        }
+
+        using var cts = new CancellationTokenSource();
+        item.Cts = cts;
+        item.Started = item.LastSample = DateTime.UtcNow;
+        item.Phase = 0;
+        item.State = ModQueueState.Running;
+        SyncBrowseQueueStates();
+        UpdateQueueUi();
+
+        var progress = new Progress<ContentInstallProgress>(p => OnQueueProgress(item, p));
+        try
+        {
+            await ModsInstaller().InstallAsync(root, item.Step.Package, item.Version, progress, cts.Token)
                 .ConfigureAwait(true);
+            item.DownloadedBytes = item.SizeBytes;
+            item.DoneText = Loc.Format(
+                "mods_q_done",
+                FormatBytes(item.SizeBytes),
+                FormatEta(Math.Max(1, (DateTime.UtcNow - item.Started).TotalSeconds)));
+            item.State = ModQueueState.Done;
+            item.Completion.TrySetResult(true);
+        }
+        catch (Exception) when (cts.IsCancellationRequested)
+        {
+            item.State = ModQueueState.Cancelled;
+            item.Completion.TrySetResult(false);
+        }
+        catch (Exception ex)
+        {
+            Log("Mods: install of " + item.Pin + " failed: " + ex.Message);
+            item.ErrorText = Loc.Format("mods_q_failed", ex.Message);
+            item.State = ModQueueState.Failed;
+            item.Completion.TrySetResult(false);
+        }
+        finally
+        {
+            item.Cts = null;
+            SyncBrowseQueueStates();
+            UpdateQueueUi();
+        }
+
+        await LoadInstalledModsCoreAsync().ConfigureAwait(true);
+        RefreshDediModPolicyUi();
+    }
+
+    void OnQueueProgress(ModQueueItem item, ContentInstallProgress p)
+    {
+        if (!item.IsRunning)
+            return;
+        switch (p.Phase)
+        {
+            case "download":
+                item.Phase = 0;
+                if (p.Unit == ProgressUnit.Bytes && p.Current >= 0)
+                {
+                    var total = p.Total > 0 ? p.Total : item.SizeBytes;
+                    var cur = p.Current;
+                    item.DownloadedBytes = cur;
+                    var now = DateTime.UtcNow;
+                    var dt = (now - item.LastSample).TotalSeconds;
+                    if (dt >= 0.25)
+                    {
+                        var inst = (cur - item.LastBytes) / dt;
+                        item.RateEma = item.RateEma <= 0 ? inst : 0.3 * inst + 0.7 * item.RateEma;
+                        item.LastBytes = cur;
+                        item.LastSample = now;
+                    }
+
+                    item.Percent = total > 0 ? Math.Min(100, cur * 100.0 / total) : 0;
+                    item.BytesLine = total > 0
+                        ? Loc.Format("mods_q_of", FormatBytes(cur), FormatBytes(total))
+                        : FormatBytes(cur);
+                    item.RateText = item.RateEma > 0 ? FormatRate(item.RateEma) : string.Empty;
+                    item.EtaText = item.RateEma > 0 && total > cur
+                        ? Loc.Format("mods_q_left", FormatEta((total - cur) / item.RateEma))
+                        : string.Empty;
+                    item.DetailLine = "thunderstore.io";
+                }
+
+                break;
+            case "extract":
+                item.Phase = 1;
+                item.DownloadedBytes = item.SizeBytes;
+                item.Percent = p.Total > 0 ? Math.Min(100, p.Current * 100.0 / p.Total) : 0;
+                item.BytesLine = p.JobTotal > 0
+                    ? Loc.Format("mods_q_files", p.JobCurrent, p.JobTotal)
+                    : string.Empty;
+                item.RateText = string.Empty;
+                item.EtaText = string.Empty;
+                item.DetailLine = p.Message ?? string.Empty;
+                break;
+            case "check":
+                item.Phase = 2;
+                item.Percent = 100;
+                item.BytesLine = string.Empty;
+                item.DetailLine = string.Empty;
+                break;
+            case "commit":
+                item.Phase = 3;
+                item.Percent = 100;
+                break;
+        }
+
+        SyncBrowseQueueStates();
+        UpdateQueueUi();
+    }
+
+    void UpdateQueueUi()
+    {
+        var counted = _modQueue.Where(i => !i.IsCancelled).ToList();
+        var active = _modQueue.Where(i => i.IsActive).ToList();
+        var running = _modQueue.FirstOrDefault(i => i.IsRunning);
+        var total = counted.Sum(i => i.SizeBytes);
+        var done = counted.Sum(i => i.IsDone ? i.SizeBytes : Math.Min(i.DownloadedBytes, i.SizeBytes));
+        var pct = total > 0 ? done * 100.0 / total : 0;
+        var rate = running?.RateEma ?? 0;
+        var remaining = Math.Max(0, active.Sum(i => i.SizeBytes - Math.Min(i.DownloadedBytes, i.SizeBytes)));
+        var rateText = rate > 0 && running?.Phase == 0 ? FormatRate(rate) : "-";
+        var etaText = rate > 0 && remaining > 0 ? FormatEta(remaining / rate) : "-";
+
+        if (TxtQPercent is not null)
+        {
+            TxtQPercent.Text = $"{Math.Floor(pct):0}%";
+            TxtQBytes.Text = Loc.Format("mods_q_of", FormatBytes(done), FormatBytes(total));
+            TxtQRate.Text = rateText;
+            TxtQEta.Text = etaText;
+            var root = running?.Root ?? ModsInstallRoot();
+            var free = ModsRootUsable(root) ? FreeBytes(root) : -1;
+            TxtQDisk.Text = free >= 0
+                ? Loc.Format("mods_q_drive", FormatBytes(free), FormatBytes(ModSpace.Needed(remaining)))
+                : "-";
+            BarQOverall.Value = pct;
+            TxtQSummary.Text = Loc.Format("mods_q_summary", counted.Count(i => i.IsDone), counted.Count);
+            BtnModsQueueCancelAll.IsEnabled = active.Count > 0;
+            BtnModsQueueClear.IsEnabled = _modQueue.Any(i => !i.IsActive);
+        }
+
+        if (BarModQueueStrip is not null)
+        {
+            BarModQueueStrip.Visibility = active.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            var lead = running ?? active.FirstOrDefault();
+            TxtQStripName.Text = lead is null ? string.Empty
+                : Loc.Format("mods_q_strip_name", lead.Name, counted.Count(i => i.IsDone), counted.Count);
+            TxtQStripStats.Text = FormatBytes(done) + " / " + FormatBytes(total) + "  ·  " + rateText + "  ·  " + etaText;
+            BarQStrip.Value = pct;
+        }
+
+        UpdateModsSectionLabels();
+    }
+
+    void OnModQueueCancel(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: ModQueueItem item })
+            CancelQueueItem(item);
+        UpdateQueueUi();
+    }
+
+    void CancelQueueItem(ModQueueItem item)
+    {
+        if (item.IsQueued)
+        {
+            item.State = ModQueueState.Cancelled;
+            item.Completion.TrySetResult(false);
+            SyncBrowseQueueStates();
+        }
+        else if (item.IsRunning)
+        {
+            try { item.Cts?.Cancel(); }
+            catch { /* finished meanwhile */ }
         }
     }
 
-    static string PlanLines(IReadOnlyList<ModInstallStep> plan) =>
-        string.Join("\n", plan.Select(p => p.Pin));
+    void OnModQueueCancelAll(object sender, RoutedEventArgs e)
+    {
+        foreach (var item in _modQueue.ToList())
+            CancelQueueItem(item);
+        UpdateQueueUi();
+    }
 
-    IProgress<ContentInstallProgress> NewModsProgress(BrowseModRowViewModel? row) =>
-        new Progress<ContentInstallProgress>(p =>
+    void OnModQueueRetry(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: ModQueueItem item } || !item.CanRetry)
+            return;
+        item.ResetForRetry();
+        SyncBrowseQueueStates();
+        UpdateQueueUi();
+        if (!_modQueueRunning)
+            _ = RunModQueueAsync();
+    }
+
+    void OnModQueueCopy(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: ModQueueItem item })
+            return;
+        try
         {
-            var msg = string.IsNullOrWhiteSpace(p.Message) ? p.Phase : p.Message;
-            if (row is not null)
-                row.ProgressText = msg;
-            if (!string.IsNullOrEmpty(msg))
-                SetModsStatus(msg);
-        });
+            Clipboard.SetText(item.Pin + "\n" + item.ErrorText);
+            SetModsStatus(Loc.Get("mods_q_copied"));
+        }
+        catch (Exception ex)
+        {
+            SetModsStatus(ex.Message);
+        }
+    }
+
+    void OnModQueueClear(object sender, RoutedEventArgs e)
+    {
+        foreach (var item in _modQueue.Where(i => !i.IsActive).ToList())
+            _modQueue.Remove(item);
+        ApplyModsSection();
+        UpdateQueueUi();
+    }
+
+    void OnModQueueStripDetails(object sender, RoutedEventArgs e)
+    {
+        _modsSection = ModsSection.Downloads;
+        ApplySimpleTab(SimpleTab.Mods);
+        _ = RefreshModsPanelAsync();
+    }
+
+    // ------------------------------------------------------------------ profiles
+
+    void OnModsShare(object sender, RoutedEventArgs e)
+    {
+        if (PopModsShare is not null)
+            PopModsShare.IsOpen = !PopModsShare.IsOpen;
+    }
 
     void OnModsExport(object sender, RoutedEventArgs e) => _ = ExportModsProfileAsync();
 
@@ -616,15 +1414,12 @@ public partial class MainWindow
         var pins = new List<string>();
         foreach (var row in _modRows)
         {
-            if (!row.Enabled)
+            if (!row.Enabled || !row.IsCatalog)
                 continue;
-            var full = row.Mod.ThunderstoreFullName;
-            var ver = string.IsNullOrWhiteSpace(row.Mod.ThunderstoreVersion)
-                ? row.Mod.Version
-                : row.Mod.ThunderstoreVersion;
-            if (string.IsNullOrWhiteSpace(full) || string.IsNullOrWhiteSpace(ver))
+            var ver = row.InstalledVersion;
+            if (string.IsNullOrWhiteSpace(ver))
                 continue;
-            pins.Add(full.Trim() + "-" + ver.Trim());
+            pins.Add(row.Mod.ThunderstoreFullName.Trim() + "-" + ver.Trim());
         }
 
         if (pins.Count == 0)
@@ -671,7 +1466,7 @@ public partial class MainWindow
             return;
 
         var root = ModsInstallRoot();
-        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+        if (!ModsRootUsable(root))
         {
             SetModsStatus(Loc.Get("mods_no_install"));
             return;
@@ -684,59 +1479,47 @@ public partial class MainWindow
             return;
         }
 
+        if (PopModsShare is not null)
+            PopModsShare.IsOpen = false;
         SetModsBusy(true);
+        List<(ModPackage, string?)> roots;
+        var unresolved = new List<string>();
         try
         {
             var profile = await ModsThunderstore().GetProfileAsync(code).ConfigureAwait(true);
-            if (_tsPackages.Count == 0)
-            {
-                try
-                {
-                    _tsPackages = await ModsThunderstore().ListPackagesAsync().ConfigureAwait(true);
-                }
-                catch
-                {
-                    // Match pins against whatever listing we already have.
-                }
-            }
-
-            var unresolved = new List<string>();
-            var roots = new List<(ModPackage, string?)>();
+            await EnsureCatalogAsync(force: false, reportErrors: false).ConfigureAwait(true);
+            roots = new List<(ModPackage, string?)>();
             foreach (var pin in profile.Packages)
             {
-                if (!TryResolvePin(pin, out var package, out var version))
-                {
+                if (TryResolvePin(pin, out var package, out var version))
+                    roots.Add((package, version));
+                else
                     unresolved.Add(pin);
-                    continue;
-                }
-
-                roots.Add((package, version));
             }
-
-            var plan = ModInstallPlanner.Plan(_tsPackages, roots, ModsStore.Discover(root), unresolved);
-            await InstallPlanAsync(root, plan, progress: null, SetModsStatus).ConfigureAwait(true);
-            var installed = plan.Count;
-
-            await LoadInstalledModsCoreAsync().ConfigureAwait(true);
-            RefreshDediModPolicyUi();
-            if (unresolved.Count > 0)
-            {
-                SetModsStatus(Loc.Format(
-                    "mods_import_partial",
-                    installed,
-                    string.Join(", ", unresolved)));
-            }
-            else
-                SetModsStatus(Loc.Format("mods_import_ok", installed));
         }
         catch (Exception ex)
         {
             SetModsStatus(Loc.Format("mods_import_failed", ex.Message));
+            return;
         }
         finally
         {
             SetModsBusy(false);
         }
+
+        if (roots.Count == 0)
+        {
+            SetModsStatus(Loc.Format("mods_import_partial", 0, string.Join(", ", unresolved)));
+            return;
+        }
+
+        var items = await QueueCatalogInstallAsync(roots, Loc.Get("mods_reason_profile"), askAlways: true)
+            .ConfigureAwait(true);
+        if (items is null)
+            return;
+        SetModsStatus(unresolved.Count > 0
+            ? Loc.Format("mods_import_partial", items.Count, string.Join(", ", unresolved))
+            : Loc.Format("mods_import_ok", items.Count));
     }
 
     bool TryResolvePin(string pin, out ModPackage package, out string? version)
@@ -764,10 +1547,17 @@ public partial class MainWindow
         return false;
     }
 
+    // ------------------------------------------------------------------ join
+
+    /// <summary>
+    /// Brings the enabled mod set in line with a server before joining: one confirmation lists
+    /// what gets downloaded, what turns on and what goes off for this match. Installs run through
+    /// the download queue; the session filter is written after them so its restore keeps them.
+    /// </summary>
     async Task<bool> EnsureJoinModsAsync(ServerListing listing)
     {
         var root = ModsInstallRoot();
-        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+        if (!ModsRootUsable(root))
             return true;
 
         IReadOnlyList<InstalledMod> discovered;
@@ -783,45 +1573,19 @@ public partial class MainWindow
 
         var required = DistinctIds(listing.RequiredMods);
         var allowed = DistinctIds(listing.AllowedMods);
+        var enabledNow = new HashSet<string>(
+            discovered.Where(m => m.Enabled).Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
 
         // Mods the player turned off come back only with consent, and only for this session.
         var turnedOff = required
-            .Where(id => discovered.Any(m => !m.Enabled && string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase)))
+            .Where(id => !enabledNow.Contains(id)
+                         && discovered.Any(m => !m.Enabled && string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase)))
             .ToList();
-        if (turnedOff.Count > 0)
-        {
-            var enableAsk = MessageBox.Show(
-                this,
-                Loc.Format("mods_join_enable_disabled", string.Join("\n", turnedOff)),
-                Loc.Get("mods_join_missing_title"),
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question,
-                MessageBoxResult.No);
-            if (enableAsk != MessageBoxResult.Yes)
-                return false;
+        var have = new HashSet<string>(enabledNow, StringComparer.OrdinalIgnoreCase);
+        have.UnionWith(turnedOff);
+        var missing = required.Where(id => !have.Contains(id)).ToList();
 
-            var keep = new HashSet<string>(
-                discovered.Where(m => m.Enabled).Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
-            keep.UnionWith(turnedOff);
-            if (!TryBeginSessionModsFilter(root, keep))
-                return false;
-            _sessionModsForceRelaunch = true;
-        }
-
-        IReadOnlyList<string> enabled;
-        try
-        {
-            enabled = ModsStore.EnabledIds(root);
-        }
-        catch (Exception ex)
-        {
-            SetBrowserStatus(ex.Message);
-            return false;
-        }
-
-        var enabledSet = new HashSet<string>(enabled, StringComparer.OrdinalIgnoreCase);
-        var missing = required.Where(id => !enabledSet.Contains(id)).ToList();
-
+        IReadOnlyList<ModInstallStep> plan = Array.Empty<ModInstallStep>();
         if (missing.Count > 0)
         {
             var names = string.Join("\n", missing);
@@ -836,11 +1600,11 @@ public partial class MainWindow
                 return false;
             }
 
-            List<string> unresolved = new();
-            IReadOnlyList<ModInstallStep> plan;
+            var unresolved = new List<string>();
             try
             {
                 SetBrowserStatus(Loc.Get("mods_join_profile"));
+                await EnsureCatalogAsync(force: false, reportErrors: false).ConfigureAwait(true);
                 plan = await PlanJoinInstallAsync(root, listing, missing, unresolved).ConfigureAwait(true);
             }
             catch (Exception ex)
@@ -867,34 +1631,83 @@ public partial class MainWindow
                     MessageBoxImage.Warning);
                 return false;
             }
+        }
 
-            var ask = MessageBox.Show(
-                this,
-                Loc.Format("mods_join_plan", names, PlanLines(plan)),
-                Loc.Get("mods_join_missing_title"),
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning,
-                MessageBoxResult.No);
-            if (ask != MessageBoxResult.Yes)
-                return false;
+        var extras = new List<string>();
+        if (allowed.Count > 0)
+        {
+            var allowedSet = new HashSet<string>(allowed, StringComparer.OrdinalIgnoreCase);
+            allowedSet.UnionWith(required);
+            extras = have.Where(id => !allowedSet.Contains(id)).ToList();
+        }
 
-            try
+        if (turnedOff.Count == 0 && plan.Count == 0 && extras.Count == 0)
+            return true;
+
+        string NameOf(string id) =>
+            discovered.FirstOrDefault(m => string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase)) is { } m
+            && !string.IsNullOrWhiteSpace(m.Name) ? m.Name : id;
+
+        var rows = new List<ModPlanRow>();
+        rows.AddRange(plan.Select(PlanRow));
+        rows.AddRange(turnedOff.Select(id => new ModPlanRow
+        {
+            Name = NameOf(id),
+            Detail = Loc.Get("mods_join_row_off"),
+            Tag = Loc.Get("mods_tag_turn_on"),
+            TagKind = "on",
+            SizeText = "-",
+        }));
+        rows.AddRange(extras.Select(id => new ModPlanRow
+        {
+            Name = NameOf(id),
+            Detail = Loc.Get("mods_join_row_extra"),
+            Tag = Loc.Get("mods_tag_off_match"),
+            TagKind = "off",
+            SizeText = "-",
+        }));
+
+        var download = plan.Sum(s => Math.Max(0, s.Version.FileSize));
+        var server = string.IsNullOrWhiteSpace(listing.Name) ? Loc.Get("join_server") : listing.Name;
+        var ok = ModPlanWindow.Ask(this, new ModPlanSpec
+        {
+            Kicker = Loc.Get("mods_join_kicker"),
+            Headline = Loc.Format("mods_join_headline", server),
+            Body = plan.Count > 0 ? Loc.Get("mods_plan_trust") : Loc.Get("mods_join_session_body"),
+            Rows = rows,
+            PrimaryText = plan.Count > 0
+                ? Loc.Format("mods_join_primary_dl", FormatBytes(download))
+                : Loc.Get("mods_join_primary"),
+            DownloadBytes = plan.Count > 0 ? download : -1,
+            NeededBytes = ModSpace.Needed(download),
+            FreeBytes = FreeBytes(root),
+        });
+        if (!ok)
+        {
+            SetBrowserStatus(Loc.Get("mods_join_cancelled"));
+            return false;
+        }
+
+        if (plan.Count > 0)
+        {
+            var items = EnqueueSteps(root, plan, Loc.Get("mods_reason_server"));
+            SetBrowserStatus(Loc.Format("mods_join_waiting", items.Count));
+            var results = await Task.WhenAll(items.Select(i => i.Completion.Task)).ConfigureAwait(true);
+            if (results.Any(r => !r))
             {
-                await InstallPlanAsync(root, plan, progress: null, SetBrowserStatus).ConfigureAwait(true);
-            }
-            catch (Exception ex)
-            {
-                SetBrowserStatus(Loc.Format("mods_install_failed", ex.Message));
+                SetBrowserStatus(Loc.Get("mods_join_install_failed"));
                 MessageBox.Show(
                     this,
-                    Loc.Format("mods_install_failed", ex.Message),
+                    Loc.Get("mods_join_install_failed"),
                     Loc.Get("mods_join_missing_title"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 return false;
             }
 
-            var nowEnabled = new HashSet<string>(ModsStore.EnabledIds(root), StringComparer.OrdinalIgnoreCase);
+            var nowEnabled = new HashSet<string>(
+                ModsStore.Discover(root).Where(m => m.Enabled).Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
+            nowEnabled.UnionWith(turnedOff);
             var stillMissing = required.Where(id => !nowEnabled.Contains(id)).ToList();
             if (stillMissing.Count > 0)
             {
@@ -910,41 +1723,17 @@ public partial class MainWindow
             _sessionModsForceRelaunch = true;
         }
 
-        if (allowed.Count == 0)
-            return true;
-
-        var allowedSet = new HashSet<string>(allowed, StringComparer.OrdinalIgnoreCase);
-        foreach (var id in required)
-            allowedSet.Add(id);
-
-        try
+        if (turnedOff.Count > 0 || extras.Count > 0)
         {
-            enabled = ModsStore.EnabledIds(root);
-        }
-        catch (Exception ex)
-        {
-            SetBrowserStatus(ex.Message);
-            return false;
+            var keep = new HashSet<string>(
+                ModsStore.Discover(root).Where(m => m.Enabled).Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
+            keep.UnionWith(turnedOff);
+            keep.ExceptWith(extras);
+            if (!TryBeginSessionModsFilter(root, keep))
+                return false;
+            _sessionModsForceRelaunch = true;
         }
 
-        var extras = enabled.Where(id => !allowedSet.Contains(id)).ToList();
-        if (extras.Count == 0)
-            return true;
-
-        var filterAsk = MessageBox.Show(
-            this,
-            Loc.Format("mods_join_filter", string.Join("\n", extras)),
-            Loc.Get("mods_join_filter_title"),
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question,
-            MessageBoxResult.No);
-        if (filterAsk != MessageBoxResult.Yes)
-            return false;
-
-        if (!TryBeginSessionModsFilter(root, allowedSet))
-            return false;
-
-        _sessionModsForceRelaunch = true;
         return true;
     }
 

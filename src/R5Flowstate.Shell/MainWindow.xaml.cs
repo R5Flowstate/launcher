@@ -66,6 +66,7 @@ public partial class MainWindow : Window
     private bool _clientGoneArmed;
     private bool _handlingServerCrash;
     private int _crashPromptPosted;
+    private bool _clientLostWarned;
     private string? _pendingCrashExcerpt;
     private HostedServerFault _pendingFault;
     private string? _pendingClientMessage;
@@ -249,7 +250,7 @@ public partial class MainWindow : Window
                 _settings.OfflineNoAuth = false;
             if (ChkSimpleOffline is not null)
                 ChkSimpleOffline.IsChecked = _settings.OfflineNoAuth;
-            ApplyOfflineNameVisibility();
+            SyncOfflineNameText();
             if (ChkDediOnline is not null)
                 ChkDediOnline.IsChecked = _settings.DediHostOnline;
             SyncDeveloperChecks();
@@ -264,6 +265,9 @@ public partial class MainWindow : Window
                 ChkJoinWithoutDev.IsChecked = _settings.JoinWithoutDev;
             if (ChkKeepLocalFiles is not null)
                 ChkKeepLocalFiles.IsChecked = _settings.KeepLocalFiles;
+            if (ChkJoinPlaytests is not null)
+                ChkJoinPlaytests.IsChecked = _settings.JoinPlaytests;
+            ApplyRingSwitch();
             if (ChkUseDx12 is not null)
                 ChkUseDx12.IsChecked = _settings.UseDx12;
             if (ChkClientDx12 is not null)
@@ -762,10 +766,7 @@ public partial class MainWindow : Window
 
     bool ChannelIsLocal()
     {
-        var configured = Environment.GetEnvironmentVariable(ChannelSource.ChannelUrlEnvVar)
-                         ?? _settings.ChannelUrl;
-        if (string.IsNullOrWhiteSpace(configured))
-            configured = ProductConstants.DefaultChannelUrl;
+        var configured = EffectiveChannelUrl();
         return !string.IsNullOrWhiteSpace(configured) && ChannelSource.LooksLocal(configured);
     }
 
@@ -819,13 +820,15 @@ public partial class MainWindow : Window
         return false;
     }
 
+    // The offline fallback reads this cache, so each ring keeps its own: a
+    // playtester who goes offline must not fall back to the live tip.
     string ChannelCacheDir() =>
         Path.Combine(
             string.IsNullOrWhiteSpace(TxtInstallRoot.Text)
                 ? Path.GetTempPath()
                 : TxtInstallRoot.Text.Trim(),
             ProductConstants.ContentCacheDirName,
-            "channel");
+            _settings.JoinPlaytests ? "channel-playtest" : "channel");
 
     /// <summary>
     /// Synchronous, disk-only manifest recovery for paths that cannot await
@@ -856,10 +859,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            var configured = Environment.GetEnvironmentVariable(ChannelSource.ChannelUrlEnvVar)
-                             ?? _settings.ChannelUrl;
-            if (string.IsNullOrWhiteSpace(configured))
-                configured = ProductConstants.DefaultChannelUrl;
+            var configured = EffectiveChannelUrl();
             if (!string.IsNullOrWhiteSpace(configured))
             {
                 try
@@ -874,6 +874,7 @@ public partial class MainWindow : Window
                     }).ConfigureAwait(true);
                     _manifest = manifest;
                     InvalidateHealthMemo();
+                    ApplyRingBadge();
                     var remoteGate = _manifest.EffectiveGateName;
                     TxtIdentity.Text =
                         $"gate={remoteGate}  client={_manifest.Client?.CatalogVersion ?? "-"}  " +
@@ -944,10 +945,7 @@ public partial class MainWindow : Window
         if (_installBusy || _verifyBusy)
             return;
 
-        var configured = Environment.GetEnvironmentVariable(ChannelSource.ChannelUrlEnvVar)
-                         ?? _settings.ChannelUrl;
-        if (string.IsNullOrWhiteSpace(configured))
-            configured = ProductConstants.DefaultChannelUrl;
+        var configured = EffectiveChannelUrl();
         if (string.IsNullOrWhiteSpace(configured))
             return;
 
@@ -2386,6 +2384,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        ReloadCatalogIfModsChanged();
         var playlist = SelectedPlaylistId();
         if (string.IsNullOrWhiteSpace(playlist))
             playlist = "survival_dev";
@@ -2818,7 +2817,7 @@ public partial class MainWindow : Window
     {
         SetCheckSilently(ChkSimpleOffline, on);
         _settings.OfflineNoAuth = on;
-        ApplyOfflineNameVisibility();
+        SyncOfflineNameText();
         try { SettingsStore.Save(_settings); }
         catch (Exception ex) { Log($"Settings save failed: {ex.Message}"); }
         RefreshArgPreviews();
@@ -3486,6 +3485,7 @@ public partial class MainWindow : Window
         _playLocalOwnsClient = true;
         _handlingServerCrash = false;
         Interlocked.Exchange(ref _crashPromptPosted, 0);
+        _clientLostWarned = false;
         _pendingCrashExcerpt = null;
         _pendingFault = HostedServerFault.Crashed;
         _pendingClientMessage = null;
@@ -3596,7 +3596,7 @@ public partial class MainWindow : Window
     {
         if (_windowClosing || !_hostedLocalMatch || _changeMapBusy || _pendingChangeMap is not null)
             return;
-        if (Volatile.Read(ref _crashPromptPosted) != 0)
+        if (_clientLostWarned || Volatile.Read(ref _crashPromptPosted) != 0)
             return;
 
         var root = TxtInstallRoot.Text.Trim();
@@ -3607,7 +3607,8 @@ public partial class MainWindow : Window
             var answers = dediAlive && rcon is not null && rcon.Ping(TimeSpan.FromSeconds(3)).Ok;
             Dispatcher.BeginInvoke(() =>
             {
-                if (_windowClosing || !_hostedLocalMatch || Volatile.Read(ref _crashPromptPosted) != 0)
+                if (_windowClosing || !_hostedLocalMatch || _clientLostWarned
+                    || Volatile.Read(ref _crashPromptPosted) != 0)
                     return;
                 _pendingClientMessage = message;
                 _pendingCrashExcerpt = RecentScriptError();
@@ -3931,7 +3932,8 @@ public partial class MainWindow : Window
             _handlingServerCrash = false;
             _pendingCrashExcerpt = null;
             _pendingClientMessage = null;
-            Interlocked.Exchange(ref _crashPromptPosted, 0);
+            // The client logs its error dialog more than once; one warning per match.
+            _clientLostWarned = true;
             body = Loc.Format("warn_client_lost_server", clientMessage ?? string.Empty);
         }
         else
@@ -3975,6 +3977,9 @@ public partial class MainWindow : Window
         finally
         {
             Topmost = wasTop;
+            // Re-armed only after the dialog closes, or its own message pump re-enters here.
+            if (fault == HostedServerFault.ClientLost)
+                Interlocked.Exchange(ref _crashPromptPosted, 0);
         }
     }
 
@@ -4139,6 +4144,8 @@ public partial class MainWindow : Window
             BtnTabSettings.Visibility = headerTools;
         if (BtnHeaderOpenFolder is not null)
             BtnHeaderOpenFolder.Visibility = headerTools;
+        if (HdrRingSwitch is not null)
+            HdrRingSwitch.Visibility = headerTools;
         RefreshHeaderSubtitle();
 
         if (simple)
@@ -4325,6 +4332,7 @@ public partial class MainWindow : Window
                         SetSimpleStatus(Loc.Get("status_install_first"));
                         return;
                     }
+                    ReloadCatalogIfModsChanged();
                     if (_selectedMode is null)
                     {
                         SetSimpleStatus(Loc.Get("status_pick_mode"));
@@ -4350,6 +4358,7 @@ public partial class MainWindow : Window
         RefreshSimplePlayButton(health);
         if (!health.IsReady)
             return;
+        ReloadCatalogIfModsChanged();
         if (_selectedMode is null)
         {
             SetSimpleStatus(Loc.Get("status_pick_mode"));
@@ -6119,7 +6128,7 @@ public partial class MainWindow : Window
     /// manifest are all decimal; showing GiB under a "GB" label made the same
     /// install read 37.7 here and 40.5 everywhere else.
     /// </summary>
-    static string FormatBytes(long n)
+    internal static string FormatBytes(long n)
     {
         if (n < 1000)
             return Loc.Format("size_b", n);
@@ -6135,14 +6144,14 @@ public partial class MainWindow : Window
         return Loc.Format(keys[u], num);
     }
 
-    static string FormatRate(double bytesPerSec)
+    internal static string FormatRate(double bytesPerSec)
     {
         if (bytesPerSec < 1000)
             return Loc.Format("rate_bs", Loc.Format("size_b", $"{bytesPerSec:0}"));
         return Loc.Format("rate_bs", FormatBytes((long)bytesPerSec));
     }
 
-    static string FormatEta(double seconds)
+    internal static string FormatEta(double seconds)
     {
         if (seconds < 60)
             return Loc.Format("eta_s", $"{seconds:0}");

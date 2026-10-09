@@ -148,6 +148,8 @@ public static class ModsStore
             var hasScripts = SafePath.TryJoin(joined, ScriptsRsonRelative, out var rson) && File.Exists(rson);
 
             var tsVersion = string.Empty;
+            var tsFullName = string.Empty;
+            IReadOnlyList<string> deps = Array.Empty<string>();
             if (SafePath.TryJoin(joined, ManifestFileName, out var manPath) && File.Exists(manPath))
             {
                 // Same size cap as the catalog install path; this runs on every mods refresh.
@@ -155,15 +157,27 @@ public static class ModsStore
                 if (man is null)
                     skipped?.Add($"folder '{folderName}': {ManifestFileName} is unreadable, malformed or over {MaxManifestBytes / 1024} KiB");
                 else
+                {
                     tsVersion = man.VersionNumber ?? string.Empty;
+                    tsFullName = folderName;
+                    deps = (man.Dependencies ?? new List<string>())
+                        .Where(d => !string.IsNullOrWhiteSpace(d) && d.Length <= 256)
+                        .Take(64)
+                        .ToList();
+                }
             }
 
             var enabled = !enabledById.TryGetValue(id, out var listed) || listed;
+            var nameSpace = ModOwnership.Namespace(id);
+            var maps = ModOwnership.ReadMaps(doc, nameSpace, out _) ?? Array.Empty<string>();
             var replaces = new List<string>();
             foreach (var table in ModOwnership.ReadDatatableOverrides(doc, out _) ?? Array.Empty<string>())
                 replaces.Add("datatable " + table);
             foreach (var token in ModOwnership.ReadLocalizationOverrides(doc, out _) ?? Array.Empty<string>())
-                replaces.Add("text " + token);
+            {
+                if (!ModOwnership.OwnsLocKey(nameSpace, maps, token))
+                    replaces.Add("text " + token);
+            }
             found.Add(new InstalledMod
             {
                 FolderName = folderName,
@@ -178,9 +192,10 @@ public static class ModsStore
                 HasScripts = hasScripts,
                 IconPath = iconPath,
                 ThunderstoreVersion = tsVersion,
-                ThunderstoreFullName = folderName,
+                ThunderstoreFullName = tsFullName,
+                Dependencies = deps,
                 Replaces = replaces,
-                Maps = ModOwnership.ReadMaps(doc, ModOwnership.Namespace(id), out _) ?? Array.Empty<string>(),
+                Maps = maps,
             });
         }
 
@@ -201,6 +216,115 @@ public static class ModsStore
             found[i].Order = i;
 
         return found;
+    }
+
+    public const string StagingPrefix = ".__mod_";
+    public const string BackupPrefix = ".__old_";
+
+    /// <summary>
+    /// Deletes install leftovers (staging zips and folders, replaced copies) that a crash or a
+    /// killed launcher left in mods/. Only entries older than <paramref name="minAge"/> go, so an
+    /// install running in another process keeps its staging.
+    /// </summary>
+    public static int SweepStaging(string installPath, TimeSpan minAge)
+    {
+        string modsDir;
+        try
+        {
+            modsDir = ModsDirectory(installPath);
+        }
+        catch
+        {
+            return 0;
+        }
+
+        if (!Directory.Exists(modsDir))
+            return 0;
+
+        var cutoff = DateTime.UtcNow - minAge;
+        var removed = 0;
+        IEnumerable<string> entries;
+        try
+        {
+            entries = Directory.EnumerateFileSystemEntries(modsDir).ToList();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return 0;
+        }
+
+        foreach (var path in entries)
+        {
+            var name = Path.GetFileName(path);
+            if (!name.StartsWith(StagingPrefix, StringComparison.Ordinal) &&
+                !name.StartsWith(BackupPrefix, StringComparison.Ordinal))
+                continue;
+            if (!SafePath.TryJoin(modsDir, name, out var full) ||
+                !string.Equals(full, Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            try
+            {
+                if (IsReparsePoint(full))
+                    continue;
+                if (Directory.Exists(full))
+                {
+                    if (Directory.GetLastWriteTimeUtc(full) > cutoff)
+                        continue;
+                    DeleteDirectoryNoReparse(full);
+                }
+                else if (File.Exists(full))
+                {
+                    if (File.GetLastWriteTimeUtc(full) > cutoff)
+                        continue;
+                    File.SetAttributes(full, FileAttributes.Normal);
+                    File.Delete(full);
+                }
+                else
+                {
+                    continue;
+                }
+
+                removed++;
+            }
+            catch
+            {
+                // Still in use; the next sweep gets it.
+            }
+        }
+
+        return removed;
+    }
+
+    /// <summary>Bytes under one mod folder; stops counting past <paramref name="maxFiles"/> files.</summary>
+    public static long FolderSizeBytes(string installPath, string folderName, int maxFiles = 20000)
+    {
+        try
+        {
+            var modsDir = ModsDirectory(installPath);
+            if (!SafePath.TryJoin(modsDir, folderName, out var dir) || !Directory.Exists(dir) || IsReparsePoint(dir))
+                return 0;
+            long total = 0;
+            var count = 0;
+            var opts = new EnumerationOptions
+            {
+                RecurseSubdirectories = true,
+                AttributesToSkip = FileAttributes.ReparsePoint,
+                IgnoreInaccessible = true,
+            };
+            foreach (var file in new DirectoryInfo(dir).EnumerateFiles("*", opts))
+            {
+                total += file.Length;
+                if (++count >= maxFiles)
+                    break;
+            }
+
+            return total;
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     public static void SetEnabled(string installPath, string id, bool enabled)

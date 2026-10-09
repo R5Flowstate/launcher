@@ -75,6 +75,7 @@
   "tip_github": "GitHub",
   "tip_update": "La mise à jour du launcher se télécharge en arrière-plan",
   "tip_offline_name": "Votre nom dans les parties hors ligne. Lettres, chiffres, - et _ uniquement (32 max).",
+  "label_offline_name": "Nom hors ligne",
   "tip_refresh_servers": "Recharger la liste des serveurs publics",
   "tip_refresh_lb": "Recharger le classement 1v1",
   "tip_stop": "Quitter la partie en cours",
@@ -571,7 +572,7 @@
   "mode_blurb.fs_scenarios": "Combats d'escouades avec légendes, butin et un anneau qui se referme.",
   "mode_blurb.control": "Neuf contre neuf sur trois zones. Tenez-les pour marquer ; premier à 1000.",
   "mode_blurb.tdm": "Deux équipes de six. Premier à 50 éliminations.",
-  "mode_blurb.ffa": "Chacun pour soi. Premier à 30 éliminations.",
+  "mode_blurb.ffa": "Chacun pour soi. Le plus d'éliminations à la fin du chrono remporte la manche.",
   "mode_blurb.btdm": "Match à mort en douze contre douze. Premier à 60 éliminations.",
   "mode_blurb.gungame": "Quatre escouades de trois enchaînent 25 armes. La dernière est un couteau de lancer.",
   "mode_blurb.lockdown": "Quatre escouades se disputent une zone ouverte à la fois. Premier à 500 points.",
@@ -764,5 +765,10 @@
   "replays_gb": "{0} Go",
   "replays_launch_failed": "Impossible de lancer le jeu.",
   "replays_today": "Aujourd'hui",
-  "replays_yesterday": "Hier"
+  "replays_yesterday": "Hier",
+  "join_playtests": "Join playtests",
+  "tip_join_playtests": "Get builds before they go live and help test them. Playtest servers are separate from live servers. Turn off to go back to the live version.",
+  "playtest_badge": "PLAYTEST",
+  "playtest_confirm_on": "Playtest builds are unfinished and can break. You will only see playtest servers until you turn this off. Switch to the playtest version?",
+  "playtest_busy": "Close the game and wait for downloads to finish before switching between playtest and live."
 }
