@@ -233,7 +233,7 @@ public partial class MainWindow : Window
             }
             Loc.LanguageChanged += OnLocLanguageChanged;
 
-            AdoptRequestedBuildAtStartup();
+            PromoteS30AtStartup(AdoptRequestedBuildAtStartup());
 
             if (Application.Current is App app &&
                 !string.IsNullOrWhiteSpace(app.CliInstallRoot) &&
@@ -1938,6 +1938,7 @@ public partial class MainWindow : Window
 
         PersistSettingsFromUi();
         var installPath = ReadInstallPathBox();
+        var removeS21 = false;
         if (string.IsNullOrWhiteSpace(installPath))
         {
             if (_settings.SimpleMode)
@@ -2045,6 +2046,7 @@ public partial class MainWindow : Window
                     ? "status_hd_unfinished"
                     : "ready_to_play"));
                 ReloadPlaylistsAndMaps(selectSaved: true);
+                removeS21 = ChkRemoveS21After?.IsChecked == true && ChkRemoveS21After.Visibility == Visibility.Visible;
             }
         }
         catch (OperationCanceledException)
@@ -2079,6 +2081,8 @@ public partial class MainWindow : Window
             RefreshInstallStateLabels();
             PaintInstallControls();
         }
+        if (removeS21)
+            await RemoveReplacedS21Async(installPath).ConfigureAwait(true);
     }
 
     private Progress<ContentInstallProgress> CreateInstallProgress() =>
@@ -5055,17 +5059,20 @@ public partial class MainWindow : Window
     {
         var busy = _installBusy;
         var paused = _installRun?.IsPaused == true;
+        var s30Setup = ActiveBuild == GameBuild.S30 && _simplePlayKind != SimplePlayKind.Repair;
         if (TxtSimpleSetupTitle is not null)
             TxtSimpleSetupTitle.Text = busy
                 ? Loc.Get(_contentRestore ? "restoring_the_game"
                     : _contentRepair ? "repairing_the_game"
                     : "installing_the_game")
                 : _verifyBusy ? Loc.Get("checking_the_game")
-                : Loc.Get(_simplePlayKind == SimplePlayKind.Repair ? "repair_the_game" : "install_the_game");
+                : Loc.Get(_simplePlayKind == SimplePlayKind.Repair ? "repair_the_game"
+                    : s30Setup ? "game_build_s30" : "install_the_game");
         if (TxtSimpleSetupKicker is not null)
             TxtSimpleSetupKicker.Text = busy || _verifyBusy
                 ? Loc.Get("hang_tight")
-                : Loc.Get(_simplePlayKind == SimplePlayKind.Repair ? "files_need_work" : "get_started");
+                : Loc.Get(_simplePlayKind == SimplePlayKind.Repair ? "files_need_work"
+                    : s30Setup ? "new_season" : "get_started");
         if (TxtSimpleSetupBlurb is not null)
             TxtSimpleSetupBlurb.Text = Loc.Get(
                 _simplePlayKind == SimplePlayKind.Repair ? "repair_blurb"
@@ -5080,6 +5087,7 @@ public partial class MainWindow : Window
                 : Visibility.Visible;
         if (BtnSimpleSetupInstall is not null)
             BtnSimpleSetupInstall.Visibility = busy ? Visibility.Collapsed : Visibility.Visible;
+        RefreshReplaceS21Option();
         if (BtnSimpleInstallPause is not null)
         {
             BtnSimpleInstallPause.Content = paused ? Loc.Get("resume") : Loc.Get("pause");

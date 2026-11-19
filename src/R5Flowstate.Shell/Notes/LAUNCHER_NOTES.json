@@ -4,6 +4,15 @@
   "entries": [
     {
       "date": "19 Nov 2026",
+      "title": "Launcher 0.1.66",
+      "items": [
+        "Open on the R5F 2.0 install screen until R5F 2.0 is installed",
+        "Install R5F 2.0 next to your Season 21 folder",
+        "Option to remove Season 21 once R5F 2.0 has installed, to free disk space"
+      ]
+    },
+    {
+      "date": "19 Nov 2026",
       "title": "Launcher 0.1.65",
       "items": [
         "Add a Season 21 / R5F 2.0 switch to the top bar",

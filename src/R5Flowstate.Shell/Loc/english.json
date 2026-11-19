@@ -1,6 +1,6 @@
 {
   "build_not_installed": "Not installed",
-  "setup_blurb_s30": "R5Flowstate is an open source project that brings private servers to the Apex Legends S30 retail build.",
+  "setup_blurb_s30": "Season 30.1, 120 Hz servers, S31 weapons with Akimbo Wingman, breachable glass, mantle boost and 3 new maps. Installs in its own folder.",
   "s30_not_available": "Season 30.1 is not available to download yet.",
   "map_previous": "Previous map",
   "map_next": "Next map",
@@ -956,6 +956,9 @@
   "ring_live": "LIVE",
   "badge_beta": "Beta",
   "badge_new": "NEW",
+  "new_season": "NEW SEASON",
+  "remove_s21_after": "Remove Season 21 after R5F 2.0 installs (frees {0})",
+  "tip_remove_s21_after": "Deletes the Season 21 game folder once R5F 2.0 has finished installing. Your launcher settings stay.",
   "bar_group_server": "SERVER",
   "label_tick_rate": "Tick rate",
   "tip_tick_rate": "How many times a second the server runs the match. 20 Hz is the original netcode. 60 and 120 Hz use the overhauled netcode: less delay, more CPU. Also applies to matches started from the in-game lobby.",

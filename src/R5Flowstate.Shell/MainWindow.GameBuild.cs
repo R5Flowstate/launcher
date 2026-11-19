@@ -132,6 +132,7 @@ public partial class MainWindow
         RowAdvTickRate.Visibility = s30Only;
         RefreshPlayPills();
         RefreshArgPreviews();
+        RefreshReplaceS21Option();
     }
 
     /// <summary>The rate this launch uses; the saved pick only applies to R5F 2.0.</summary>
@@ -177,10 +178,16 @@ public partial class MainWindow
         }
         else
         {
-            ApplyNewInstallFolder(DefaultFolderFor(want));
+            ApplyNewInstallFolder(NewFolderFor(want, current));
         }
         SyncGameBuild(ReadInstallPathBox());
     }
+
+    /// <summary>R5F 2.0 goes next to an existing Season 21 folder, so it lands on the drive the player already chose.</summary>
+    static string NewFolderFor(GameBuild want, string current) =>
+        want == GameBuild.S30 && IsBuildFolder(current, GameBuild.S21)
+            ? current.Trim().TrimEnd('\\', '/') + " S30"
+            : DefaultFolderFor(want);
 
     static string DefaultFolderFor(GameBuild build) =>
         build == GameBuild.S30 ? SettingsStore.DefaultInstallPath.TrimEnd('\\', '/') + " S30" : SettingsStore.DefaultInstallPath;
@@ -196,10 +203,12 @@ public partial class MainWindow
         Loc.Get(build == GameBuild.S30 ? "game_build_s30" : "game_build_s21");
 
     /// <summary>--build on a cold start: moves to the remembered folder before the window first paints.</summary>
-    void AdoptRequestedBuildAtStartup()
+    bool AdoptRequestedBuildAtStartup()
     {
-        if (!GameBuildLink.TakePending(out var want) || BuildOf(_settings.InstallPath) == want)
-            return;
+        if (!GameBuildLink.TakePending(out var want))
+            return false;
+        if (BuildOf(_settings.InstallPath) == want)
+            return true;
 
         var target = want == GameBuild.S30 ? _settings.S30InstallPath : _settings.S21InstallPath;
         if (IsBuildFolder(target, want))
@@ -212,6 +221,7 @@ public partial class MainWindow
             if (!NeedsSetup(_settings.InstallPath) || GameBuilds.IsS30(_settings.InstallPath))
                 _settings.InstallPath = DefaultFolderFor(want);
         }
+        return true;
     }
 
     /// <summary>--build on a second start; the switch asks for a folder when none is remembered.</summary>

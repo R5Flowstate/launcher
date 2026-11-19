@@ -1744,6 +1744,11 @@
                           <TextBlock x:Name="TxtSimpleInstallSize" FontSize="13"
                                      Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap"
                                      Text="{loc:T checking_size}"/>
+                          <CheckBox x:Name="ChkRemoveS21After" Margin="0,14,0,0" Visibility="Collapsed" IsChecked="True"
+                                    ToolTip="{loc:T tip_remove_s21_after}">
+                            <TextBlock x:Name="TxtRemoveS21After" TextWrapping="Wrap" FontSize="13"
+                                       Foreground="{DynamicResource TextPrimary}"/>
+                          </CheckBox>
                           <Button x:Name="BtnSimpleSetupInstall"
                                   Style="{StaticResource PlayBarButton}"
                                   Content="{loc:T install}"
