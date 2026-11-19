@@ -946,6 +946,7 @@
   "mods_join_install_failed": "Un mod requis ne s'est pas installé. Voyez Gestionnaire de mods > Téléchargements pour la raison. La connexion a été annulée.",
   "ring_live": "PUBLIC",
   "badge_beta": "Bêta",
+  "badge_new": "NOUVEAU",
   "bar_group_server": "SERVEUR",
   "label_tick_rate": "Tickrate",
   "tip_tick_rate": "Nombre de fois par seconde où le serveur fait tourner la partie. 20 Hz est le netcode d'origine. 60 et 120 Hz utilisent le netcode remanié : moins de délai, plus de CPU. S'applique aussi aux parties lancées depuis le salon en jeu.",

@@ -994,6 +994,23 @@
                   Visibility="Collapsed"
                   Click="OnBrowserRefresh"
                   ToolTip="{loc:T tip_refresh_servers}"/>
+          <Border Style="{StaticResource SegmentBar}" Margin="0,0,10,0" ToolTip="{loc:T tip_game_build}">
+            <StackPanel Orientation="Horizontal">
+              <Button x:Name="BtnHdrS21" Style="{StaticResource HeaderSeasonSegment}"
+                      Content="{loc:T game_build_s21}" Click="OnPickBuildS21"/>
+              <Button x:Name="BtnHdrS30" Style="{StaticResource HeaderSeasonSegment}" Click="OnPickBuildS30"
+                      AutomationProperties.Name="{loc:T game_build_s30}">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="{loc:T game_build_s30}" VerticalAlignment="Center"/>
+                  <Border x:Name="BdgHdrS30New" Margin="8,0,0,0" Padding="5,0,5,1" CornerRadius="4"
+                          VerticalAlignment="Center" Background="{DynamicResource AccentBright}" Visibility="Collapsed">
+                    <TextBlock Text="{loc:T badge_new}" FontSize="10" FontWeight="Bold"
+                               Foreground="{DynamicResource PrimaryText}"/>
+                  </Border>
+                </StackPanel>
+              </Button>
+            </StackPanel>
+          </Border>
           <Button x:Name="BtnTabToolSettings"
                   Style="{StaticResource GhostButton}"
                   Width="36" Height="32" Padding="0"
@@ -1470,7 +1487,7 @@
                                StaysOpen="False" AllowsTransparency="True" Closed="OnShellPopupClosed">
                           <Border Style="{StaticResource PopupCard}" Width="330">
                             <StackPanel>
-                              <DockPanel Style="{StaticResource SettingRow}" ToolTip="{loc:T tip_tick_rate}">
+                              <DockPanel x:Name="RowPopTickRate" Style="{StaticResource SettingRow}" ToolTip="{loc:T tip_tick_rate}">
                                 <Border DockPanel.Dock="Right" Style="{StaticResource SegmentBar}">
                                   <StackPanel Orientation="Horizontal">
                                     <Button x:Name="BtnTick20" Style="{StaticResource TickSegment}" Content="20 Hz"
@@ -3183,7 +3200,7 @@
                                  LostFocus="OnArgsLostFocus" TextChanged="OnArgsTextChanged"/>
                       </Grid>
 
-                      <DockPanel Style="{StaticResource SettingRow}" MinHeight="42" ToolTip="{loc:T tip_tick_rate}">
+                      <DockPanel x:Name="RowAdvTickRate" Style="{StaticResource SettingRow}" MinHeight="42" ToolTip="{loc:T tip_tick_rate}">
                         <Border DockPanel.Dock="Right" Style="{StaticResource SegmentBar}">
                           <StackPanel Orientation="Horizontal">
                             <Button x:Name="BtnAdvTick20" Style="{StaticResource TickSegment}" Content="20 Hz"

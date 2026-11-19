@@ -946,6 +946,7 @@
   "mods_join_install_failed": "一個必要模組沒有安裝。原因見模組管理員 > 下載。已取消加入。",
   "ring_live": "正式",
   "badge_beta": "測試",
+  "badge_new": "新",
   "bar_group_server": "伺服器",
   "label_tick_rate": "Tick 率",
   "tip_tick_rate": "伺服器每秒執行比賽的次數。20 Hz 為原版網路程式碼。60 和 120 Hz 使用重製的網路程式碼：延遲更低，CPU 佔用更高。也適用於從遊戲內大廳開始的比賽。",

@@ -67,7 +67,7 @@ public partial class MainWindow
         var args = BuildClientArgs(includeConnect: false).ToList();
         args.Add("-local_boot");
         args.Add("-local_tickrate");
-        args.Add(_settings.TickRate.ToString(CultureInfo.InvariantCulture));
+        args.Add(EffectiveTickRate.ToString(CultureInfo.InvariantCulture));
         if (_settings.Cheats)
         {
             args.Add("-local_cheats");

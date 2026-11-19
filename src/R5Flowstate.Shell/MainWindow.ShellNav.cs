@@ -261,7 +261,7 @@ public partial class MainWindow
     {
         if (TxtPillServer is null || _settings is null)
             return;
-        TxtPillServer.Text = _settings.TickRate + " Hz";
+        TxtPillServer.Text = EffectiveTickRate + " Hz";
         ChipCheats.Visibility = ChkSimpleCheats.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         ChipPassword.Visibility = ChkSimplePassword.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         ChipDeveloper.Visibility = ChkSimpleDeveloper.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
@@ -282,7 +282,7 @@ public partial class MainWindow
         PopServer.IsOpen = false;
         PopGame.IsOpen = false;
         var map = !string.IsNullOrWhiteSpace(_liveMap) ? MapDisplayName(_liveMap) : _selectedMode?.SelectedMap?.DisplayName;
-        var tick = _settings.TickRate + " Hz";
+        var tick = EffectiveTickRate + " Hz";
         TxtPlayLiveDetail.Text = string.IsNullOrWhiteSpace(map) ? tick : map + ", " + tick;
     }
 

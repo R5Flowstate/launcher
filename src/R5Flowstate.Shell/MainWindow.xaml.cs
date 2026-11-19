@@ -3402,7 +3402,7 @@ public partial class MainWindow : Window
             Width = _settings.ClientWidth,
             Height = _settings.ClientHeight,
             WindowMode = _settings.ClientWindowMode,
-            LocalMatchTickRate = _settings.TickRate,
+            LocalMatchTickRate = EffectiveTickRate,
             Disabled = raw ? null : ArgsEditor.ParseKeys(_settings.ClientDisabledArgs),
         });
     }
@@ -3435,7 +3435,7 @@ public partial class MainWindow : Window
             Password = password,
             Extra = raw ? string.Empty : TxtDediArgs.Text ?? string.Empty,
             ExtraTokens = BuildDediModPolicyTokens(),
-            TickRate = _settings.TickRate,
+            TickRate = EffectiveTickRate,
             Disabled = raw ? null : ArgsEditor.ParseKeys(_settings.DediDisabledArgs),
         });
     }

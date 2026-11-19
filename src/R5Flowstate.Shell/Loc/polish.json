@@ -946,6 +946,7 @@
   "mods_join_install_failed": "Wymagany mod nie został zainstalowany. Powód jest w Menedżer modów > Pobrania. Dołączenie anulowano.",
   "ring_live": "OFICJALNY",
   "badge_beta": "Beta",
+  "badge_new": "NOWE",
   "bar_group_server": "SERWER",
   "label_tick_rate": "Tickrate",
   "tip_tick_rate": "Ile razy na sekundę serwer przelicza mecz. 20 Hz to oryginalny netcode. 60 i 120 Hz używają przebudowanego netcode: mniejsze opóźnienie, większe użycie CPU. Dotyczy też meczów uruchamianych z lobby w grze.",

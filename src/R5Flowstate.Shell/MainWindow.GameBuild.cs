@@ -111,7 +111,8 @@ public partial class MainWindow
             radio.IsChecked = active == GameBuild.S30;
         _paintingBuild = false;
 
-        foreach (var (button, build) in new[] { (BtnServersS21, GameBuild.S21), (BtnServersS30, GameBuild.S30) })
+        foreach (var (button, build) in new[] { (BtnServersS21, GameBuild.S21), (BtnServersS30, GameBuild.S30),
+                     (BtnHdrS21, GameBuild.S21), (BtnHdrS30, GameBuild.S30) })
         {
             button.Background = build == active ? (Brush)FindResource("PrimaryFill") : Brushes.Transparent;
             button.Foreground = (Brush)FindResource(build == active ? "PrimaryText" : "TextMuted");
@@ -122,7 +123,19 @@ public partial class MainWindow
         RowUseDx12.Visibility = s21Only;
         RowClientDx12.Visibility = s21Only;
         RowJoinPlaytests.Visibility = s21Only;
+        BdgHdrS30New.Visibility = active != GameBuild.S30 && s30 == Loc.Get("build_not_installed")
+            ? Visibility.Visible : Visibility.Collapsed;
+
+        // Season 21 servers run only at the stock rate.
+        var s30Only = active == GameBuild.S30 ? Visibility.Visible : Visibility.Collapsed;
+        RowPopTickRate.Visibility = s30Only;
+        RowAdvTickRate.Visibility = s30Only;
+        RefreshPlayPills();
+        RefreshArgPreviews();
     }
+
+    /// <summary>The rate this launch uses; the saved pick only applies to R5F 2.0.</summary>
+    int EffectiveTickRate => ActiveBuild == GameBuild.S30 ? _settings.TickRate : TickRates.Stock;
 
     void OnPickBuildS21(object sender, RoutedEventArgs e) => OnBuildPicked(GameBuild.S21);
 

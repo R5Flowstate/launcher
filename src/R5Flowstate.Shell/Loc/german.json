@@ -946,6 +946,7 @@
   "mods_join_install_failed": "Ein erforderlicher Mod wurde nicht installiert. Den Grund siehst du unter Mod-Manager > Downloads. Der Beitritt wurde abgebrochen.",
   "ring_live": "STABIL",
   "badge_beta": "Beta",
+  "badge_new": "NEU",
   "bar_group_server": "SERVER",
   "label_tick_rate": "Tickrate",
   "tip_tick_rate": "Wie oft pro Sekunde der Server das Match berechnet. 20 Hz ist der ursprüngliche Netcode. 60 und 120 Hz nutzen den überarbeiteten Netcode: weniger Verzögerung, mehr CPU. Gilt auch für Matches aus der Lobby im Spiel.",

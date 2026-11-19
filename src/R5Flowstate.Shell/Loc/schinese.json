@@ -946,6 +946,7 @@
   "mods_join_install_failed": "一个必需模组没有安装。原因见模组管理器 > 下载。已取消加入。",
   "ring_live": "正式",
   "badge_beta": "测试",
+  "badge_new": "新",
   "bar_group_server": "服务器",
   "label_tick_rate": "Tick 率",
   "tip_tick_rate": "服务器每秒运行比赛的次数。20 Hz 为原版网络代码。60 和 120 Hz 使用重做的网络代码：延迟更低，CPU 占用更高。也适用于从游戏内大厅开始的比赛。",

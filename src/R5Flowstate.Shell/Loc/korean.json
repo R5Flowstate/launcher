@@ -946,6 +946,7 @@
   "mods_join_install_failed": "필요한 모드가 설치되지 않았습니다. 이유는 모드 관리자 > 다운로드에서 보세요. 참가가 취소되었습니다.",
   "ring_live": "정식",
   "badge_beta": "베타",
+  "badge_new": "NEW",
   "bar_group_server": "서버",
   "label_tick_rate": "틱레이트",
   "tip_tick_rate": "서버가 1초에 경기를 처리하는 횟수입니다. 20 Hz는 기존 넷코드입니다. 60 Hz와 120 Hz는 개선된 넷코드를 사용해 지연은 줄고 CPU 사용량은 늘어납니다. 게임 내 로비에서 시작한 경기에도 적용됩니다.",

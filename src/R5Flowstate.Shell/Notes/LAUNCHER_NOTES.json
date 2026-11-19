@@ -4,6 +4,14 @@
   "entries": [
     {
       "date": "19 Nov 2026",
+      "title": "Launcher 0.1.65",
+      "items": [
+        "Add a Season 21 / R5F 2.0 switch to the top bar",
+        "Season 21 servers always run at 20 Hz; 120 Hz is for R5F 2.0"
+      ]
+    },
+    {
+      "date": "19 Nov 2026",
       "title": "Launcher 0.1.64",
       "items": [
         "Add R5F 2.0 install and play",
