@@ -19,6 +19,11 @@ internal static class RpakFile
     public const ushort FlagOodle = 1 << 9;
     public const ushort FlagZstd = 1 << 15;
 
+    /// <summary>Whether Oodle-encoded paks can be read at all here, i.e. whether
+    /// oo2core_8_win64.dll is beside the launcher. Callers report this instead of
+    /// letting a retail pak look like a corrupt file.</summary>
+    public static bool OodleAvailable => OodleNative.IsAvailable;
+
     public static bool TryExtractUiia(string path, out UiiaAsset asset, out string? error)
     {
         asset = default;

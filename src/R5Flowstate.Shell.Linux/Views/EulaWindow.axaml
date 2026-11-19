@@ -1,0 +1,72 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:R5Flowstate.Shell.Linux"
+        x:Class="R5Flowstate.Shell.Linux.Views.EulaWindow"
+        Title="{loc:T eula_title}"
+        Height="560" Width="640" MinHeight="360" MinWidth="480"
+        Background="{StaticResource WindowBg}"
+        Foreground="{StaticResource TextPrimary}"
+        SystemDecorations="BorderOnly"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+  <Grid RowDefinitions="34,*">
+    <!-- Caption bar: draggable, themed like the shell. -->
+    <Border Grid.Row="0" Background="{StaticResource HeaderFill}"
+            BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,0,0,1"
+            PointerPressed="OnCaptionPointerPressed">
+      <DockPanel Margin="12,0,0,0">
+        <Button DockPanel.Dock="Right" Classes="caption-close" Content="&#x2715;"
+                Click="OnClose" ToolTip.Tip="{loc:T close}"/>
+        <TextBlock Text="{loc:T eula_title}" VerticalAlignment="Center"
+                   FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+      </DockPanel>
+    </Border>
+
+    <DockPanel Grid.Row="1" Margin="16">
+      <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+          <Button x:Name="BtnDecline" Content="{loc:T decline}" Width="96"
+                  Classes="ghost" Click="OnDecline"/>
+          <Button x:Name="BtnAccept" Content="{loc:T accept}" Width="110"
+                  Classes="primary" IsEnabled="False" Click="OnAccept"/>
+          <Button x:Name="BtnClose" Content="{loc:T close}" Width="96"
+                  Classes="ghost" Click="OnClose"/>
+        </StackPanel>
+        <TextBlock x:Name="TxtMeta" VerticalAlignment="Center"
+                   FontSize="12" Opacity="0.65" TextWrapping="Wrap"
+                   Foreground="{StaticResource TextMuted}"/>
+      </DockPanel>
+
+      <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+        <ComboBox x:Name="CmbLanguage" DockPanel.Dock="Right" Width="220"
+                  ToolTip.Tip="{loc:T tip_eula_lang}"
+                  SelectionChanged="OnLanguageChanged">
+          <ComboBox.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding Label}"/>
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <TextBlock x:Name="TxtTitle" Text="{loc:T legal_notice}"
+                   FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"
+                   TextWrapping="Wrap" Margin="0,0,12,0"
+                   Foreground="{StaticResource TextPrimary}"/>
+      </DockPanel>
+
+      <Border Background="{StaticResource SurfaceSunken}"
+              BorderBrush="{StaticResource BorderLine}" BorderThickness="1"
+              CornerRadius="4" Padding="10">
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+          <!-- VerticalContentAlignment=Top: Fluent centres single-line fields,
+               which reads as broken for a multi-paragraph legal body. -->
+          <TextBox x:Name="TxtBody" IsReadOnly="True" TextWrapping="Wrap"
+                   AcceptsReturn="True" MinHeight="160"
+                   VerticalContentAlignment="Top"
+                   Foreground="{StaticResource TextCode}" FontSize="13"
+                   Text="{loc:T loading}"/>
+        </ScrollViewer>
+      </Border>
+    </DockPanel>
+  </Grid>
+</Window>

@@ -1,0 +1,2486 @@
+<!-- Faithful Avalonia port of the Windows Shell MainWindow.xaml:
+     same layout tree, same x:Names, same Loc keys. WindowChrome → custom
+     caption strip (SystemDecorations=BorderOnly keeps native resize),
+     MDL2 glyphs → vector paths, keyed styles → classes, PasswordBox →
+     TextBox with PasswordChar, RichTextBox panes → read-only TextBox. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:R5Flowstate.Shell.Linux"
+        xmlns:views="using:R5Flowstate.Shell.Linux.Views"
+        x:Class="R5Flowstate.Shell.Linux.Views.MainWindow"
+        Title="R5Flowstate"
+        Height="737" Width="1099"
+        MinHeight="640" MinWidth="1080"
+        Background="{StaticResource WindowBg}"
+        Foreground="{StaticResource TextPrimary}"
+        WindowStartupLocation="CenterScreen"
+        KeyDown="OnWindowKeyDown"
+        SystemDecorations="BorderOnly">
+
+  <Window.Resources>
+
+    <DataTemplate x:Key="ServerRowTemplate">
+      <Border Background="{StaticResource SurfaceBg}"
+              CornerRadius="4" Padding="14,11" Margin="0,0,0,8">
+        <DockPanel>
+          <Button DockPanel.Dock="Left"
+                  Classes="favorite-star"
+                  Content="{Binding FavoriteGlyph}"
+                  VerticalAlignment="Center" Margin="0,0,12,0"
+                  Foreground="{Binding StarForeground}"
+                  Click="OnToggleFavorite"
+                  ToolTip.Tip="{loc:T tip_favorite}"/>
+          <Button DockPanel.Dock="Right"
+                  Classes="accent"
+                  Content="{Binding JoinCaption}"
+                  Width="84" Height="34" Margin="14,0,0,0"
+                  VerticalAlignment="Center"
+                  IsEnabled="{Binding JoinEnabled}"
+                  ToolTip.Tip="{Binding JoinHint}"
+                  Click="OnJoinServerClick"/>
+          <StackPanel VerticalAlignment="Center">
+            <DockPanel>
+              <Path DockPanel.Dock="Left" Width="12" Height="12" Margin="0,1,7,0"
+                    VerticalAlignment="Center" Stretch="Uniform"
+                    IsVisible="{Binding HasPassword}"
+                    Fill="{StaticResource TextSecondary}"
+                    Data="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"
+                    ToolTip.Tip="{loc:T tip_password}"/>
+              <Border DockPanel.Dock="Left" Margin="0,0,8,0" Padding="6,1" CornerRadius="3"
+                      Background="{StaticResource AccentDim}" VerticalAlignment="Center"
+                      IsVisible="{Binding HasModRequirement}"
+                      ToolTip.Tip="{Binding ModTooltip}">
+                <TextBlock Text="{Binding ModBadge}" FontSize="11" FontWeight="SemiBold"
+                           Foreground="{StaticResource AccentBright}"/>
+              </Border>
+              <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
+                         Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
+            <TextBlock Text="{Binding Detail}" FontSize="12"
+                       Margin="0,3,0,0" Foreground="{StaticResource TextMuted}"
+                       TextTrimming="CharacterEllipsis"/>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="ModRowTemplate">
+      <Border Background="{StaticResource SurfaceBg}"
+              CornerRadius="4" Padding="14,11" Margin="0,0,0,8">
+        <DockPanel>
+          <Button DockPanel.Dock="Right"
+                  Classes="danger-small"
+                  Content="{loc:T mods_uninstall}"
+                  MinWidth="88" Height="30" Margin="8,0,0,0"
+                  VerticalAlignment="Center"
+                  IsEnabled="{Binding ActionsEnabled}"
+                  Click="OnModUninstall"/>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                      VerticalAlignment="Center" Margin="8,0,0,0">
+            <Button Content="&#x25B2;" Width="30" Height="28" MinWidth="0"
+                    Padding="0" FontSize="10" Margin="0,0,4,0"
+                    Classes="ghost"
+                    IsEnabled="{Binding ActionsEnabled}"
+                    Click="OnModMoveUp"
+                    ToolTip.Tip="{loc:T mods_move_up}"/>
+            <Button Content="&#x25BC;" Width="30" Height="28" MinWidth="0"
+                    Padding="0" FontSize="10"
+                    Classes="ghost"
+                    IsEnabled="{Binding ActionsEnabled}"
+                    Click="OnModMoveDown"
+                    ToolTip.Tip="{loc:T mods_move_down}"/>
+          </StackPanel>
+          <CheckBox DockPanel.Dock="Right"
+                    Classes="quiet-check"
+                    Margin="10,0,0,0" VerticalAlignment="Center"
+                    IsChecked="{Binding Enabled}"
+                    IsEnabled="{Binding ActionsEnabled}"
+                    Click="OnModEnabledChanged"
+                    ToolTip.Tip="{loc:T mods_enable}"/>
+          <Grid DockPanel.Dock="Left" Width="36" Height="36" Margin="0,0,12,0"
+                VerticalAlignment="Center">
+            <Image Source="avares://R5Flowstate.Shell.Linux/Assets/logo.png" Opacity="0.28"
+                   Stretch="Uniform" IsHitTestVisible="False"/>
+            <Image Source="{Binding IconSource}" Stretch="UniformToFill"
+                   IsVisible="{Binding HasIcon}" IsHitTestVisible="False"/>
+          </Grid>
+          <StackPanel VerticalAlignment="Center">
+            <DockPanel>
+              <Border DockPanel.Dock="Right" Margin="8,0,0,0" Padding="6,1" CornerRadius="3"
+                      Background="{StaticResource UpdateFill}" VerticalAlignment="Center"
+                      IsVisible="{Binding HasUpdate}">
+                <TextBlock Text="{Binding UpdateLabel}" FontSize="11" FontWeight="SemiBold"
+                           Foreground="{StaticResource UpdateText}"/>
+              </Border>
+              <Border DockPanel.Dock="Right" Margin="8,0,0,0" Padding="6,1" CornerRadius="3"
+                      Background="{StaticResource DangerBg}" VerticalAlignment="Center"
+                      IsVisible="{Binding HasWarning}">
+                <TextBlock Text="{Binding WarningLabel}" FontSize="11" FontWeight="SemiBold"
+                           Foreground="{StaticResource DangerFg}"/>
+              </Border>
+              <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
+                         Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
+            <TextBlock Text="{Binding Detail}" FontSize="12"
+                       Margin="0,3,0,0" Foreground="{StaticResource TextMuted}"
+                       TextTrimming="CharacterEllipsis"/>
+            <TextBlock Text="{Binding ProgressText}" FontSize="11"
+                       Margin="0,3,0,0" Foreground="{StaticResource AccentBright}"
+                       IsVisible="{Binding HasProgress}"/>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="BrowseModRowTemplate">
+      <Border Background="{StaticResource SurfaceBg}"
+              CornerRadius="4" Padding="14,11" Margin="0,0,0,8">
+        <DockPanel>
+          <Button DockPanel.Dock="Right"
+                  Classes="accent"
+                  Content="{Binding InstallCaption}"
+                  Width="96" Height="34" Margin="14,0,0,0"
+                  VerticalAlignment="Center"
+                  IsEnabled="{Binding InstallEnabled}"
+                  Click="OnBrowseModInstall"/>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
+                       Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
+            <TextBlock Text="{Binding Detail}" FontSize="12"
+                       Margin="0,3,0,0" Foreground="{StaticResource TextMuted}"
+                       TextWrapping="Wrap"/>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="PatchNoteRowTemplate">
+      <Border BorderBrush="{StaticResource BorderLine}" BorderThickness="2,0,0,0"
+              Background="Transparent" Padding="16,12,16,14" Margin="0,0,0,16">
+        <StackPanel>
+          <DockPanel Margin="0,0,0,2">
+            <TextBlock DockPanel.Dock="Right" FontSize="12" Foreground="{StaticResource TextMuted}"
+                       VerticalAlignment="Center" Margin="12,0,0,0"
+                       Text="{Binding Date}"/>
+            <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold"
+                       Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
+          </DockPanel>
+          <Rectangle Height="1" Fill="{StaticResource BorderSoft}" Margin="0,8,0,0"/>
+          <ItemsControl ItemsSource="{Binding Items}" Margin="0,10,0,0">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <DockPanel Margin="0,0,0,6">
+                  <Rectangle DockPanel.Dock="Left" Width="5" Height="5" RadiusX="1" RadiusY="1"
+                             Margin="1,6,10,0" VerticalAlignment="Top"
+                             Fill="{StaticResource Accent}"
+                             IsVisible="{Binding !IsHeader}"/>
+                  <TextBlock Text="{Binding Text}" FontSize="13"
+                             Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"
+                             Margin="0,0,0,0"
+                             FontWeight="{Binding IsHeader, Converter={x:Static loc:HeaderWeightConverter.Instance}}"/>
+                </DockPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="BlogCardTemplate">
+      <Border x:Name="Card" Classes="card" CornerRadius="10" Margin="0,0,0,10" Cursor="Hand"
+              ClipToBounds="True" Focusable="True"
+              Tag="{Binding}"
+              Tapped="OnBlogCardClick" KeyDown="OnBlogCardKey"
+              ToolTip.Tip="{Binding Title}">
+        <Border.Styles>
+          <Style Selector="Border.card">
+            <Setter Property="Background" Value="{StaticResource SurfaceRaised}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderSoft}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+          </Style>
+          <Style Selector="Border.card:pointerover">
+            <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+          </Style>
+        </Border.Styles>
+        <StackPanel>
+          <Border Height="170" ClipToBounds="True" Background="{StaticResource SurfaceSunken}"
+                  IsVisible="{Binding HasCover}">
+            <Grid>
+              <TextBlock Text="R5" FontSize="22" FontWeight="Bold"
+                         Foreground="{StaticResource AccentTrack}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              <Image Source="{Binding CoverImage}" Stretch="UniformToFill"
+                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                     IsVisible="{Binding HasCoverImage}"/>
+            </Grid>
+          </Border>
+          <StackPanel Margin="20,14,20,16">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,6">
+              <Border Padding="8,2" CornerRadius="4" Margin="0,0,8,0"
+                      Background="{StaticResource AccentDim}"
+                      IsVisible="{Binding HasTag}">
+                <TextBlock Text="{Binding Tag}" FontSize="10" FontWeight="SemiBold"
+                           Foreground="{StaticResource AccentBright}" VerticalAlignment="Center"/>
+              </Border>
+              <TextBlock Text="{Binding Date}" FontSize="11"
+                         Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"/>
+            </StackPanel>
+            <TextBlock Text="{Binding Title}" FontSize="17" FontWeight="SemiBold"
+                       Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap" TextAlignment="Center"
+                       MaxHeight="42" TextTrimming="WordEllipsis"/>
+            <TextBlock Text="{Binding Summary}" FontSize="12.5" Margin="0,6,0,0"
+                       Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" TextAlignment="Center"
+                       MaxHeight="30" TextTrimming="WordEllipsis"
+                       IsVisible="{Binding HasSummary}"/>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="LeaderboardRowTemplate">
+      <Border Classes="card" CornerRadius="4" Padding="12,9" Margin="0,0,0,6" Cursor="Hand"
+              Tag="{Binding}"
+              Tapped="OnLeaderboardRowClick"
+              ToolTip.Tip="{Binding Persona}">
+        <Border.Styles>
+          <Style Selector="Border.card">
+            <!-- AccentDim while this row's profile is open (the Windows template
+                 does it with a DataTrigger on IsSelected). -->
+            <Setter Property="Background" Value="{Binding RowBackground}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,9"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+          </Style>
+          <Style Selector="Border.card:pointerover">
+            <Setter Property="Background" Value="{StaticResource SurfaceRaised}"/>
+          </Style>
+        </Border.Styles>
+        <Grid MinWidth="1024" ColumnDefinitions="52,*,58,36,36,46,54,50,76,40,36,44,44,48,50,44">
+          <TextBlock Grid.Column="0" Text="{Binding RankLabel}" FontFamily="{StaticResource Mono}" FontSize="12"
+                     TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0"
+                     Foreground="{Binding RankForeground}" FontWeight="{Binding RankWeight}"/>
+          <TextBlock Grid.Column="1" Text="{Binding Persona}" FontSize="13" FontWeight="SemiBold"
+                     Foreground="{Binding PersonaForeground}" TextTrimming="CharacterEllipsis"
+                     VerticalAlignment="Center" Margin="4,0,8,0"/>
+          <TextBlock Grid.Column="2" Text="{Binding ScoreLabel}" FontFamily="{StaticResource Mono}" FontSize="12"
+                     Foreground="{StaticResource TextPrimary}" TextAlignment="Right" VerticalAlignment="Center"/>
+          <TextBlock Grid.Column="3" Text="{Binding KillsLabel}" FontFamily="{StaticResource Mono}" FontSize="12"
+                     Foreground="{StaticResource TextSecondary}" TextAlignment="Right" VerticalAlignment="Center"/>
+          <TextBlock Grid.Column="4" Text="{Binding DeathsLabel}" FontFamily="{StaticResource Mono}" FontSize="12"
+                     Foreground="{StaticResource TextSecondary}" TextAlignment="Right" VerticalAlignment="Center"/>
+          <TextBlock Grid.Column="5" Text="{Binding KdLabel}" FontFamily="{StaticResource Mono}" FontSize="12"
+                     Foreground="{StaticResource TextPrimary}" TextAlignment="Right" VerticalAlignment="Center"/>
+          <TextBlock Grid.Column="6" Text="{Binding DamageLabel}" FontFamily="{StaticResource Mono}" FontSize="12"
+                     Foreground="{StaticResource TextSecondary}" TextAlignment="Right" VerticalAlignment="Center"/>
+          <TextBlock Grid.Column="7" Text="{Binding AccLabel}" FontFamily="{StaticResource Mono}" FontSize="12"
+                     Foreground="{StaticResource TextSecondary}" TextAlignment="Right" VerticalAlignment="Center"/>
+          <TextBlock Grid.Column="8" Text="{Binding WeaponLabel}" FontSize="12"
+                     Foreground="{StaticResource TextSecondary}" TextTrimming="CharacterEllipsis"
+                     VerticalAlignment="Center" Margin="8,0,4,0"/>
+          <TextBlock Grid.Column="9" Text="{Binding InputLabel}" FontFamily="{StaticResource Mono}" FontSize="11"
+                     Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="4,0,0,0"/>
+          <TextBlock Grid.Column="10" Text="{Binding HsLabel}" FontFamily="{StaticResource Mono}" FontSize="12"
+                     Foreground="{StaticResource TextSecondary}" TextAlignment="Right" VerticalAlignment="Center"/>
+          <TextBlock Grid.Column="11" Text="{Binding HitsLabel}" FontFamily="{StaticResource Mono}" FontSize="12"
+                     Foreground="{StaticResource TextSecondary}" TextAlignment="Right" VerticalAlignment="Center"/>
+          <TextBlock Grid.Column="12" Text="{Binding WinsLabel}" FontFamily="{StaticResource Mono}" FontSize="12"
+                     Foreground="{StaticResource TextSecondary}" TextAlignment="Right" VerticalAlignment="Center"/>
+          <TextBlock Grid.Column="13" Text="{Binding GamesLabel}" FontFamily="{StaticResource Mono}" FontSize="12"
+                     Foreground="{StaticResource TextSecondary}" TextAlignment="Right" VerticalAlignment="Center"/>
+          <TextBlock Grid.Column="14" Text="{Binding WrLabel}" FontFamily="{StaticResource Mono}" FontSize="12"
+                     Foreground="{StaticResource TextPrimary}" TextAlignment="Right" VerticalAlignment="Center"/>
+          <TextBlock Grid.Column="15" Text="{Binding StreakLabel}" FontFamily="{StaticResource Mono}" FontSize="12"
+                     Foreground="{StaticResource TextSecondary}" TextAlignment="Right" VerticalAlignment="Center"/>
+        </Grid>
+      </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="LbHistoryRowTemplate">
+      <Border Classes="card" CornerRadius="4" Padding="12,10" Margin="0,0,0,6" Cursor="Hand"
+              Tag="{Binding}" Tapped="OnLbHistoryRowClick"
+              ToolTip.Tip="{loc:T lb_match_open}">
+        <Border.Styles>
+          <Style Selector="Border.card">
+            <Setter Property="Background" Value="{StaticResource SurfaceBg}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+          </Style>
+          <Style Selector="Border.card:pointerover">
+            <Setter Property="Background" Value="{StaticResource SurfaceRaised}"/>
+          </Style>
+        </Border.Styles>
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Left" Text="{Binding ScoreLabel}" FontFamily="{StaticResource Mono}"
+                     FontWeight="SemiBold" FontSize="14" MinWidth="56" VerticalAlignment="Center"
+                     Foreground="{StaticResource AccentBright}"/>
+          <TextBlock DockPanel.Dock="Right" Text="{Binding AtLabel}" FontSize="11"
+                     Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+          <TextBlock DockPanel.Dock="Right" Text="{Binding HostLabel}" FontSize="11"
+                     Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" MinWidth="72"
+                     TextTrimming="CharacterEllipsis" Margin="12,0,0,0"/>
+          <TextBlock DockPanel.Dock="Right" Text="{Binding DurationLabel}" FontFamily="{StaticResource Mono}" FontSize="12"
+                     Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" MinWidth="36"
+                     TextAlignment="Right" Margin="12,0,0,0"/>
+          <TextBlock DockPanel.Dock="Right" Text="{Binding DamageLabel}" FontFamily="{StaticResource Mono}" FontSize="12"
+                     Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" MinWidth="56"
+                     TextAlignment="Right" Margin="12,0,0,0"/>
+          <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+            <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"
+                       FontSize="13" Foreground="{StaticResource TextPrimary}"/>
+            <TextBlock FontSize="11" Margin="0,2,0,0" TextTrimming="CharacterEllipsis">
+              <Run Text="{Binding MapLabel, Mode=OneWay}" Foreground="{StaticResource TextSecondary}"/>
+              <Run Text="  &#183;  " Foreground="{StaticResource TextMuted}"/>
+              <Run Text="{Binding PlaylistLabel, Mode=OneWay}" Foreground="{StaticResource TextMuted}"/>
+            </TextBlock>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="LbSplitRowTemplate">
+      <DockPanel Margin="0,0,0,4">
+        <TextBlock DockPanel.Dock="Right" Text="{Binding Extra}" FontFamily="{StaticResource Mono}" FontSize="11"
+                   Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+        <TextBlock Text="{Binding Label}" FontSize="12" Foreground="{StaticResource TextSecondary}"
+                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+      </DockPanel>
+    </DataTemplate>
+
+    <DataTemplate x:Key="LbRecentMatchRowTemplate">
+      <DockPanel Margin="0,0,0,6" Background="Transparent" Cursor="Hand"
+                 Tag="{Binding}" Tapped="OnLbRecentMatchClick"
+                 ToolTip.Tip="{loc:T lb_match_open}">
+        <TextBlock DockPanel.Dock="Left" Text="{Binding Result}" FontFamily="{StaticResource Mono}"
+                   FontWeight="SemiBold" FontSize="13" MinWidth="22" VerticalAlignment="Center"
+                   Foreground="{Binding ResultForeground}"/>
+        <TextBlock DockPanel.Dock="Right" Text="{Binding AtLabel}" FontSize="11"
+                   Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+        <TextBlock DockPanel.Dock="Right" Text="{Binding HostLabel}" FontSize="11"
+                   Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" MinWidth="72"
+                   TextTrimming="CharacterEllipsis" Margin="12,0,0,0"/>
+        <TextBlock DockPanel.Dock="Right" Text="{Binding DurationLabel}" FontFamily="{StaticResource Mono}" FontSize="12"
+                   Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" MinWidth="36"
+                   TextAlignment="Right" Margin="12,0,0,0"/>
+        <TextBlock DockPanel.Dock="Right" Text="{Binding DamageLabel}" FontFamily="{StaticResource Mono}" FontSize="12"
+                   Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" MinWidth="48"
+                   TextAlignment="Right" Margin="12,0,0,0"/>
+        <TextBlock DockPanel.Dock="Right" Text="{Binding KdLabel}" FontFamily="{StaticResource Mono}" FontSize="12"
+                   Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" MinWidth="40"
+                   TextAlignment="Right" Margin="12,0,0,0"/>
+        <TextBlock>
+          <Run Text="{loc:T vs}" Foreground="{StaticResource TextMuted}"/>
+          <Run Text="{Binding Opponent, Mode=OneWay}" Foreground="{StaticResource TextPrimary}"/>
+          <Run Text="  &#183;  " Foreground="{StaticResource TextMuted}"/>
+          <Run Text="{Binding MapLabel, Mode=OneWay}" Foreground="{StaticResource TextSecondary}"/>
+          <Run Text="  &#183;  " Foreground="{StaticResource TextMuted}"/>
+          <Run Text="{Binding WeaponLabel, Mode=OneWay}" Foreground="{StaticResource TextMuted}"/>
+        </TextBlock>
+      </DockPanel>
+    </DataTemplate>
+
+    <DataTemplate x:Key="MatchPlayerRowTemplate">
+      <Border Classes="card" CornerRadius="4" Padding="12,10" Margin="0,0,0,6" Cursor="Hand"
+              Tag="{Binding}" Tapped="OnLbMatchPlayerClick"
+              ToolTip.Tip="{loc:T lb_match_open_player}">
+        <Border.Styles>
+          <Style Selector="Border.card">
+            <Setter Property="Background" Value="{StaticResource SurfaceRaised}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+          </Style>
+          <Style Selector="Border.card:pointerover">
+            <Setter Property="Background" Value="{StaticResource BorderSoft}"/>
+          </Style>
+        </Border.Styles>
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Left" Text="{Binding Result}" FontFamily="{StaticResource Mono}"
+                     FontWeight="SemiBold" FontSize="13" MinWidth="26" VerticalAlignment="Center"
+                     Foreground="{Binding ResultForeground}"/>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="{Binding KillsLabel}" FontFamily="{StaticResource Mono}" FontSize="12" MinWidth="34"
+                       TextAlignment="Right" Foreground="{StaticResource TextPrimary}"/>
+            <TextBlock Text="{Binding DeathsLabel}" FontFamily="{StaticResource Mono}" FontSize="12" MinWidth="34"
+                       TextAlignment="Right" Foreground="{StaticResource TextSecondary}"/>
+            <TextBlock Text="{Binding DamageLabel}" FontFamily="{StaticResource Mono}" FontSize="12" MinWidth="56"
+                       TextAlignment="Right" Foreground="{StaticResource TextSecondary}"/>
+            <TextBlock Text="{Binding HsLabel}" FontFamily="{StaticResource Mono}" FontSize="12" MinWidth="34"
+                       TextAlignment="Right" Foreground="{StaticResource TextMuted}"/>
+            <TextBlock Text="{Binding HitsLabel}" FontFamily="{StaticResource Mono}" FontSize="12" MinWidth="42"
+                       TextAlignment="Right" Foreground="{StaticResource TextMuted}"/>
+            <TextBlock Text="{Binding AccLabel}" FontFamily="{StaticResource Mono}" FontSize="12" MinWidth="52"
+                       TextAlignment="Right" Foreground="{StaticResource TextMuted}"/>
+          </StackPanel>
+          <StackPanel Margin="6,0,12,0" VerticalAlignment="Center">
+            <TextBlock Text="{Binding Persona}" FontSize="13" TextTrimming="CharacterEllipsis"
+                       Foreground="{StaticResource TextPrimary}"/>
+            <TextBlock FontSize="11" Margin="0,2,0,0" TextTrimming="CharacterEllipsis">
+              <Run Text="{Binding WeaponLabel, Mode=OneWay}" Foreground="{StaticResource TextMuted}"/>
+              <Run Text="  &#183;  " Foreground="{StaticResource TextMuted}"/>
+              <Run Text="{Binding InputLabel, Mode=OneWay}" Foreground="{StaticResource TextMuted}"/>
+            </TextBlock>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="CreditRowTemplate">
+      <Border x:Name="Row" Classes="card" BorderThickness="2,0,0,0" Padding="16,12,16,14" Margin="0,0,20,14"
+              Cursor="Hand" VerticalAlignment="Top"
+              Tapped="OnCreditRowClick"
+              ToolTip.Tip="{Binding Url}">
+        <Border.Styles>
+          <Style Selector="Border.card">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderLine}"/>
+            <Setter Property="BorderThickness" Value="2,0,0,0"/>
+            <Setter Property="Padding" Value="16,12,16,14"/>
+            <Setter Property="Margin" Value="0,0,20,14"/>
+          </Style>
+          <Style Selector="Border.card:pointerover">
+            <Setter Property="Background" Value="{StaticResource SurfaceBg}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+          </Style>
+          <Style Selector="Border.card:pointerover TextBlock.title">
+            <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+          </Style>
+          <Style Selector="Border.card:pointerover Path.github">
+            <Setter Property="Fill" Value="{StaticResource TextCode}"/>
+          </Style>
+          <Style Selector="Border.card:pointerover TextBlock.url">
+            <Setter Property="Foreground" Value="{StaticResource TextCode}"/>
+          </Style>
+        </Border.Styles>
+        <StackPanel VerticalAlignment="Top">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Right" Text="{Binding By}"
+                       FontSize="12" Margin="10,1,0,0" VerticalAlignment="Center"
+                       Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis"/>
+            <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold"
+                       Classes="title" Foreground="{StaticResource TextPrimary}"
+                       TextTrimming="CharacterEllipsis"/>
+          </DockPanel>
+          <TextBlock Text="{Binding Blurb}" FontSize="12.5" Margin="0,6,0,0"
+                     MinHeight="34" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+          <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+            <Path Width="12" Height="12" Margin="0,1,6,0" VerticalAlignment="Center"
+                  Classes="github" Stretch="Uniform" Fill="{StaticResource TextMuted}"
+                  Data="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+            <TextBlock Text="{Binding UrlShort}" VerticalAlignment="Center"
+                       Classes="url" FontFamily="{StaticResource Mono}" FontSize="11"
+                       Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis"/>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+
+  </Window.Resources>
+
+  <Grid x:Name="RootChrome" RowDefinitions="34,*">
+
+    <!-- Custom caption strip: drag surface + window controls. -->
+    <Border Grid.Row="0" Background="{StaticResource WindowBg}"
+            PointerPressed="OnCaptionPointerPressed">
+      <DockPanel LastChildFill="True">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+          <Button Classes="caption" Click="OnWinMinimize" ToolTip.Tip="{loc:T minimize}">
+            <Path Width="10" Height="10" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                  StrokeThickness="1" Data="M 0 5 L 10 5"/>
+          </Button>
+          <Button x:Name="BtnWinMaximize" Classes="caption" Click="OnWinMaximize"
+                  ToolTip.Tip="{loc:T maximize}">
+            <Path x:Name="TxtWinMaxGlyph" Width="10" Height="10"
+                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                  StrokeThickness="1" Data="M 0 0 L 0 10 M 0 0 L 10 0 M 10 0 L 10 10 M 0 10 L 10 10"/>
+          </Button>
+          <Button Classes="caption-close" Click="OnWinClose" ToolTip.Tip="{loc:T close}">
+            <Path Width="10" Height="10" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                  StrokeThickness="1.1" Data="M 0 0 L 10 10 M 10 0 L 0 10"/>
+          </Button>
+        </StackPanel>
+        <Border/>
+      </DockPanel>
+    </Border>
+
+    <DockPanel Grid.Row="1">
+
+    <!-- Header: logo, tool buttons, Play. -->
+    <Border DockPanel.Dock="Top" Padding="16,4,16,18"
+            Background="{StaticResource WindowBg}">
+      <DockPanel LastChildFill="True">
+      <Button x:Name="BtnQuickPlay" DockPanel.Dock="Right"
+              IsVisible="{Binding !IsSimpleMode}"
+              Classes="primary"
+              Content="{loc:T play}"
+              MinWidth="176" Height="50"
+              Margin="10,0,0,0"
+              VerticalAlignment="Center"
+              Command="{Binding PlayLocalCommand}"
+              ToolTip.Tip="{loc:T tip_play}"/>
+      <Button x:Name="BtnModeToggle" DockPanel.Dock="Right"
+              IsVisible="{Binding !IsSimpleMode}"
+              Classes="ghost"
+              Width="40" Height="36" Padding="0"
+              VerticalAlignment="Center"
+              Click="OnModeToggle"
+              ToolTip.Tip="{loc:T tip_mode_advanced}">
+        <Canvas Width="16" Height="16">
+          <Rectangle Canvas.Left="0.5" Canvas.Top="1.5" Width="15" Height="13" RadiusX="2" RadiusY="2"
+                     Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                     StrokeThickness="1.4"/>
+          <Line StartPoint="5.6,1.5" EndPoint="5.6,14.5"
+                Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.4"/>
+          <Line StartPoint="8,5.4" EndPoint="13,5.4"
+                Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.4" StrokeLineCap="Round"/>
+          <Line StartPoint="8,8" EndPoint="13,8"
+                Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.4" StrokeLineCap="Round"/>
+          <Line StartPoint="8,10.6" EndPoint="11,10.6"
+                Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.4" StrokeLineCap="Round"/>
+        </Canvas>
+      </Button>
+      <Button x:Name="BtnTabSettings" DockPanel.Dock="Right"
+              IsVisible="{Binding !IsSimpleMode}"
+              Classes="ghost"
+              Width="40" Height="36" Padding="0" Margin="0,0,6,0"
+              VerticalAlignment="Center"
+              Click="OnSimpleTabSettings"
+              ToolTip.Tip="{loc:T tip_settings}">
+        <Canvas Width="16" Height="16">
+          <Line StartPoint="1,4" EndPoint="15,4"
+                Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.5" StrokeLineCap="Round"/>
+          <Line StartPoint="1,8" EndPoint="15,8"
+                Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.5" StrokeLineCap="Round"/>
+          <Line StartPoint="1,12" EndPoint="15,12"
+                Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.5" StrokeLineCap="Round"/>
+          <Ellipse Canvas.Left="9.2" Canvas.Top="2.2" Width="3.6" Height="3.6"
+                   Fill="{StaticResource WindowBg}"
+                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                   StrokeThickness="1.5"/>
+          <Ellipse Canvas.Left="3.2" Canvas.Top="6.2" Width="3.6" Height="3.6"
+                   Fill="{StaticResource WindowBg}"
+                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                   StrokeThickness="1.5"/>
+          <Ellipse Canvas.Left="8.2" Canvas.Top="10.2" Width="3.6" Height="3.6"
+                   Fill="{StaticResource WindowBg}"
+                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                   StrokeThickness="1.5"/>
+        </Canvas>
+      </Button>
+      <Button x:Name="BtnHeaderOpenFolder" DockPanel.Dock="Right"
+              IsVisible="{Binding !IsSimpleMode}"
+              Classes="ghost"
+              Width="40" Height="36" Padding="0" Margin="0,0,6,0"
+              VerticalAlignment="Center"
+              Click="OnOpenInstall"
+              ToolTip.Tip="{loc:T tip_open_folder}">
+        <Canvas Width="16" Height="16">
+          <Path Data="M1.5,13.5 V4.5 A1,1 0 0 1 2.5,3.5 H6 L7.5,5.5 H13.5 A1,1 0 0 1 14.5,6.5 V13.5 Z"
+                Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.4" StrokeJoin="Round"/>
+        </Canvas>
+      </Button>
+      <Button x:Name="BtnHeaderConsole" DockPanel.Dock="Right"
+              IsVisible="{Binding !IsSimpleMode}"
+              Classes="ghost"
+              Width="40" Height="36" Padding="0" Margin="0,0,6,0"
+              VerticalAlignment="Center"
+              Click="OnSimpleTabConsole"
+              ToolTip.Tip="{loc:T tip_console}">
+        <Canvas Width="16" Height="16">
+          <Rectangle Canvas.Left="0.5" Canvas.Top="1.5" Width="15" Height="13" RadiusX="2" RadiusY="2"
+                     Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                     StrokeThickness="1.4"/>
+          <Polyline Points="3.2,6 6.2,8 3.2,10"
+                    Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                    StrokeThickness="1.5" StrokeLineCap="Round"
+                    StrokeJoin="Round" Fill="Transparent"/>
+          <Line StartPoint="7.4,11" EndPoint="12.4,11"
+                Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.5" StrokeLineCap="Round"/>
+        </Canvas>
+      </Button>
+      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <Image Source="avares://R5Flowstate.Shell.Linux/Assets/logo.png" Height="30" Margin="0,0,12,0"
+               VerticalAlignment="Center" Cursor="Hand" ToolTip.Tip="{loc:T tip_website}"
+               Tapped="OnOpenWebsite"/>
+        <TextBlock VerticalAlignment="Center" FontSize="24" FontWeight="SemiBold"
+                   Foreground="{StaticResource TextPrimary}">
+          <Run Text="R5Flowstate"/>
+          <Run Text=" Beta" FontSize="11" FontWeight="SemiBold"
+               Foreground="{StaticResource AccentBright}"/>
+          <Run x:Name="TxtHeaderSubtitle" FontSize="12" FontWeight="Normal"
+               Text=" — Linux" Foreground="{StaticResource TextMuted}"/>
+        </TextBlock>
+      </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- Advanced-mode bottom status bar. -->
+    <Border x:Name="BarAdvancedStatus" DockPanel.Dock="Bottom" Margin="26,14,26,18"
+            Padding="0,10,0,0"
+            IsVisible="{Binding !IsSimpleMode}"
+            BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,1,0,0">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+          <Button Classes="footer-icon" Click="OnOpenWebsite" ToolTip.Tip="{loc:T tip_website}">
+            <Canvas Width="16" Height="16">
+              <Ellipse Canvas.Left="0.8" Canvas.Top="0.8" Width="14.4" Height="14.4"
+                       Stroke="{StaticResource TextSecondary}" StrokeThickness="1.4"/>
+              <Ellipse Canvas.Left="4.9" Canvas.Top="0.8" Width="6.2" Height="14.4"
+                       Stroke="{StaticResource TextSecondary}" StrokeThickness="1.2"/>
+              <Line StartPoint="1.2,8" EndPoint="14.8,8"
+                    Stroke="{StaticResource TextSecondary}" StrokeThickness="1.2"/>
+            </Canvas>
+          </Button>
+          <Button Classes="footer-icon" Click="OnOpenDiscord" ToolTip.Tip="{loc:T tip_discord}">
+            <Path Width="15" Height="15" Fill="{StaticResource TextSecondary}" Stretch="Uniform"
+                  Data="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028 14.09 14.09 0 001.226-1.994.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+          </Button>
+          <Button Classes="footer-icon" Click="OnOpenGitHub" ToolTip.Tip="{loc:T tip_github}">
+            <Path Width="15" Height="15" Fill="{StaticResource TextSecondary}" Stretch="Uniform"
+                  Data="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+          </Button>
+          <TextBlock x:Name="TxtAdvancedVersion"
+                     FontFamily="{StaticResource Mono}" FontSize="12" Foreground="{StaticResource TextMuted}"
+                     VerticalAlignment="Center" Margin="6,0,0,0"
+                     Text="{Binding Version}"/>
+        </StackPanel>
+        <TextBlock x:Name="TxtStatus" Text="{Binding Status}" TextWrapping="Wrap"
+                   VerticalAlignment="Center"
+                   FontFamily="{StaticResource Mono}" FontSize="12" Foreground="{StaticResource TextCode}"/>
+      </DockPanel>
+    </Border>
+
+    <Grid>
+      <!-- ===================== Simple player shell ===================== -->
+      <DockPanel x:Name="PanelSimple" IsVisible="{Binding IsSimpleMode}">
+        <Border x:Name="BarSimpleTabs" DockPanel.Dock="Top" Padding="16,0"
+                Background="{StaticResource WindowBg}"
+                BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,0,0,1">
+          <DockPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                        VerticalAlignment="Center" Margin="12,0,0,0">
+              <Button x:Name="BtnTabToolFolder"
+                      Classes="ghost"
+                      Width="34" Height="30" Padding="0" Margin="0,0,4,0"
+                      Click="OnOpenInstall"
+                      ToolTip.Tip="{loc:T tip_open_folder}">
+                <Canvas Width="16" Height="16">
+                  <Path Data="M1.5,13.5 V4.5 A1,1 0 0 1 2.5,3.5 H6 L7.5,5.5 H13.5 A1,1 0 0 1 14.5,6.5 V13.5 Z"
+                        Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                        StrokeThickness="1.4" StrokeJoin="Round"/>
+                </Canvas>
+              </Button>
+              <Button x:Name="BtnTabToolSettings"
+                      Classes="ghost"
+                      Width="34" Height="30" Padding="0" Margin="0,0,4,0"
+                      Click="OnSimpleTabSettings"
+                      ToolTip.Tip="{loc:T tip_settings}">
+                <Canvas Width="16" Height="16">
+                  <Line StartPoint="1,4" EndPoint="15,4"
+                        Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                        StrokeThickness="1.5" StrokeLineCap="Round"/>
+                  <Line StartPoint="1,8" EndPoint="15,8"
+                        Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                        StrokeThickness="1.5" StrokeLineCap="Round"/>
+                  <Line StartPoint="1,12" EndPoint="15,12"
+                        Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                        StrokeThickness="1.5" StrokeLineCap="Round"/>
+                  <Ellipse Canvas.Left="9.2" Canvas.Top="2.2" Width="3.6" Height="3.6"
+                           Fill="{StaticResource WindowBg}"
+                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                           StrokeThickness="1.5"/>
+                  <Ellipse Canvas.Left="3.2" Canvas.Top="6.2" Width="3.6" Height="3.6"
+                           Fill="{StaticResource WindowBg}"
+                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                           StrokeThickness="1.5"/>
+                  <Ellipse Canvas.Left="8.2" Canvas.Top="10.2" Width="3.6" Height="3.6"
+                           Fill="{StaticResource WindowBg}"
+                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                           StrokeThickness="1.5"/>
+                </Canvas>
+              </Button>
+              <Button x:Name="BtnTabToolAdvanced"
+                      Classes="ghost"
+                      Width="34" Height="30" Padding="0"
+                      Click="OnModeToggle"
+                      ToolTip.Tip="{loc:T tip_mode_advanced}">
+                <Canvas Width="16" Height="16">
+                  <Rectangle Canvas.Left="0.5" Canvas.Top="1.5" Width="15" Height="13" RadiusX="2" RadiusY="2"
+                             Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                             StrokeThickness="1.4"/>
+                  <Line StartPoint="5.6,1.5" EndPoint="5.6,14.5"
+                        Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                        StrokeThickness="1.4"/>
+                  <Line StartPoint="8,5.4" EndPoint="13,5.4"
+                        Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                        StrokeThickness="1.4" StrokeLineCap="Round"/>
+                  <Line StartPoint="8,8" EndPoint="13,8"
+                        Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                        StrokeThickness="1.4" StrokeLineCap="Round"/>
+                  <Line StartPoint="8,10.6" EndPoint="11,10.6"
+                        Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                        StrokeThickness="1.4" StrokeLineCap="Round"/>
+                </Canvas>
+              </Button>
+            </StackPanel>
+            <Button x:Name="BtnBrowserRefresh" DockPanel.Dock="Right"
+                    Content="{loc:T refresh}" Width="92" Height="34"
+                    Classes="ghost"
+                    VerticalAlignment="Center"
+                    Margin="12,0,0,4" Click="OnHeaderRefresh"
+                    ToolTip.Tip="{loc:T tip_refresh_servers}"/>
+            <ScrollViewer x:Name="TabScroll" HorizontalAlignment="Left"
+                          HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollBarVisibility="Disabled">
+              <StackPanel Orientation="Horizontal">
+                <Button x:Name="BtnTabScrollLeft" Classes="ghost"
+                        Width="24" Height="30" Padding="0" Margin="0,0,2,0"
+                        VerticalAlignment="Center" IsVisible="False"
+                        Click="OnTabScrollLeft" Content="&#x2039;"/>
+                <Button x:Name="BtnTabScrollRight" Classes="ghost"
+                        Width="24" Height="30" Padding="0" Margin="2,0,0,0"
+                        VerticalAlignment="Center" IsVisible="False"
+                        Click="OnTabScrollRight" Content="&#x203A;"/>
+                <Button x:Name="BtnTabLocal" Content="{loc:T tab_install}"
+                        Classes="tab on" Click="OnSimpleTabLocal"/>
+                <Button x:Name="BtnTabServers" Content="{loc:T tab_servers}"
+                        Classes="tab" Click="OnSimpleTabServers"
+                        ToolTip.Tip="{loc:T tip_servers_locked}"/>
+                <Button x:Name="BtnTabLeaderboards" Content="{loc:T tab_leaderboards}"
+                        Classes="tab" Click="OnSimpleTabLeaderboards"
+                        ToolTip.Tip="{loc:T tip_leaderboards}"/>
+                <Button x:Name="BtnTabConsole" Content="{loc:T tab_console}"
+                        Classes="tab" Click="OnSimpleTabConsole"/>
+                <Button x:Name="BtnTabMods" Content="{loc:T tab_mods}"
+                        Classes="tab" Click="OnSimpleTabMods"/>
+                <Button x:Name="BtnTabBlog"
+                        Classes="tab" Click="OnSimpleTabBlog">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{loc:T tab_blog}" VerticalAlignment="Center"/>
+                    <Ellipse x:Name="DotBlogUnread" Width="7" Height="7"
+                             Margin="7,0,0,1" VerticalAlignment="Center"
+                             Fill="{StaticResource Accent}" IsVisible="False"/>
+                  </StackPanel>
+                </Button>
+                <Button x:Name="BtnTabNotes"
+                        Classes="tab" Click="OnSimpleTabNotes">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{loc:T tab_notes}" VerticalAlignment="Center"/>
+                    <Ellipse x:Name="DotNotesUnread" Width="7" Height="7"
+                             Margin="7,0,0,1" VerticalAlignment="Center"
+                             Fill="{StaticResource Accent}"
+                             IsVisible="{Binding NotesUnread}"/>
+                  </StackPanel>
+                </Button>
+                <Button x:Name="BtnTabCredits" Content="{loc:T tab_credits}" Margin="0"
+                        Classes="tab" Click="OnSimpleTabCredits"/>
+              </StackPanel>
+            </ScrollViewer>
+          </DockPanel>
+        </Border>
+        <TextBlock x:Name="TxtBrowserStatus" DockPanel.Dock="Top" Text="{Binding BrowserStatus}" FontSize="12"
+                   Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"
+                   Background="{StaticResource SurfaceBg}"
+                   Padding="16,12,16,0"/>
+        <Border x:Name="BarSimpleFooter" DockPanel.Dock="Bottom" Margin="0"
+                Padding="16,8" Background="{StaticResource WindowBg}"
+                BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,1,0,0">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"
+                      Margin="16,0,0,0">
+            <Button Classes="footer-icon" Click="OnOpenWebsite" ToolTip.Tip="{loc:T tip_website}">
+              <Canvas Width="16" Height="16">
+                <Ellipse Canvas.Left="0.8" Canvas.Top="0.8" Width="14.4" Height="14.4"
+                         Stroke="{StaticResource TextSecondary}" StrokeThickness="1.4"/>
+                <Ellipse Canvas.Left="4.9" Canvas.Top="0.8" Width="6.2" Height="14.4"
+                         Stroke="{StaticResource TextSecondary}" StrokeThickness="1.2"/>
+                <Line StartPoint="1.2,8" EndPoint="14.8,8"
+                      Stroke="{StaticResource TextSecondary}" StrokeThickness="1.2"/>
+              </Canvas>
+            </Button>
+            <Button Classes="footer-icon" Click="OnOpenDiscord" ToolTip.Tip="{loc:T tip_discord}">
+              <Path Width="15" Height="15" Fill="{StaticResource TextSecondary}" Stretch="Uniform"
+                    Data="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028 14.09 14.09 0 001.226-1.994.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+            </Button>
+            <Button Classes="footer-icon" Click="OnOpenGitHub" ToolTip.Tip="{loc:T tip_github}">
+              <Path Width="15" Height="15" Fill="{StaticResource TextSecondary}" Stretch="Uniform"
+                    Data="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+            </Button>
+            <TextBlock x:Name="TxtSimpleVersion" Margin="8,0,0,0"
+                       FontFamily="{StaticResource Mono}" FontSize="11.5"
+                       Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"
+                       Text="{Binding Version}"/>
+          </StackPanel>
+          <Grid VerticalAlignment="Center" HorizontalAlignment="Stretch" ColumnDefinitions="Auto,*">
+            <Ellipse x:Name="DotSimpleStatus" Grid.Column="0" Width="6" Height="6"
+                     Margin="0,0,8,0" VerticalAlignment="Center"
+                     Fill="{StaticResource Accent}"/>
+            <TextBlock x:Name="TxtSimpleStatus" Grid.Column="1" Text="{Binding SimpleStatus}"
+                       FontFamily="{StaticResource Mono}" FontSize="11" Foreground="{StaticResource TextMuted}"
+                       VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis"/>
+          </Grid>
+        </DockPanel>
+        </Border>
+        <Grid Background="{StaticResource SurfaceBg}">
+
+          <!-- ===== LOCAL (install / play) ===== -->
+          <DockPanel x:Name="PanelSimpleLocal">
+            <!-- The play tab's bar, for a job that runs while the game is already
+                 there (verify, repair, update). It is shown only when the setup
+                 card is not on screen, because that card carries a bar of its own
+                 and two would track in lockstep — upstream's rule, applied in
+                 PaintInstallControls. It used to be a literal Value="0" with a
+                 literal IsVisible="False", so nothing could ever move it. -->
+            <ProgressBar x:Name="BarSimpleInstall" DockPanel.Dock="Bottom"
+                         Height="6" Minimum="0" Maximum="100"
+                         Value="{Binding InstallFraction}"
+                         Margin="0,10,0,0"
+                         IsVisible="False"/>
+            <Border x:Name="BarSimplePlay" DockPanel.Dock="Bottom" Margin="0" Padding="16,12"
+                    Background="Transparent"
+                    BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,1,0,0">
+              <Grid VerticalAlignment="Center" ClipToBounds="True" ColumnDefinitions="Auto,*,Auto">
+                <StackPanel Grid.Column="2" Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                  <!-- Collapsed, like the Windows launcher: the Play tab
+                       carries CHANGE MAP inside its own action buttons, so the
+                       bar must not offer it during setup either. -->
+                  <Button x:Name="BtnChangeMap"
+                          Classes="ghost"
+                          Content="{loc:T change_map}"
+                          MinWidth="128" Height="44" Padding="16,0"
+                          Margin="0,0,10,0"
+                          FontSize="13"
+                          VerticalAlignment="Center"
+                          IsVisible="False"
+                          Click="OnChangeMap"/>
+                  <Button x:Name="BtnPlay"
+                          Classes="play-bar"
+                          Content="{loc:T play}"
+                          VerticalAlignment="Center"
+                          Command="{Binding PlayLocalCommand}"/>
+                </StackPanel>
+                <StackPanel x:Name="PanelSimplePlayOptions" Grid.Column="0"
+                            Orientation="Horizontal" VerticalAlignment="Center">
+                  <CheckBox x:Name="ChkSimpleCheats" Content="{loc:T cheats}"
+                            Classes="quiet-check"
+                            ToolTip.Tip="{loc:T tip_cheats}"
+                            IsChecked="{Binding Cheats}"
+                            VerticalAlignment="Center"/>
+                  <CheckBox x:Name="ChkSimpleDeveloper" Content="{loc:T developer}"
+                            Classes="quiet-check"
+                            ToolTip.Tip="{loc:T tip_developer}"
+                            IsChecked="{Binding Dev}"
+                            VerticalAlignment="Center"/>
+                  <CheckBox x:Name="ChkUseDx12" Content="{loc:T directx12}"
+                            Classes="quiet-check"
+                            ToolTip.Tip="{loc:T tip_dx12}"
+                            IsChecked="{Binding UseDx12}"
+                            VerticalAlignment="Center"/>
+                  <Border Width="1" Height="16" Margin="0,0,16,0" VerticalAlignment="Center"
+                          Background="{StaticResource BorderSoft}"/>
+                  <Button x:Name="BtnResolutionPreset"
+                          Classes="ghost"
+                          Content="{loc:T label_resolution_short}"
+                          MinWidth="0" Height="30" Padding="10,0" Margin="0,0,8,0"
+                          FontSize="13"
+                          VerticalAlignment="Center"
+                          ToolTip.Tip="{loc:T tip_resolution}"
+                          Click="OnResolutionPresetClick"/>
+                  <TextBox x:Name="TxtClientWidth" Width="60" Height="30"
+                           VerticalAlignment="Center"
+                           ToolTip.Tip="{loc:T tip_resolution}"
+                           Text="{Binding ClientWidth}"
+                           LostFocus="OnClientResolutionLostFocus"/>
+                  <TextBlock Text="x" Margin="6,0,6,0" VerticalAlignment="Center"
+                             Foreground="{StaticResource TextSecondary}"/>
+                  <TextBox x:Name="TxtClientHeight" Width="60" Height="30"
+                           VerticalAlignment="Center"
+                           ToolTip.Tip="{loc:T tip_resolution}"
+                           Text="{Binding ClientHeight}"
+                           LostFocus="OnClientResolutionLostFocus"/>
+                  <Border Width="1" Height="16" Margin="16,0,16,0" VerticalAlignment="Center"
+                          Background="{StaticResource BorderSoft}"/>
+                  <Button x:Name="BtnLaunchArgs"
+                          Classes="ghost"
+                          Content="{loc:T label_launch_args}"
+                          MinWidth="0" Height="30" Padding="10,0"
+                          FontSize="13"
+                          VerticalAlignment="Center"
+                          ToolTip.Tip="{loc:T tip_launch_args}"
+                          Click="OnLaunchArgsClick"/>
+                  <Border Width="1" Height="16" Margin="16,0,16,0" VerticalAlignment="Center"
+                          Background="{StaticResource BorderSoft}"/>
+                  <CheckBox x:Name="ChkSimpleOffline" Content="{loc:T offline}"
+                            Classes="quiet-check"
+                            ToolTip.Tip="{loc:T tip_offline}"
+                            IsChecked="{Binding OfflineNoAuth}"
+                            VerticalAlignment="Center"/>
+                  <CheckBox x:Name="ChkSimplePassword" Content="{loc:T password}"
+                            Classes="quiet-check"
+                            ToolTip.Tip="{loc:T tip_password_lock}"
+                            IsChecked="{Binding PasswordProtect}"
+                            VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBox x:Name="TxtSimplePassword" Grid.Column="1" Height="30"
+                         MinWidth="72" MaxWidth="420" Margin="0,0,12,0"
+                         PasswordChar="●"
+                         HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                         IsVisible="{Binding PasswordProtect}"
+                         ToolTip.Tip="{loc:T tip_password_charset}"
+                         Text="{Binding DediPassword}"/>
+              </Grid>
+            </Border>
+            <Grid>
+              <Grid x:Name="PanelSimplePlay" Margin="14" ColumnDefinitions="212,*">
+                <Border Grid.Column="0" Margin="0,0,12,0" CornerRadius="9" Padding="6"
+                        Background="{StaticResource SurfaceSunken}"
+                        BorderBrush="{StaticResource BorderSoft}" BorderThickness="1">
+                  <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl x:Name="ListModes" ItemsSource="{Binding Modes}" HorizontalAlignment="Stretch">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <StackPanel Margin="2,0,2,0">
+                            <DockPanel Margin="4,9,4,5">
+                              <TextBlock Text="{Binding Header}"
+                                         Classes="mode-rail-group"
+                                         Margin="6,0,8,0" VerticalAlignment="Center"/>
+                              <TextBlock Text="{Binding ItemCount}"
+                                         DockPanel.Dock="Right" Margin="8,0,6,0"
+                                         FontFamily="{StaticResource Mono}" FontSize="10"
+                                         VerticalAlignment="Center"
+                                         Foreground="{StaticResource BorderStrong}"/>
+                              <Border Height="1" Background="{StaticResource BorderSoft}"
+                                      VerticalAlignment="Center"/>
+                            </DockPanel>
+                            <ItemsControl ItemsSource="{Binding Items}">
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                  <Button ToolTip.Tip="{Binding Blurb}"
+                                          Classes="mode-rail"
+                                          Background="{Binding ChipBackground}"
+                                          Foreground="{Binding ChipForeground}"
+                                          FontWeight="{Binding ChipWeight}"
+                                          Click="OnModeChipClick">
+                                    <DockPanel LastChildFill="True">
+                                      <TextBlock Text="{Binding MapCountLabel}"
+                                                 DockPanel.Dock="Right" Margin="8,0,0,0"
+                                                 VerticalAlignment="Center"
+                                                 FontFamily="{StaticResource Mono}" FontSize="10"
+                                                 Foreground="{Binding MapCountForeground}"/>
+                                      <TextBlock Text="{Binding Title}"
+                                                 VerticalAlignment="Center"
+                                                 TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                  </Button>
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                          </StackPanel>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </ScrollViewer>
+                </Border>
+                <Border Grid.Column="1" CornerRadius="9" ClipToBounds="True"
+                        Background="#121816"
+                        BorderBrush="{StaticResource BorderSoft}" BorderThickness="1">
+                  <Grid MinHeight="280">
+                    <Image x:Name="ImgLoadscreen" Source="{Binding HeroArt}"
+                           Stretch="UniformToFill"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Border VerticalAlignment="Bottom" Height="120">
+                      <Border.Background>
+                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                          <GradientStop Color="#00121814" Offset="0"/>
+                          <GradientStop Color="#E0121814" Offset="1"/>
+                        </LinearGradientBrush>
+                      </Border.Background>
+                    </Border>
+                    <StackPanel VerticalAlignment="Bottom" Margin="20,0,190,18">
+                      <TextBlock x:Name="TxtHeroTitle" Text="{Binding HeroTitle}"
+                                 FontSize="27" FontWeight="SemiBold"
+                                 Foreground="#f4f7f5" TextTrimming="CharacterEllipsis"/>
+                      <TextBlock x:Name="TxtHeroSubtitle" Text="{Binding HeroSubtitle}"
+                                 FontSize="13" Foreground="#b8c8bc"
+                                 Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+                      <TextBlock x:Name="TxtHeroCommand" Text="{Binding HeroCommand}"
+                                 Classes="mono-note"
+                                 Foreground="#8aa094" Opacity="0.85"
+                                 Margin="0,8,0,0" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
+                                VerticalAlignment="Bottom" Margin="0,0,12,12">
+                      <!-- The map picker. Windows' rule for it is the card's own: a
+                           pinned mode has exactly one map, so there is nothing to
+                           pick, and CanPickMap is that rule (ModeCardViewModel).
+                           The four-rect icon is upstream's; the label lives in Loc
+                           as select_map and is carried on the button rather than
+                           drawn beside it, because this row is 36x36 icon buttons
+                           (its sibling is the shuffle) and a caption would not fit.
+                           The tooltip is upstream's tip_pick_map_art. -->
+                      <Button x:Name="BtnMapPicker"
+                              Width="36" Height="36" Padding="0"
+                              Classes="ghost"
+                              Background="#B3101613"
+                              BorderBrush="#2EF4F7F5" BorderThickness="1"
+                              IsVisible="{Binding CanPickMap}"
+                              Click="OnToggleMapPicker"
+                              AutomationProperties.Name="{loc:T select_map}"
+                              ToolTip.Tip="{loc:T tip_pick_map_art}">
+                        <Canvas Width="16" Height="16">
+                          <Rectangle Canvas.Left="1" Canvas.Top="1" Width="6" Height="6"
+                                     RadiusX="1.4" RadiusY="1.4"
+                                     Fill="{StaticResource TextSecondary}"/>
+                          <Rectangle Canvas.Left="9" Canvas.Top="1" Width="6" Height="6"
+                                     RadiusX="1.4" RadiusY="1.4"
+                                     Fill="{StaticResource TextSecondary}"/>
+                          <Rectangle Canvas.Left="1" Canvas.Top="9" Width="6" Height="6"
+                                     RadiusX="1.4" RadiusY="1.4"
+                                     Fill="{StaticResource TextSecondary}"/>
+                          <Rectangle Canvas.Left="9" Canvas.Top="9" Width="6" Height="6"
+                                     RadiusX="1.4" RadiusY="1.4"
+                                     Fill="{StaticResource TextSecondary}"/>
+                        </Canvas>
+                      </Button>
+                      <Button x:Name="BtnReloadLoadscreen"
+                              Width="36" Height="36" Padding="0"
+                              Classes="ghost"
+                              Background="#B3101613"
+                              BorderBrush="#2EF4F7F5" BorderThickness="1"
+                              IsVisible="{Binding CanShuffleLoadscreen}"
+                              Click="OnReloadLoadscreen"
+                              ToolTip.Tip="{loc:T tip_shuffle_loadscreen}">
+                        <Canvas Width="16" Height="16">
+                          <Path Stroke="{StaticResource TextSecondary}" StrokeThickness="1.8"
+                                StrokeLineCap="Round"
+                                Data="M 14 8 A 6 6 0 1 1 12.2 3.8"/>
+                          <Path Fill="{StaticResource TextSecondary}"
+                                Data="M 15.2 1 L 15.2 5.2 L 11 5.2 Z"/>
+                        </Canvas>
+                      </Button>
+                    </StackPanel>
+
+                    <Border x:Name="PanelMapPicker" IsVisible="False"
+                            Background="#F2111815">
+                      <DockPanel Margin="16,14,16,14">
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+                          <Button DockPanel.Dock="Right" Width="36" Height="32" Padding="0"
+                                  Classes="ghost"
+                                  Click="OnToggleMapPicker"
+                                  ToolTip.Tip="{loc:T close}">
+                            <Canvas Width="12" Height="12">
+                              <Path Stroke="{StaticResource TextSecondary}" StrokeThickness="1.8"
+                                    StrokeLineCap="Round"
+                                    Data="M 1 1 L 11 11 M 11 1 L 1 11"/>
+                            </Canvas>
+                          </Button>
+                          <TextBlock Text="{loc:T choose_map}" Classes="section-label"
+                                     Margin="0" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                          <ItemsControl x:Name="ListMapTiles" ItemsSource="{Binding MapTiles}">
+                            <ItemsControl.ItemsPanel>
+                              <ItemsPanelTemplate>
+                                <WrapPanel/>
+                              </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate>
+                                <Button Click="OnMapTileClick"
+                                        Classes="map-tile"
+                                        ToolTip.Tip="{Binding Stem}"/>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                        </ScrollViewer>
+                      </DockPanel>
+                    </Border>
+                  </Grid>
+                </Border>
+              </Grid>
+              <Border x:Name="PanelSimpleSetup" IsVisible="False"
+                      CornerRadius="4" ClipToBounds="True"
+                      Background="{StaticResource SurfaceSunken}">
+                <Grid>
+                  <Image Source="avares://R5Flowstate.Shell.Linux/Assets/install-bg.jpg" Stretch="UniformToFill"
+                         VerticalAlignment="Top" HorizontalAlignment="Right"/>
+                  <Border Background="#660B100D"/>
+                  <Border>
+                    <Border.Background>
+                      <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                        <GradientStop Color="#F20B100D" Offset="0"/>
+                        <GradientStop Color="#C20B100D" Offset="0.38"/>
+                        <GradientStop Color="#000B100D" Offset="0.86"/>
+                      </LinearGradientBrush>
+                    </Border.Background>
+                  </Border>
+                  <Border>
+                    <Border.Background>
+                      <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Color="#000B100D" Offset="0"/>
+                        <GradientStop Color="#800B100D" Offset="0.42"/>
+                        <GradientStop Color="#FA0B100D" Offset="0.88"/>
+                      </LinearGradientBrush>
+                    </Border.Background>
+                  </Border>
+
+                  <ScrollViewer x:Name="ScrollSimpleSetup"
+                                VerticalScrollBarVisibility="Auto"
+                                HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Left"
+                                Width="600" Margin="40,28,40,32">
+                      <!-- These two come from the view model rather than from
+                           {loc:T}, because they say something about the job:
+                           "Installing the game / HANG TIGHT" while one runs,
+                           "Install the game / GET STARTED" otherwise. Windows
+                           re-writes them onto the bound TextBlocks in
+                           PaintInstallControls, which is where its language
+                           binding dies; a computed property has no such cost. -->
+                      <TextBlock x:Name="TxtSimpleSetupKicker" Text="{Binding SimpleSetupKicker}"
+                                 Classes="section-label"
+                                 Foreground="{StaticResource AccentBright}" Margin="0,0,0,6"/>
+                      <TextBlock x:Name="TxtSimpleSetupTitle" Text="{Binding SimpleSetupTitle}"
+                                 FontSize="34" FontWeight="Bold"
+                                 Foreground="{StaticResource TextPrimary}"/>
+
+                      <StackPanel x:Name="PanelSimpleSetupIdle"
+                                  IsVisible="{Binding !Installing}">
+                        <TextBlock x:Name="TxtSimpleSetupBlurb" Margin="0,8,0,16" FontSize="14"
+                                   Foreground="{StaticResource TextSecondary}"
+                                   TextWrapping="Wrap"
+                                   Text="{loc:T setup_blurb}"/>
+                        <TextBlock Text="{loc:T label_folder}" Classes="field-label"/>
+                        <DockPanel Margin="0,4,0,12">
+                          <Button DockPanel.Dock="Right" Content="{loc:T browse}" Width="112" Height="38"
+                                  Margin="10,0,0,0" Classes="ghost"
+                                  Click="OnBrowseSimpleInstall"/>
+                          <TextBox x:Name="TxtSimpleInstallRoot" Height="38"
+                                   Text="{Binding InstallPath}"/>
+                        </DockPanel>
+                        <TextBlock x:Name="TxtSimpleInstallSize" FontSize="13"
+                                   Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"
+                                   Text="{Binding InstallSizeText}"/>
+                        <!-- The setup card is only on screen while the game is
+                             missing (see AttachInstallGate), so this button is always
+                             the Install half of Windows' mode-switching CTA: upstream
+                             binds it to OnPlay, which dispatches on _simplePlayKind
+                             and runs RunInstallAsync(InstallMode.Full) for the
+                             Install/SetUp kinds. Sending it to PlayLocal instead made
+                             it answer "the game is not installed there" and do
+                             nothing — a caption that says INSTALL must install. -->
+                        <Button x:Name="BtnSimpleSetupInstall"
+                                Classes="play-bar"
+                                Content="{loc:T install}"
+                                HorizontalAlignment="Left"
+                                Margin="0,20,0,0"
+                                IsEnabled="{Binding !Installing}"
+                                Command="{Binding InstallGameCommand}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,16,0,0" Spacing="10">
+                          <Button Classes="link" Content="{loc:T learn_more}"
+                                  FontSize="12" Click="OnOpenWebsite"
+                                  ToolTip.Tip="{loc:T tip_website}"/>
+                          <TextBlock Text="  ·  " VerticalAlignment="Center"
+                                     Foreground="{StaticResource TextMuted}"/>
+                          <Button Classes="link" Content="{loc:T read_eula}"
+                                  FontSize="12" Click="OnReadEula"/>
+                        </StackPanel>
+                      </StackPanel>
+
+                      <!-- Upstream's PanelSimpleInstallProgress: the folder form
+                           above and this card swap in place while a job runs, so the
+                           install tab reports its own progress rather than leaving
+                           the player with a still form and a footer status line.
+
+                           The per-card download-limit box upstream keeps at the
+                           bottom is deliberately not repeated here: this port has one
+                           editable DownloadLimit (Settings → Downloads), and a second
+                           editor of the same number could disagree with it. -->
+                      <Border x:Name="PanelSimpleInstallProgress"
+                              IsVisible="{Binding Installing}"
+                              Margin="0,18,0,0" Background="#D90C1210"
+                              BorderBrush="{StaticResource BorderLine}" BorderThickness="1"
+                              CornerRadius="4" Padding="18,16">
+                        <StackPanel>
+                          <DockPanel>
+                            <TextBlock x:Name="TxtSimpleProgressBytes" DockPanel.Dock="Right"
+                                       Text="{Binding InstallBytes}"
+                                       FontSize="12" Foreground="{StaticResource TextSecondary}"
+                                       Margin="12,0,0,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtSimpleProgressPhase"
+                                       Text="{Binding InstallPhase}"
+                                       FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{StaticResource AccentBright}"/>
+                          </DockPanel>
+                          <!-- MinHeight on the variable rows: an empty line must not
+                               shrink the card between progress ticks. -->
+                          <TextBlock x:Name="TxtSimpleProgressFile"
+                                     Text="{Binding InstallFileLine}"
+                                     FontSize="13" Foreground="{StaticResource TextPrimary}"
+                                     Margin="0,6,0,0" MinHeight="17"
+                                     HorizontalAlignment="Stretch"
+                                     TextWrapping="NoWrap"
+                                     TextTrimming="CharacterEllipsis"/>
+                          <ProgressBar x:Name="BarSimpleFile" Height="8" Minimum="0" Maximum="100"
+                                       Value="{Binding InstallFraction}"
+                                       Margin="0,12,0,0"/>
+                          <ItemsControl x:Name="ListActiveTransfers"
+                                        ItemsSource="{Binding InstallActive}"
+                                        Margin="0,10,0,0">
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate>
+                                <Grid Margin="0,0,0,5">
+                                  <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                  </Grid.ColumnDefinitions>
+                                  <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                             FontSize="11"
+                                             Foreground="{StaticResource TextSecondary}"
+                                             TextWrapping="NoWrap"
+                                             TextTrimming="CharacterEllipsis"
+                                             VerticalAlignment="Center"/>
+                                  <TextBlock Grid.Column="1" Text="{Binding Detail}"
+                                             FontSize="11"
+                                             Foreground="{StaticResource TextSecondary}"
+                                             Margin="10,0,0,0" VerticalAlignment="Center"/>
+                                  <ProgressBar Grid.ColumnSpan="2" Height="2"
+                                               Minimum="0" Maximum="100"
+                                               Value="{Binding Percent}"
+                                               VerticalAlignment="Bottom"
+                                               Opacity="0.75"/>
+                                </Grid>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                          <DockPanel Margin="0,8,0,0" MinHeight="16">
+                            <TextBlock x:Name="TxtSimpleProgressRate" DockPanel.Dock="Right"
+                                       Text="{Binding InstallRateText}"
+                                       FontSize="12" Foreground="{StaticResource AccentBright}"
+                                       Margin="12,0,0,0"/>
+                            <TextBlock x:Name="TxtSimpleProgressStep"
+                                       Text="{Binding InstallStep}"
+                                       FontSize="12" Foreground="{StaticResource TextSecondary}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"/>
+                          </DockPanel>
+                          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
+                                      Margin="0,6,0,0">
+                            <Button x:Name="BtnSimpleInstallPause"
+                                    Content="{Binding InstallPauseLabel}"
+                                    Classes="ghost"
+                                    MinWidth="96" Height="34" Margin="0,0,8,0"
+                                    Command="{Binding TogglePauseInstallCommand}"/>
+                            <Button x:Name="BtnSimpleInstallCancel"
+                                    Content="{loc:T cancel}"
+                                    Classes="danger"
+                                    MinWidth="96" Height="34"
+                                    Command="{Binding CancelInstallCommand}"/>
+                          </StackPanel>
+                        </StackPanel>
+                      </Border>
+                    </StackPanel>
+                  </ScrollViewer>
+                </Grid>
+              </Border>
+            </Grid>
+          </DockPanel>
+
+          <!-- ===== LEADERBOARDS ===== -->
+          <DockPanel x:Name="PanelSimpleLeaderboards" Margin="16,14,16,14" IsVisible="False">
+            <DockPanel DockPanel.Dock="Top" Margin="2,0,0,10">
+              <TextBlock DockPanel.Dock="Left" Text="{loc:T section_1v1}"
+                         Classes="section-label" Margin="0,0,16,0"
+                         VerticalAlignment="Center"/>
+              <TextBlock x:Name="TxtLbActivity" DockPanel.Dock="Right"
+                         Text="{Binding LbActivity}"
+                         IsVisible="{Binding LbActivityVisible}"
+                         FontSize="12" Foreground="{StaticResource TextMuted}"
+                         VerticalAlignment="Center" Margin="12,0,0,0"/>
+              <TextBlock x:Name="TxtLbStatus" Text="{Binding LbStatus}" FontSize="12"
+                         Foreground="{StaticResource TextSecondary}"
+                         TextWrapping="Wrap" VerticalAlignment="Center"/>
+            </DockPanel>
+            <DockPanel DockPanel.Dock="Top" Margin="2,0,0,10">
+              <StackPanel DockPanel.Dock="Left" Orientation="Horizontal"
+                          VerticalAlignment="Center" Margin="0,0,16,0">
+                <Button x:Name="BtnLbViewBoard" Content="{loc:T lb_board}"
+                        Classes="tab on" Click="OnLbViewBoard"
+                        Margin="0,0,18,0" FontSize="13" Height="32"/>
+                <Button x:Name="BtnLbViewMatches" Content="{loc:T lb_history}"
+                        Classes="tab" Click="OnLbViewMatches"
+                        Margin="0" FontSize="13" Height="32"/>
+              </StackPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                          VerticalAlignment="Center">
+                <Button x:Name="BtnLbPrev" Content="{loc:T lb_prev}"
+                        Classes="ghost" MinWidth="72" Height="32"
+                        Command="{Binding LbPrevCommand}"
+                        IsEnabled="{Binding LbHasPrev}"/>
+                <Button x:Name="BtnLbNext" Content="{loc:T lb_next}"
+                        Classes="ghost" MinWidth="72" Height="32"
+                        Margin="6,0,0,0" Command="{Binding LbNextCommand}"
+                        IsEnabled="{Binding LbHasNext}"/>
+              </StackPanel>
+              <DockPanel VerticalAlignment="Center">
+                <TextBlock DockPanel.Dock="Left" Text="{loc:T lb_season}"
+                           FontSize="12" Foreground="{StaticResource TextSecondary}"
+                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <ComboBox x:Name="CmbLbSeason" Width="180" Height="32" Margin="0,0,12,0"
+                          ItemsSource="{Binding LbSeasons}"
+                          SelectedItem="{Binding LbSelectedSeason}"
+                          SelectionChanged="OnLbSeasonChanged"
+                          IsEnabled="{Binding LbSeasons.Count}"/>
+                <TextBox x:Name="TxtLbSearch" Height="32"
+                         ToolTip.Tip="{loc:T lb_search}"
+                         TextChanged="OnLbSearchTextChanged"
+                         KeyDown="OnLbSearchKeyDown"/>
+              </DockPanel>
+            </DockPanel>
+
+            <!-- Player card: the profile of the row you clicked, with its map and
+                 weapon splits and its last eight matches. -->
+            <Border x:Name="PanelLbDetail" DockPanel.Dock="Bottom"
+                    IsVisible="{Binding LbDetailVisible}"
+                    Background="{StaticResource SurfaceBg}"
+                    CornerRadius="4" Padding="16,14" Margin="0,8,0,0">
+              <Grid ColumnDefinitions="240,16,180,16,180,16,*">
+                <Button Grid.Column="0" Grid.ColumnSpan="7" Content="{loc:T lb_close}"
+                        Classes="ghost" Padding="10,2" FontSize="12"
+                        HorizontalAlignment="Right" VerticalAlignment="Top"
+                        ZIndex="2" Command="{Binding LbCloseDetailCommand}"
+                        ToolTip.Tip="{loc:T lb_close}"/>
+                <StackPanel Grid.Column="0">
+                  <TextBlock x:Name="TxtLbDetailPersona" Text="{Binding LbDetailPersona}"
+                             FontSize="16" FontWeight="SemiBold"
+                             Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
+                  <TextBlock x:Name="TxtLbDetailRank" Text="{Binding LbDetailRank}"
+                             FontSize="13" Margin="0,4,0,0"
+                             Foreground="{StaticResource AccentBright}"/>
+                  <TextBlock x:Name="TxtLbDetailStats" Text="{Binding LbDetailStats}"
+                             FontSize="13" Margin="0,10,0,0"
+                             Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+                  <TextBlock x:Name="TxtLbDetailLoadout" Text="{Binding LbDetailLoadout}"
+                             FontSize="12" Margin="0,8,0,0"
+                             Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
+                  <TextBlock x:Name="TxtLbDetailStreak" Text="{Binding LbDetailStreak}"
+                             FontSize="12" Margin="0,6,0,0"
+                             Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
+                  <TextBlock x:Name="TxtLbDetailBest" Text="{Binding LbDetailBest}"
+                             FontSize="12" Margin="0,4,0,0"
+                             Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
+                  <Button x:Name="BtnLbFullHistory" Content="{loc:T lb_full_history}"
+                          Classes="ghost" Padding="10,2" FontSize="12"
+                          HorizontalAlignment="Left" Margin="0,10,0,0"
+                          Command="{Binding LbFullHistoryCommand}"
+                          ToolTip.Tip="{loc:T lb_full_history}"/>
+                </StackPanel>
+                <DockPanel Grid.Column="2">
+                  <TextBlock DockPanel.Dock="Top" Text="{loc:T lb_maps}"
+                             Classes="section-label"/>
+                  <ItemsControl x:Name="ListLbMaps" ItemsSource="{Binding LbMapSplits}"
+                                ItemTemplate="{StaticResource LbSplitRowTemplate}"/>
+                </DockPanel>
+                <DockPanel Grid.Column="4">
+                  <TextBlock DockPanel.Dock="Top" Text="{loc:T lb_weapons}"
+                             Classes="section-label"/>
+                  <ItemsControl x:Name="ListLbWeapons" ItemsSource="{Binding LbWeaponSplits}"
+                                ItemTemplate="{StaticResource LbSplitRowTemplate}"/>
+                </DockPanel>
+                <DockPanel Grid.Column="6">
+                  <TextBlock DockPanel.Dock="Top" Text="{loc:T section_recent}"
+                             Classes="section-label"/>
+                  <TextBlock x:Name="TxtLbMatchesStatus" DockPanel.Dock="Top"
+                             Text="{Binding LbMatchesStatus}"
+                             IsVisible="{Binding LbMatchesStatusVisible}"
+                             FontSize="12" Foreground="{StaticResource TextSecondary}"
+                             Margin="0,0,0,8"/>
+                  <ItemsControl x:Name="ListLbMatches" ItemsSource="{Binding LbRecentMatches}"
+                                ItemTemplate="{StaticResource LbRecentMatchRowTemplate}"/>
+                </DockPanel>
+              </Grid>
+            </Border>
+
+            <Grid>
+              <ScrollViewer x:Name="ScrollLbBoard" VerticalScrollBarVisibility="Auto"
+                            HorizontalScrollBarVisibility="Auto">
+                <StackPanel>
+                  <Border Padding="12,2,12,6" Margin="0,0,0,4"
+                          BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,0,0,1">
+                    <Grid MinWidth="1024" ColumnDefinitions="52,*,58,36,36,46,54,50,76,40,36,44,44,48,50,44">
+                      <Button x:Name="BtnLbColRank" Grid.Column="0" Classes="lb-sort" Tag="rank" Click="OnLbSortClick"/>
+                      <Button x:Name="BtnLbColPlayer" Grid.Column="1" Classes="lb-sort" Tag="persona" Click="OnLbSortClick" HorizontalContentAlignment="Left" Margin="4,0,8,0"/>
+                      <Button x:Name="BtnLbColScore" Grid.Column="2" Classes="lb-sort" Tag="score" Click="OnLbSortClick"/>
+                      <Button x:Name="BtnLbColK" Grid.Column="3" Classes="lb-sort" Tag="kills" Click="OnLbSortClick" ToolTip.Tip="{loc:T tip_lb_kills}"/>
+                      <Button x:Name="BtnLbColD" Grid.Column="4" Classes="lb-sort" Tag="deaths" Click="OnLbSortClick" ToolTip.Tip="{loc:T tip_lb_deaths}"/>
+                      <Button x:Name="BtnLbColKd" Grid.Column="5" Classes="lb-sort" Tag="kd" Click="OnLbSortClick" ToolTip.Tip="{loc:T tip_lb_kd}"/>
+                      <Button x:Name="BtnLbColDmg" Grid.Column="6" Classes="lb-sort" Tag="damage" Click="OnLbSortClick" ToolTip.Tip="{loc:T tip_lb_damage}"/>
+                      <Button x:Name="BtnLbColAcc" Grid.Column="7" Classes="lb-sort" Tag="accuracy" Click="OnLbSortClick" ToolTip.Tip="{loc:T tip_lb_acc}"/>
+                      <Button x:Name="BtnLbColWpn" Grid.Column="8" Classes="lb-sort" Tag="mostUsedWeapon" Click="OnLbSortClick" HorizontalContentAlignment="Left" Margin="8,0,4,0" ToolTip.Tip="{loc:T tip_lb_wpn}"/>
+                      <Button x:Name="BtnLbColIn" Grid.Column="9" Classes="lb-sort" Tag="mostUsedInput" Click="OnLbSortClick" HorizontalContentAlignment="Left" Margin="4,0,0,0" ToolTip.Tip="{loc:T tip_lb_in}"/>
+                      <Button x:Name="BtnLbColHs" Grid.Column="10" Classes="lb-sort" Tag="headshots" Click="OnLbSortClick" ToolTip.Tip="{loc:T lb_hs}"/>
+                      <Button x:Name="BtnLbColHits" Grid.Column="11" Classes="lb-sort" Tag="hits" Click="OnLbSortClick" ToolTip.Tip="{loc:T lb_hits}"/>
+                      <Button x:Name="BtnLbColWins" Grid.Column="12" Classes="lb-sort" Tag="wins" Click="OnLbSortClick" ToolTip.Tip="{loc:T lb_wins}"/>
+                      <Button x:Name="BtnLbColGames" Grid.Column="13" Classes="lb-sort" Tag="games" Click="OnLbSortClick" ToolTip.Tip="{loc:T lb_games}"/>
+                      <Button x:Name="BtnLbColWr" Grid.Column="14" Classes="lb-sort" Tag="winRate" Click="OnLbSortClick" ToolTip.Tip="{loc:T tip_lb_wr}"/>
+                      <Button x:Name="BtnLbColStreak" Grid.Column="15" Classes="lb-sort" Tag="streak" Click="OnLbSortClick" ToolTip.Tip="{loc:T tip_lb_streak}"/>
+                  </Grid>
+                </Border>
+                <ItemsControl x:Name="ListLb" ItemsSource="{Binding LeaderboardRows}"
+                              ItemTemplate="{StaticResource LeaderboardRowTemplate}"/>
+              </StackPanel>
+              </ScrollViewer>
+              <ScrollViewer x:Name="ScrollLbHistory" IsVisible="False"
+                            VerticalScrollBarVisibility="Auto"
+                            HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl x:Name="ListLbHistory" ItemsSource="{Binding LeaderboardHistoryRows}"
+                              ItemTemplate="{StaticResource LbHistoryRowTemplate}"/>
+              </ScrollViewer>
+
+              <!-- Match card: one grouped 1v1 session, everyone who played it.
+                   Layered over both lists, so it needs no extra tab. -->
+              <Grid x:Name="OverlayLbMatch" IsVisible="{Binding LbMatchVisible}"
+                    Panel.ZIndex="10" Background="#CC000000"
+                    Tapped="OnLbMatchBackdropTapped">
+                <Border Background="{StaticResource SurfaceBg}"
+                        BorderBrush="{StaticResource BorderStrong}" BorderThickness="1"
+                        CornerRadius="6" Padding="18,16" Margin="24"
+                        MaxWidth="760" MaxHeight="520"
+                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                  <DockPanel>
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+                      <Button DockPanel.Dock="Right" Content="{loc:T lb_close}"
+                              Classes="ghost" Padding="12,4" FontSize="12"
+                              VerticalAlignment="Top" Command="{Binding LbCloseMatchCommand}"
+                              ToolTip.Tip="{loc:T lb_close}"/>
+                      <StackPanel>
+                        <TextBlock x:Name="TxtMatchTitle" Text="{Binding LbMatchTitle}"
+                                   FontSize="17" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimary}"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="TxtMatchScore" Text="{Binding LbMatchScore}"
+                                   FontFamily="{StaticResource Mono}" FontSize="20"
+                                   Margin="0,2,0,0" Foreground="{StaticResource AccentBright}"/>
+                        <TextBlock x:Name="TxtMatchMeta" Text="{Binding LbMatchMeta}"
+                                   FontSize="12" Margin="0,8,0,0"
+                                   Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="TxtMatchHost" Text="{Binding LbMatchHost}"
+                                   FontSize="12" Margin="0,4,0,0"
+                                   Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="TxtMatchWinner" Text="{Binding LbMatchWinner}"
+                                   IsVisible="{Binding LbMatchHasWinner}"
+                                   FontSize="12" Margin="0,4,0,0"
+                                   Foreground="{StaticResource Accent}" TextWrapping="Wrap"/>
+                      </StackPanel>
+                    </DockPanel>
+                    <TextBlock x:Name="TxtMatchStatus" DockPanel.Dock="Top"
+                               Text="{Binding LbMatchStatus}"
+                               IsVisible="{Binding LbMatchStatusVisible}"
+                               FontSize="12" Foreground="{StaticResource TextSecondary}"
+                               Margin="0,0,0,8" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="TxtMatchOneSided" DockPanel.Dock="Bottom" FontSize="11"
+                               Text="{loc:T lb_match_one_sided}" Margin="0,8,0,0"
+                               IsVisible="{Binding LbMatchOneSided}"
+                               Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  MinHeight="160">
+                      <ItemsControl x:Name="ListMatchPlayers" ItemsSource="{Binding LbMatchPlayers}"
+                                    ItemTemplate="{StaticResource MatchPlayerRowTemplate}"/>
+                    </ScrollViewer>
+                  </DockPanel>
+                </Border>
+              </Grid>
+            </Grid>
+          </DockPanel>
+
+          <!-- ===== SERVERS ===== -->
+          <DockPanel x:Name="PanelSimpleServers" Margin="16,14,16,14" IsVisible="False">
+            <DockPanel DockPanel.Dock="Top" Margin="2,0,0,12">
+              <Button x:Name="BtnDisconnect" DockPanel.Dock="Right"
+                      Content="{loc:T disconnect}" MinWidth="120" Height="34"
+                      Classes="danger-small"
+                      IsVisible="False"
+                      Command="{Binding KillClientCommand}"
+                      ToolTip.Tip="{loc:T tip_disconnect}"/>
+              <TextBlock x:Name="TxtConnectedTo" VerticalAlignment="Center"
+                         FontSize="13" Foreground="{StaticResource AccentBright}"
+                         IsVisible="False" TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
+            <StackPanel x:Name="BarServersFooter" DockPanel.Dock="Bottom"
+                        Orientation="Horizontal" HorizontalAlignment="Center"
+                        Margin="0,12,0,0">
+              <Button x:Name="BtnServersClientOptions"
+                      Content="{loc:T client_settings}" MinWidth="0" Height="26"
+                      Padding="10,0" Margin="0,0,14,0" FontSize="12"
+                      VerticalAlignment="Center"
+                      Classes="ghost"
+                      ToolTip.Tip="{loc:T tip_client_settings}"
+                      Click="OnToggleServersClientOptions"/>
+              <Button Classes="link" Content="{loc:T read_eula}"
+                      FontSize="12" VerticalAlignment="Center" Click="OnReadEula"/>
+            </StackPanel>
+            <Border x:Name="PanelServersClientOptions" DockPanel.Dock="Bottom"
+                    IsVisible="False" Margin="0,12,0,0"
+                    Background="{StaticResource SurfaceSunken}"
+                    CornerRadius="4" Padding="12,8">
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                          HorizontalAlignment="Center">
+                <CheckBox x:Name="ChkServersDx12" Content="{loc:T directx12}"
+                          Classes="quiet-check"
+                          ToolTip.Tip="{loc:T tip_dx12}"
+                          IsChecked="{Binding UseDx12}"
+                          VerticalAlignment="Center"/>
+                <Border Width="1" Height="16" Margin="0,0,16,0" VerticalAlignment="Center"
+                        Background="{StaticResource BorderSoft}"/>
+                <Button x:Name="BtnServersResolution"
+                        Classes="ghost"
+                        Content="{loc:T label_resolution_short}"
+                        MinWidth="0" Height="30" Padding="10,0" Margin="0,0,8,0"
+                        FontSize="13"
+                        VerticalAlignment="Center"
+                        ToolTip.Tip="{loc:T tip_resolution}"
+                        Click="OnResolutionPresetClick"/>
+                <TextBox x:Name="TxtServersWidth" Width="60" Height="30"
+                         VerticalAlignment="Center"
+                         ToolTip.Tip="{loc:T tip_resolution}"
+                         Text="{Binding ClientWidth}"
+                         LostFocus="OnClientResolutionLostFocus"/>
+                <TextBlock Text="x" Margin="6,0,6,0" VerticalAlignment="Center"
+                           Foreground="{StaticResource TextSecondary}"/>
+                <TextBox x:Name="TxtServersHeight" Width="60" Height="30"
+                         VerticalAlignment="Center"
+                         ToolTip.Tip="{loc:T tip_resolution}"
+                         Text="{Binding ClientHeight}"
+                         LostFocus="OnClientResolutionLostFocus"/>
+              </StackPanel>
+            </Border>
+            <ScrollViewer x:Name="ScrollServersSimple"
+                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+              <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="2,0,0,10" Spacing="8">
+                  <TextBox x:Name="TxtServersJoinTarget" Width="220" Height="32"
+                           Text="{Binding JoinTarget}"
+                           ToolTip.Tip="ip:port"/>
+                  <Button Content="{loc:T play}" Classes="play-bar" Height="34" MinWidth="96"
+                          Padding="18,0" FontSize="13"
+                          Command="{Binding JoinCommand}"/>
+                </StackPanel>
+                <ItemsControl x:Name="ListServersSimple"
+                              ItemsSource="{Binding Servers}"
+                              ItemTemplate="{StaticResource ServerRowTemplate}"/>
+              </StackPanel>
+            </ScrollViewer>
+          </DockPanel>
+
+          <!-- ===== BLOG ===== -->
+          <DockPanel x:Name="PanelSimpleBlog" Margin="16,14,16,14" IsVisible="False">
+            <TextBlock x:Name="TxtBlogStatus" DockPanel.Dock="Top" Text="{Binding BlogStatus}"
+                       IsVisible="{Binding BlogStatusVisible}"
+                       FontSize="12" Foreground="{StaticResource TextSecondary}"
+                       TextWrapping="Wrap" Margin="2,0,0,10"
+                       MaxWidth="920" HorizontalAlignment="Center"/>
+            <Grid>
+              <Grid x:Name="PanelBlogList" IsVisible="{Binding BlogListVisible}"
+                    ColumnDefinitions="*,Auto,*">
+                <ScrollViewer x:Name="ScrollBlogList" Grid.Column="1" Width="920"
+                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                  <ItemsControl x:Name="ListBlog"
+                                ItemsSource="{Binding BlogCards}"
+                                ItemTemplate="{StaticResource BlogCardTemplate}"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Top"/>
+
+                </ScrollViewer>
+              </Grid>
+              <DockPanel x:Name="PanelBlogReader" IsVisible="{Binding BlogReaderVisible}">
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12"
+                            HorizontalAlignment="Center">
+                  <Button x:Name="BtnBlogBack" Content="{loc:T blog_back}"
+                          Classes="ghost" MinWidth="0" Height="32"
+                          Padding="12,0" FontSize="12" Click="OnBlogBack"/>
+                  <Button x:Name="BtnBlogOpenSite" Content="{loc:T blog_open_site}"
+                          Classes="ghost" MinWidth="0" Height="32"
+                          Padding="12,0" FontSize="12" Margin="8,0,0,0"
+                          Click="OnBlogOpenSite"/>
+                </StackPanel>
+                <TextBlock x:Name="TxtBlogReaderStatus" DockPanel.Dock="Top"
+                           Text="{Binding BlogReaderStatus}"
+                           IsVisible="{Binding BlogReaderStatusVisible}"
+                           FontSize="12" Foreground="{StaticResource TextSecondary}"
+                           TextWrapping="Wrap" Margin="0,0,0,10"
+                           MaxWidth="1000" HorizontalAlignment="Center"/>
+                <Grid ColumnDefinitions="*,Auto,*">
+                  <ScrollViewer x:Name="ScrollBlogReader" Grid.Column="1" Width="1000"
+                                VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                      <Border CornerRadius="10" Margin="0,0,0,16" ClipToBounds="True"
+                              Background="{StaticResource SurfaceSunken}"
+                              BorderBrush="{StaticResource BorderSoft}" BorderThickness="1">
+                        <Grid x:Name="GridBlogHeader" MinHeight="{Binding BlogReaderHeaderMinHeight}">
+                          <Image x:Name="ImgBlogCover" Source="{Binding BlogReaderCover}"
+                                 Stretch="UniformToFill" Opacity="0.8" MaxHeight="320"
+                                 IsVisible="{Binding BlogReaderCoverVisible}"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                          <Rectangle x:Name="RectBlogCoverFade"
+                                     IsVisible="{Binding BlogReaderCoverVisible}">
+                            <Rectangle.Fill>
+                              <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                                <GradientStop Color="#E6111815" Offset="0"/>
+                                <GradientStop Color="#C0111815" Offset="0.5"/>
+                                <GradientStop Color="#00111815" Offset="1"/>
+                              </LinearGradientBrush>
+                            </Rectangle.Fill>
+                          </Rectangle>
+                          <StackPanel Margin="20,22,20,20" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                              <Border x:Name="BorderBlogTag" Padding="10,3" CornerRadius="4"
+                                      Margin="0,0,10,0" Background="{StaticResource AccentDim}"
+                                      IsVisible="{Binding BlogReaderTagVisible}">
+                                <TextBlock x:Name="TxtBlogTag" Text="{Binding BlogReaderTag}"
+                                           FontSize="11" FontWeight="SemiBold"
+                                           Foreground="{StaticResource AccentBright}"/>
+                              </Border>
+                              <TextBlock x:Name="TxtBlogDate" Text="{Binding BlogReaderDate}"
+                                         FontSize="12" Foreground="{StaticResource TextMuted}"
+                                         VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TxtBlogTitle" Text="{Binding BlogReaderTitle}"
+                                       FontSize="26" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="TxtBlogSummary" Text="{Binding BlogReaderSummary}"
+                                       IsVisible="{Binding BlogReaderSummaryVisible}"
+                                       FontSize="14" Margin="0,8,0,0"
+                                       Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+                          </StackPanel>
+                        </Grid>
+                      </Border>
+                      <views:BlogMarkdownView x:Name="BlogBody"
+                                              Source="{Binding BlogReaderBody}"/>
+                    </StackPanel>
+                  </ScrollViewer>
+                </Grid>
+              </DockPanel>
+            </Grid>
+          </DockPanel>
+
+          <!-- ===== NOTES ===== -->
+          <DockPanel x:Name="PanelSimpleNotes" Margin="16,14,16,14" IsVisible="False">
+            <DockPanel DockPanel.Dock="Top" Margin="2,0,0,12" LastChildFill="True">
+              <StackPanel Orientation="Horizontal">
+                <Button x:Name="BtnNotesGame" Content="{loc:T tab_game}"
+                        Classes="tab" Click="OnNotesPageGame"
+                        Classes.on="{Binding !NotesShowLauncher}"/>
+                <Button x:Name="BtnNotesLauncher" Content="{loc:T tab_launcher}"
+                        Classes="tab" Click="OnNotesPageLauncher"
+                        Classes.on="{Binding NotesShowLauncher}"/>
+              </StackPanel>
+            </DockPanel>
+            <ScrollViewer x:Name="ScrollNotes"
+                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+              <ItemsControl x:Name="ListNotes" ItemsSource="{Binding NotesEntries}" VerticalAlignment="Top"
+                            ItemTemplate="{StaticResource PatchNoteRowTemplate}"/>
+            </ScrollViewer>
+          </DockPanel>
+
+          <!-- ===== MODS ===== -->
+          <DockPanel x:Name="PanelSimpleMods" Margin="16,14,16,14" IsVisible="False">
+            <DockPanel DockPanel.Dock="Top" Margin="2,0,0,12" LastChildFill="True">
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                          VerticalAlignment="Center">
+                <Button x:Name="BtnModsInstallFile" Content="{loc:T mods_install_file}"
+                        Classes="ghost" MinWidth="0" Height="32"
+                        Padding="12,0" Margin="0,0,8,0" FontSize="12"
+                        Click="OnModsInstallFile"/>
+                <Button x:Name="BtnModsRefresh" Content="{loc:T refresh}"
+                        Classes="ghost" MinWidth="0" Height="32"
+                        Padding="12,0" FontSize="12"
+                        Command="{Binding RefreshModsCommand}"/>
+              </StackPanel>
+              <StackPanel x:Name="PanelModsSections" Orientation="Horizontal">
+                <Button x:Name="BtnModsSectionInstalled" Content="{loc:T mods_installed}"
+                        Classes="tab on" Click="OnModsSectionInstalled"/>
+                <Button x:Name="BtnModsSectionBrowse" Content="{loc:T mods_browse_tab}"
+                        Classes="tab" Click="OnModsSectionBrowse"/>
+              </StackPanel>
+            </DockPanel>
+            <DockPanel x:Name="PanelModsProfile" DockPanel.Dock="Bottom" Margin="0,12,0,0" IsVisible="False">
+              <TextBlock DockPanel.Dock="Left" Text="{loc:T mods_profile}"
+                         FontSize="12" Foreground="{StaticResource TextSecondary}"
+                         VerticalAlignment="Center" Margin="0,0,10,0"/>
+              <Button x:Name="BtnModsExport" DockPanel.Dock="Right"
+                      Content="{loc:T mods_export}"
+                      Classes="ghost" MinWidth="0" Height="32"
+                      Padding="12,0" FontSize="12" Margin="8,0,0,0"
+                      Click="OnModsExport"/>
+              <Button x:Name="BtnModsImport" DockPanel.Dock="Right"
+                      Content="{loc:T mods_import}"
+                      Classes="ghost" MinWidth="0" Height="32"
+                      Padding="12,0" FontSize="12"
+                      Click="OnModsImport"/>
+              <TextBox x:Name="TxtModsProfile" Height="32"
+                       ToolTip.Tip="{loc:T mods_profile_hint}"/>
+            </DockPanel>
+            <TextBlock x:Name="TxtModsStatus" DockPanel.Dock="Bottom" Text="{Binding ModsStatus}"
+                       FontSize="12" Foreground="{StaticResource TextSecondary}"
+                       TextWrapping="Wrap" Margin="0,8,0,0"/>
+            <Grid>
+              <DockPanel x:Name="PanelModsInstalled">
+                <TextBox x:Name="TxtModsSearch" DockPanel.Dock="Top" Height="32"
+                         Margin="0,0,0,10" ToolTip.Tip="{loc:T mods_search}"/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                  <ItemsControl x:Name="ListModsInstalled"
+                                ItemsSource="{Binding ModsInstalled}"
+                                ItemTemplate="{StaticResource ModRowTemplate}"/>
+                </ScrollViewer>
+              </DockPanel>
+              <DockPanel x:Name="PanelModsBrowse" IsVisible="False">
+                <TextBox x:Name="TxtModsBrowseSearch" DockPanel.Dock="Top" Height="32"
+                         Margin="0,0,0,10" ToolTip.Tip="{loc:T mods_search}"/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                  <ItemsControl x:Name="ListModsBrowse"
+                                ItemsSource="{Binding ModsBrowse}"
+                                ItemTemplate="{StaticResource BrowseModRowTemplate}"/>
+                </ScrollViewer>
+              </DockPanel>
+            </Grid>
+          </DockPanel>
+
+          <!-- ===== CREDITS ===== -->
+          <Grid x:Name="PanelSimpleCredits" Margin="16,14,16,14" IsVisible="False">
+            <Image Source="avares://R5Flowstate.Shell.Linux/Assets/logo.png" Width="340" Opacity="0.05"
+                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                   Margin="0,0,10,4" IsHitTestVisible="False"/>
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Top" Margin="2,0,0,18">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="{loc:T credits_host}"
+                             FontSize="16" FontWeight="SemiBold"
+                             Foreground="{StaticResource TextPrimary}"
+                             VerticalAlignment="Center"/>
+                  <StackPanel Orientation="Horizontal" Margin="14,0,0,0" Cursor="Hand"
+                              Background="Transparent" VerticalAlignment="Center"
+                              Tapped="OnOpenPatreon"
+                              ToolTip.Tip="https://www.patreon.com/c/r5_CafeFPS">
+                    <Path Width="12" Height="12" Margin="0,2,6,0" VerticalAlignment="Center"
+                          Stretch="Uniform" Fill="{StaticResource TextMuted}"
+                          Data="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                    <TextBlock Text="@CafeFPS" VerticalAlignment="Center"
+                               FontFamily="{StaticResource Mono}" FontSize="12"
+                               Foreground="{StaticResource TextMuted}"/>
+                  </StackPanel>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0" Spacing="8">
+                  <TextBlock FontSize="13" VerticalAlignment="Center"
+                             Foreground="{StaticResource TextSecondary}"
+                             Text="{loc:T credits_patreon}"/>
+                  <Button Classes="link" Content="{loc:T credits_patreon_link}"
+                          FontSize="13" Click="OnOpenPatreon"
+                          ToolTip.Tip="https://www.patreon.com/c/r5_CafeFPS"/>
+                  <TextBlock Text="{loc:T credits_kofi_or}" VerticalAlignment="Center"
+                             FontSize="13" Foreground="{StaticResource TextSecondary}"/>
+                  <Button Classes="link" Content="{loc:T credits_kofi_link}"
+                          FontSize="13" Click="OnOpenKofi"
+                          ToolTip.Tip="https://ko-fi.com/r5r_colombia"/>
+                </StackPanel>
+                <TextBlock Text="{loc:T credits_built}"
+                           FontSize="13" TextWrapping="Wrap" Margin="0,10,0,0"
+                           Foreground="{StaticResource TextSecondary}"/>
+              </StackPanel>
+              <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                  <ItemsControl x:Name="ListCredits" Margin="2,0,0,0" VerticalAlignment="Top"
+                                ItemsSource="{Binding CreditsRows}"
+                                ItemTemplate="{StaticResource CreditRowTemplate}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <UniformGrid Columns="3"/>
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                  </ItemsControl>
+                  <StackPanel Orientation="Horizontal" Margin="2,6,0,14" Spacing="6">
+                    <TextBlock FontSize="13" VerticalAlignment="Center"
+                               Foreground="{StaticResource TextSecondary}"
+                               Text="{loc:T credits_modding}"/>
+                    <Button Classes="link" Content="{loc:T credits_tools_link}"
+                            FontSize="13" Click="OnOpenToolsRepos"/>
+                  </StackPanel>
+                </StackPanel>
+              </ScrollViewer>
+            </DockPanel>
+          </Grid>
+
+          <!-- ===== CONSOLE ===== -->
+          <DockPanel x:Name="PanelSimpleConsole" Margin="16,14,16,14" IsVisible="False"
+                     Background="{StaticResource SurfaceBg}">
+            <Border DockPanel.Dock="Bottom" Margin="0,12,0,0" Padding="16,10"
+                    CornerRadius="4"
+                    Background="{StaticResource SurfaceBg}">
+              <DockPanel LastChildFill="False" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                  <!-- The mode/map combos are the Play tab's rail in combo
+                       form: the window binds them to the selected card and its
+                       maps, exactly as Windows' BindConsoleModePicker / MapPicker
+                       do. MapIds above is the Advanced tab's own list. -->
+                  <!-- What each combo shows is the item's own ToString, because
+                       that is what Avalonia offers: upstream's DisplayMemberPath is
+                       a WPF property and Avalonia 11 has no such member (the XAML
+                       compile refuses it, AVLN2000). So the text is the view model's
+                       — ModeCardViewModel.ToString returns Title, MapOption.ToString
+                       returns DisplayName, and without the first of those the player
+                       got the type name clipped to the box: "R5Flowstate.Shell…"
+                       where the gamemode list should have been. -->
+                  <ComboBox x:Name="CmbConsoleMode"
+                            Width="168" Height="40"
+                            VerticalAlignment="Center"
+                            Margin="0,0,10,0" IsVisible="False"
+                            SelectionChanged="OnConsoleModeSelectionChanged"
+                            ToolTip.Tip="{loc:T tip_pick_mode}"/>
+                  <ComboBox x:Name="CmbConsoleMap"
+                            Width="200" Height="40"
+                            VerticalAlignment="Center"
+                            Margin="0,0,10,0" IsVisible="False"
+                            SelectionChanged="OnConsoleMapSelectionChanged"
+                            ToolTip.Tip="{loc:T tip_pick_map}"/>
+                  <Button x:Name="BtnReloadLevel"
+                          Content="{loc:T reload_level}" MinWidth="108" Height="44"
+                          Padding="16,0" FontSize="13"
+                          Classes="ghost"
+                          VerticalAlignment="Center"
+                          IsVisible="False"
+                          Click="OnReloadLevel"
+                          ToolTip.Tip="{loc:T tip_reload_level}"/>
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                  <Button x:Name="BtnConsoleFind"
+                          Content="{loc:T find}" MinWidth="92" Height="44"
+                          Padding="16,0" FontSize="13"
+                          Classes="ghost"
+                          VerticalAlignment="Center"
+                          Margin="0,0,10,0" IsVisible="False"
+                          Click="OnConsoleFind"
+                          ToolTip.Tip="{loc:T tip_find}"/>
+                  <!-- Clear is one button for both logs (Windows' OnConsoleClear
+                       clears the server pane and the client pane), and the action
+                       button is the whole session's STOP rather than the dedi's
+                       own kill — upstream's console action is OnPlay, whose live
+                       state for a running session is StopSessionAsync. -->
+                  <Button x:Name="BtnConsoleClear"
+                          Content="{loc:T clear}" MinWidth="92" Height="44"
+                          Padding="16,0" FontSize="13"
+                          Classes="ghost"
+                          VerticalAlignment="Center"
+                          Margin="0,0,10,0"
+                          Command="{Binding ClearConsoleBothCommand}"
+                          ToolTip.Tip="{loc:T tip_clear}"/>
+                  <Button x:Name="BtnConsoleAction"
+                          Content="{loc:T stop}" MinWidth="150" Height="44"
+                          Padding="16,0" FontSize="13" FontWeight="SemiBold"
+                          Classes="danger-small"
+                          VerticalAlignment="Center"
+                          IsVisible="False"
+                          Command="{Binding StopSessionCommand}"
+                          ToolTip.Tip="{loc:T tip_stop}"/>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+            <!-- The rows are named by index rather than by name (Windows names
+                 each RowDefinition); the console view rules set their heights
+                 from code, which is the one thing a RowDefinition cannot be
+                 bound for. -->
+            <Grid x:Name="GridConsole" RowDefinitions="*,10,*">
+              <Border x:Name="PaneConsoleServer" Grid.Row="0"
+                      Background="{StaticResource SurfaceSunken}"
+                      CornerRadius="4" Padding="14,12">
+                <DockPanel>
+                  <TextBlock DockPanel.Dock="Top" Text="{loc:T section_dedi}"
+                             Classes="section-label"/>
+                  <Border x:Name="BarFindServer" DockPanel.Dock="Top"
+                          IsVisible="False" Margin="0,0,0,8"
+                          Background="{StaticResource SurfaceRaised}"
+                          CornerRadius="4" Padding="8,6">
+                    <DockPanel LastChildFill="False">
+                      <TextBlock Text="{loc:T find}" VerticalAlignment="Center"
+                                 Margin="2,0,8,0" FontSize="12"
+                                 Foreground="{StaticResource TextMuted}"/>
+                      <TextBox x:Name="TxtFindServer" Width="240" Height="28"
+                               Tag="Server"
+                               VerticalAlignment="Center"
+                               TextChanged="OnConsoleFindTextChanged"
+                               KeyDown="OnConsoleFindKeyDown"
+                               ToolTip.Tip="{loc:T tip_find}"/>
+                      <TextBlock x:Name="TxtFindServerCount" Tag="Server"
+                                 VerticalAlignment="Center" Margin="8,0,0,0"
+                                 FontSize="12"
+                                 Foreground="{StaticResource TextMuted}"/>
+                      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                                  VerticalAlignment="Center">
+                        <CheckBox x:Name="ChkFindServerCase" Content="Aa"
+                                  Classes="option-chip" Tag="Server"
+                                  VerticalAlignment="Center"
+                                  IsCheckedChanged="OnConsoleFindCaseChanged"
+                                  ToolTip.Tip="{loc:T tip_find_case}"/>
+                        <Button Content="&#x25B2;" Width="30" Height="28" MinWidth="0"
+                                Padding="0" FontSize="10" Margin="4,0,0,0"
+                                Classes="ghost" Tag="Server"
+                                x:Name="BtnFindServerPrev" Click="OnConsoleFindPrev"
+                                ToolTip.Tip="{loc:T tip_find_prev}"/>
+                        <Button Content="&#x25BC;" Width="30" Height="28" MinWidth="0"
+                                Padding="0" FontSize="10" Margin="4,0,0,0"
+                                Classes="ghost" Tag="Server"
+                                x:Name="BtnFindServerNext" Click="OnConsoleFindNext"
+                                ToolTip.Tip="{loc:T tip_find_next}"/>
+                        <Button Content="&#x2715;" Width="30" Height="28" MinWidth="0"
+                                Padding="0" FontSize="11" Margin="4,0,0,0"
+                                Classes="ghost" Tag="Server"
+                                x:Name="BtnFindServerClose" Click="OnConsoleFindClose"
+                                ToolTip.Tip="{loc:T tip_find_close}"/>
+                      </StackPanel>
+                    </DockPanel>
+                  </Border>
+                  <TextBox x:Name="TxtConsoleServerCmd" DockPanel.Dock="Bottom"
+                           Classes="console-input" Tag="Server"
+                           Margin="0,10,0,0"
+                           KeyDown="OnConsoleServerCmdKeyDown"
+                           ToolTip.Tip="{loc:T tip_console_server}"/>
+                  <views:ConsolePane x:Name="TxtConsoleServer"
+                                     Lines="{Binding ConsoleServerLines}"/>
+                </DockPanel>
+              </Border>
+              <Border Grid.Row="2" Background="{StaticResource SurfaceSunken}"
+                      CornerRadius="4" Padding="14,12">
+                <DockPanel>
+                  <TextBlock DockPanel.Dock="Top" Text="{loc:T section_client}"
+                             Classes="section-label"/>
+                  <Border x:Name="BarFindClient" DockPanel.Dock="Top"
+                          IsVisible="False" Margin="0,0,0,8"
+                          Background="{StaticResource SurfaceRaised}"
+                          CornerRadius="4" Padding="8,6">
+                    <DockPanel LastChildFill="False">
+                      <TextBlock Text="{loc:T find}" VerticalAlignment="Center"
+                                 Margin="2,0,8,0" FontSize="12"
+                                 Foreground="{StaticResource TextMuted}"/>
+                      <TextBox x:Name="TxtFindClient" Width="240" Height="28"
+                               Tag="Client"
+                               VerticalAlignment="Center"
+                               TextChanged="OnConsoleFindTextChanged"
+                               KeyDown="OnConsoleFindKeyDown"
+                               ToolTip.Tip="{loc:T tip_find}"/>
+                      <TextBlock x:Name="TxtFindClientCount" Tag="Client"
+                                 VerticalAlignment="Center" Margin="8,0,0,0"
+                                 FontSize="12"
+                                 Foreground="{StaticResource TextMuted}"/>
+                      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                                  VerticalAlignment="Center">
+                        <CheckBox x:Name="ChkFindClientCase" Content="Aa"
+                                  Classes="option-chip" Tag="Client"
+                                  VerticalAlignment="Center"
+                                  IsCheckedChanged="OnConsoleFindCaseChanged"
+                                  ToolTip.Tip="{loc:T tip_find_case}"/>
+                        <Button Content="&#x25B2;" Width="30" Height="28" MinWidth="0"
+                                Padding="0" FontSize="10" Margin="4,0,0,0"
+                                Classes="ghost" Tag="Client"
+                                x:Name="BtnFindClientPrev" Click="OnConsoleFindPrev"
+                                ToolTip.Tip="{loc:T tip_find_prev}"/>
+                        <Button Content="&#x25BC;" Width="30" Height="28" MinWidth="0"
+                                Padding="0" FontSize="10" Margin="4,0,0,0"
+                                Classes="ghost" Tag="Client"
+                                x:Name="BtnFindClientNext" Click="OnConsoleFindNext"
+                                ToolTip.Tip="{loc:T tip_find_next}"/>
+                        <Button Content="&#x2715;" Width="30" Height="28" MinWidth="0"
+                                Padding="0" FontSize="11" Margin="4,0,0,0"
+                                Classes="ghost" Tag="Client"
+                                x:Name="BtnFindClientClose" Click="OnConsoleFindClose"
+                                ToolTip.Tip="{loc:T tip_find_close}"/>
+                      </StackPanel>
+                    </DockPanel>
+                  </Border>
+                  <TextBox x:Name="TxtConsoleClientCmd" DockPanel.Dock="Bottom"
+                           Classes="console-input" Tag="Client"
+                           Margin="0,10,0,0"
+                           KeyDown="OnConsoleClientCmdKeyDown"
+                           ToolTip.Tip="{loc:T tip_console_client}"/>
+                  <views:ConsolePane x:Name="TxtConsoleClient"
+                                     Lines="{Binding ConsoleClientLines}"/>
+                </DockPanel>
+              </Border>
+            </Grid>
+          </DockPanel>
+
+          <!-- ===== SETTINGS ===== -->
+          <ScrollViewer x:Name="PanelSimpleSettings" Margin="16,14,16,14" IsVisible="False"
+                        VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                        Background="{StaticResource SurfaceBg}">
+            <StackPanel Margin="0,0,10,0">
+          <Border Classes="card">
+            <StackPanel>
+              <TextBlock Text="{loc:T section_language}" Classes="section-label"/>
+              <ComboBox x:Name="CmbUiLanguage"
+                        Height="32" Margin="0,0,0,16"
+                        ItemsSource="{Binding Languages}"
+                        SelectedItem="{Binding SelectedLanguage}"
+                        SelectionChanged="OnUiLanguageChanged">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding Label}"/>
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+              <TextBlock Text="{loc:T section_install}" Classes="section-label"/>
+              <TextBlock Text="{loc:T label_install_dir}" Classes="field-label"/>
+              <DockPanel>
+                <Button DockPanel.Dock="Right" Content="{loc:T browse}" Width="88" Margin="8,0,0,0"
+                        Classes="ghost" Click="OnBrowseInstall"
+                        ToolTip.Tip="{loc:T tip_browse_install}"/>
+                <Button DockPanel.Dock="Right" Content="{loc:T reset_path}" MinWidth="100" Margin="8,0,0,0"
+                        Classes="ghost" Click="OnResetInstallPath"
+                        ToolTip.Tip="{loc:T tip_reset_path}"/>
+                <Button DockPanel.Dock="Right" Content="{loc:T remove_game}" MinWidth="128" Margin="16,0,0,0"
+                        Classes="danger-small"
+                        Command="{Binding RemoveGameFilesCommand}"
+                        ToolTip.Tip="{loc:T tip_remove_game}"/>
+                <Button DockPanel.Dock="Right" Content="{loc:T open}" Width="64" Margin="8,0,0,0"
+                        Classes="ghost" Click="OnOpenInstall"/>
+                <TextBox x:Name="TxtInstallRoot" Text="{Binding InstallPath}"/>
+              </DockPanel>
+              <CheckBox x:Name="ChkOpenConsoleOnLaunch" Margin="0,12,0,0"
+                        Content="{loc:T open_console_on_launch}"
+                        ToolTip.Tip="{loc:T tip_open_console}"
+                        IsChecked="{Binding OpenConsoleOnLaunch}"/>
+              <CheckBox x:Name="ChkShowUnlistedMaps" Margin="0,12,0,0"
+                        Content="{loc:T show_unlisted_maps}"
+                        ToolTip.Tip="{loc:T tip_show_unlisted_maps}"
+                        IsChecked="{Binding ShowUnlistedMaps}"/>
+              <CheckBox x:Name="ChkJoinWithoutDev" Margin="0,12,0,0"
+                        Content="{loc:T join_without_dev}"
+                        ToolTip.Tip="{loc:T tip_join_without_dev}"
+                        IsChecked="{Binding JoinWithoutDev}"/>
+              <DockPanel Margin="0,12,0,0" LastChildFill="False">
+                <TextBlock Text="{loc:T label_download_limit}" VerticalAlignment="Center"
+                           Foreground="{StaticResource TextSecondary}"/>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right"
+                            VerticalAlignment="Center">
+                  <TextBox x:Name="TxtDownloadLimit" Width="64" Height="30"
+                           ToolTip.Tip="{loc:T tip_download_limit}"
+                           Text="{Binding DownloadLimit}"/>
+                  <TextBlock Text="{loc:T mbs_unit}" Margin="6,0,0,0"
+                             VerticalAlignment="Center"
+                             Foreground="{StaticResource TextSecondary}"/>
+                </StackPanel>
+              </DockPanel>
+            </StackPanel>
+          </Border>
+
+          <!-- Linux: Proton + EA App card (replaces the Windows launcher-runtime card). -->
+          <Border x:Name="CardProtonEa" Classes="card">
+            <StackPanel>
+              <TextBlock Text="Proton &amp; EA App" Classes="section-label"/>
+              <TextBlock Text="Proton build:" Classes="field-label"/>
+              <DockPanel Margin="0,0,0,10">
+                <Button DockPanel.Dock="Right" Content="{loc:T refresh}" Width="92" Margin="8,0,0,0"
+                        Classes="ghost" Command="{Binding RefreshProtonsCommand}"
+                        ToolTip.Tip="Rescan Steam Proton builds"/>
+                <ComboBox x:Name="CmbProton" Height="32"
+                          ItemsSource="{Binding Protons}"
+                          SelectedItem="{Binding SelectedProton}">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                      <TextBlock Text="{Binding Name}"/>
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+              </DockPanel>
+              <TextBlock Text="Proton dir:" Classes="field-label"/>
+              <TextBox x:Name="TxtProtonDir" IsReadOnly="True" Margin="0,0,0,10"
+                       Text="{Binding ProtonDir}" FontFamily="{StaticResource Mono}" FontSize="12"/>
+              <TextBlock Text="Wine prefix (shared with the game):" Classes="field-label"/>
+              <TextBox x:Name="TxtPrefixPath" Margin="0,0,0,10"
+                       Text="{Binding PrefixPath}" FontFamily="{StaticResource Mono}" FontSize="12"/>
+
+              <!-- One runtime. The EA App is a Chromium client, and Proton runs it
+                   in the game's own prefix, so the two meet on a shared wineserver
+                   rather than across the host's loopback — and the EA App still has
+                   to be signed in while you play, because the game proves its
+                   account through EA's LSX server on 3216 either way.
+                   The "EA App runtime" combo, the second prefix box and the Wine
+                   status line that used to sit here are gone with the split: there
+                   is no runtime to pick and no second prefix to name. -->
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                <CheckBox x:Name="ChkStartEaWithGame" Content="Start the EA App with the game"
+                          IsChecked="{Binding StartEaWithGame}"
+                          ToolTip.Tip="Bring the EA App up (and wait for its channel) before an online launch. The game cannot prove its account without it."/>
+              </StackPanel>
+              <TextBlock x:Name="TxtEaStatus" Classes="mono-note" Text="{Binding EaStatus}"
+                         Margin="0,0,0,4"/>
+              <TextBlock x:Name="TxtEaChannel" Classes="mono-note" Text="{Binding EaChannelStatus}"
+                         Margin="0,0,0,10"/>
+              <StackPanel Orientation="Horizontal">
+                <Button Content="Install EA App" Margin="0,0,8,0"
+                        Classes="accent" MinWidth="128"
+                        Command="{Binding InstallEaCommand}"/>
+                <Button Content="Launch EA App" Margin="0,0,8,0"
+                        Classes="ghost" MinWidth="128"
+                        Command="{Binding LaunchEaCommand}"/>
+                <Button x:Name="BtnEaProbe" Content="Probe EA channel" Margin="0,0,8,0"
+                        Classes="ghost" MinWidth="140"
+                        ToolTip.Tip="Connect-test EA's loopback ports (3216 LSX, 3215 local host) and report which family answered. Reads only."
+                        Command="{Binding ProbeEaChannelCommand}"/>
+                <Button Content="{loc:T refresh}" MinWidth="96"
+                        Classes="ghost"
+                        Command="{Binding UpdateEaStatusCommand}"/>
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                <Button x:Name="BtnPrepareEaPrefix" Content="Prepare EA prefix"
+                        Classes="ghost" MinWidth="200"
+                        IsEnabled="{Binding !Busy}"
+                        ToolTip.Tip="Install the runtimes the EA App expects (corefonts, vcrun2019) and set the prefix to Windows 10 — the game's own prefix, prepared through the Wine inside the Proton build. Downloads from Microsoft; the Install EA App button runs it too."
+                        Command="{Binding PrepareEaPrefixCommand}"/>
+              </StackPanel>
+
+              <!-- The two bridge buttons that used to sit here are gone. They linked
+                   an EA install from a separate Wine prefix into the game's, and
+                   carried its registry keys across as a .reg — all of it a way of
+                   making one prefix look like another. There is one prefix now, so
+                   EA's own install writes the registry the game reads, and a bridge
+                   button would be a button whose whole job no longer exists.
+                   The verdict line below is still live: it is the channel's own
+                   state before an online launch, and the game's own words
+                   (EbisuSDK / NET-OBS / OFFLINE-GUARD) while one runs. -->
+              <TextBlock x:Name="TxtEaBridgeStatus" Classes="mono-note"
+                         Text="{Binding EaBridgeStatus}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+              <TextBlock x:Name="TxtEaIdentity" Classes="mono-note"
+                         Text="{Binding EaIdentityStatus}" TextWrapping="Wrap" Margin="0,4,0,0"
+                         ToolTip.Tip="What the game itself said about the platform identity when it last ran (EbisuSDK token, NET-OBS handshake, OFFLINE-GUARD install check). Empty until a client has run."/>
+
+              <!-- Desktop integration. Windows' setup program writes the Start
+                   menu entry; on Linux nothing does, so the launcher writes its
+                   own — and one for the EA App once the prefix has EA Desktop,
+                   which is the "launch alongside" pair. -->
+              <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                <Button x:Name="BtnCreateShortcuts" Content="{loc:T shortcuts_create}"
+                        Classes="ghost" MinWidth="200"
+                        ToolTip.Tip="{loc:T tip_shortcuts}"
+                        Command="{Binding CreateShortcutsCommand}"/>
+              </StackPanel>
+
+              <!-- Downloading is separate from installing: these fetch the files
+                   into ~/Downloads and compatibilitytools.d without touching the
+                   prefix, so they are safe to press before anything is set up. -->
+              <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                <Button x:Name="BtnDownloadEa" Content="Download EA installer" Margin="0,0,8,0"
+                        Classes="ghost" MinWidth="160"
+                        IsEnabled="{Binding !Downloading}"
+                        ToolTip.Tip="Fetch EAappInstaller.exe from EA to ~/Downloads and verify it"
+                        Command="{Binding DownloadEaInstallerCommand}"/>
+                <Button x:Name="BtnDownloadProton" Content="Download Proton-GE"
+                        Classes="ghost" MinWidth="160"
+                        IsEnabled="{Binding !Downloading}"
+                        ToolTip.Tip="Fetch the latest GE-Proton into Steam compatibilitytools.d"
+                        Command="{Binding DownloadProtonCommand}"/>
+              </StackPanel>
+              <!-- Proton is what runs the game; GE is the fallback when Steam
+                   ships none. ~500 MB, so it is the player's call, and this is the
+                   switch the launcher reads before it starts the transfer. -->
+              <CheckBox x:Name="ChkAutoGe" Content="Download Proton-GE automatically when no Proton is found"
+                        Margin="0,8,0,0"
+                        IsChecked="{Binding AutoDownloadProtonGe}"
+                        ToolTip.Tip="Off means the launcher reports that no build was found and waits for the Download Proton-GE button instead."/>
+              <TextBlock x:Name="TxtDownloadStatus" Classes="mono-note"
+                         Text="{Binding DownloadStatus}" Margin="0,8,0,0"
+                         IsVisible="{Binding Downloading}"/>
+              <ProgressBar x:Name="BarDownload" Height="4" Margin="0,6,0,0"
+                           Minimum="0" Maximum="1"
+                           Value="{Binding DownloadFraction}"
+                           IsVisible="{Binding Downloading}"/>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="card">
+            <StackPanel>
+              <TextBlock Text="{loc:T section_game_files}" Classes="section-label"/>
+              <TextBlock x:Name="TxtHealth" Text="{Binding HealthText}"
+                         Classes="mono-note" Margin="0,0,0,4"/>
+              <!-- Channel tip + the size line the planner produces (upstream's
+                   "About 41.9 GB. Needs about 41.9 GB free while installing."). -->
+              <TextBlock x:Name="TxtChannelStatus" Classes="mono-note"
+                         Text="{Binding ChannelStatus}" Margin="0,0,0,4"
+                         IsVisible="{Binding ChannelStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+              <TextBlock x:Name="TxtInstallSize" Classes="mono-note"
+                         Text="{Binding InstallSizeText}" Margin="0,0,0,12"/>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                <Button x:Name="BtnDownloadFull" Content="{loc:T check_updates}" Margin="0,0,8,0"
+                        Classes="accent"
+                        IsEnabled="{Binding !Installing}"
+                        Command="{Binding InstallGameCommand}"
+                        ToolTip.Tip="{loc:T tip_check_updates}"/>
+                <Button x:Name="BtnCheckUpdates" Content="{loc:T refresh}" Margin="0,0,8,0"
+                        Classes="ghost"
+                        IsEnabled="{Binding !Installing}"
+                        Command="{Binding CheckUpdatesCommand}"
+                        ToolTip.Tip="Re-read the channel and compare it with the install — downloads nothing"/>
+                <Button x:Name="BtnVerify" Content="{loc:T verify_files}" Margin="0,0,8,0"
+                        Classes="ghost"
+                        IsEnabled="{Binding !Installing}"
+                        Command="{Binding VerifyCommand}"
+                        ToolTip.Tip="{loc:T tip_verify_files}"/>
+                <Button x:Name="BtnRepair" Content="{loc:T repair}"
+                        Classes="ghost"
+                        IsEnabled="{Binding !Installing}"
+                        Command="{Binding RepairFilesCommand}"
+                        ToolTip.Tip="{loc:T tip_repair}"/>
+                <Button x:Name="BtnPauseInstall" Content="{loc:T pause}" Margin="8,0,8,0"
+                        Classes="ghost"
+                        IsVisible="{Binding Installing}"
+                        Command="{Binding TogglePauseInstallCommand}"/>
+                <Button x:Name="BtnCancelInstall" Content="{loc:T cancel}"
+                        Classes="danger"
+                        IsVisible="{Binding Installing}"
+                        Command="{Binding CancelInstallCommand}"/>
+              </StackPanel>
+              <CheckBox x:Name="ChkKeepLocalFiles" Margin="0,0,0,12"
+                        Content="{loc:T keep_local_files}"
+                        ToolTip.Tip="{loc:T tip_keep_local_files}"
+                        IsChecked="{Binding KeepLocalFiles}"/>
+              <ProgressBar x:Name="BarInstall" Height="6" Minimum="0" Maximum="100"
+                           Value="{Binding InstallFraction}"
+                           Margin="0,0,0,10"/>
+              <TextBlock x:Name="TxtInstallStatus" Text="{Binding InstallStatus}"
+                         Classes="mono-note"/>
+            </StackPanel>
+          </Border>
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
+      </DockPanel>
+
+      <!-- ===================== Advanced developer UI ===================== -->
+      <ScrollViewer x:Name="PanelAdvanced" Margin="26,6,26,0"
+                    IsVisible="{Binding !IsSimpleMode}"
+                    VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="0,0,10,0">
+
+          <Border Classes="card">
+            <StackPanel>
+              <DockPanel Margin="0,0,0,10">
+                <Button x:Name="BtnAdvBrowserRefresh" DockPanel.Dock="Right"
+                        Content="{loc:T refresh}" Width="92"
+                        Classes="ghost" Command="{Binding RefreshServersCommand}"
+                        ToolTip.Tip="{loc:T tip_refresh_servers}"/>
+                <TextBlock Text="{loc:T section_servers}" Classes="section-label"
+                           Margin="0" VerticalAlignment="Center"/>
+              </DockPanel>
+              <TextBlock x:Name="TxtAdvBrowserStatus" Text="{Binding BrowserStatus}"
+                         Classes="mono-note" Margin="0,0,0,12"/>
+              <ItemsControl x:Name="ListServersAdvanced"
+                            ItemsSource="{Binding Servers}"
+                            ItemTemplate="{StaticResource ServerRowTemplate}"/>
+              <StackPanel Orientation="Horizontal" Margin="0,10,0,0" HorizontalAlignment="Center" Spacing="6">
+                <Button Classes="link" Content="{loc:T read_eula}" FontSize="12" Click="OnReadEula"/>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="card">
+            <StackPanel>
+              <DockPanel Margin="0,0,0,10">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                  <Button x:Name="BtnKillClient" Content="{loc:T kill}" Width="72" Margin="0,0,8,0"
+                          Classes="danger-small"
+                          Command="{Binding KillClientCommand}"
+                          ToolTip.Tip="{loc:T tip_kill_client}"/>
+                  <Button x:Name="BtnLaunchClient" Content="{loc:T launch_client}" Width="130"
+                          Classes="accent" Command="{Binding LaunchClientCommand}"/>
+                </StackPanel>
+                <TextBlock Text="{loc:T section_client}" Classes="section-label"
+                           Margin="0" VerticalAlignment="Center"/>
+              </DockPanel>
+              <CheckBox Content="{loc:T developer}"
+                         Margin="0,0,0,10"
+                         IsChecked="{Binding Dev}"
+                         ToolTip.Tip="{loc:T tip_developer_client}"/>
+              <CheckBox Content="{loc:T directx12}"
+                        Margin="0,0,0,10"
+                        IsChecked="{Binding UseDx12}"
+                        ToolTip.Tip="{loc:T tip_dx12}"/>
+              <TextBlock Text="{loc:T label_extra_args}" Classes="field-label"/>
+              <TextBox x:Name="TxtClientArgs" FontFamily="{StaticResource Mono}" FontSize="12" Margin="0,0,0,6"
+                       Text="{Binding ClientArgs}"/>
+              <TextBlock x:Name="TxtClientPreview" Classes="mono-note" Text="{Binding ClientPreview}"/>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="card">
+            <StackPanel>
+              <DockPanel Margin="0,0,0,10">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                  <Button x:Name="BtnKillDedi" Content="{loc:T kill}" Width="72" Margin="0,0,8,0"
+                          Classes="danger-small"
+                          Command="{Binding KillDediCommand}"
+                          ToolTip.Tip="{loc:T tip_kill_dedi}"/>
+                  <Button x:Name="BtnLaunchDedi" Content="{loc:T launch_dedi}" Width="130"
+                          Classes="accent" Command="{Binding LaunchDediCommand}"/>
+                </StackPanel>
+                <TextBlock Text="{loc:T section_dedi}" Classes="section-label"
+                           Margin="0" VerticalAlignment="Center"/>
+              </DockPanel>
+
+              <!-- R5Flowstate parity (RowDediPackage): hosting on another machine
+                   means the standalone server zip, and the master server decides
+                   whether that package is being published at all — an old master
+                   that has no `dedi` field keeps the link hidden rather than
+                   offering a download that 404s. -->
+              <StackPanel x:Name="RowDediPackage" Orientation="Horizontal"
+                          Margin="0,0,0,12"
+                          IsVisible="{Binding DediPackageAvailable}">
+                <TextBlock Text="{loc:T dedi_package_hint}" FontSize="12"
+                           TextWrapping="Wrap" VerticalAlignment="Center"
+                           Foreground="{StaticResource TextMuted}"/>
+                <Button x:Name="BtnDediPackage" Classes="link" FontSize="12" Margin="6,0,0,0"
+                        Content="{loc:T dedi_package_link}"
+                        ToolTip.Tip="{loc:T tip_dedi_package}"
+                        Click="OnOpenDediPackage"/>
+              </StackPanel>
+
+              <Grid Margin="0,0,0,12" ColumnDefinitions="2*,12,2*,12,100" RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:T label_playlist}"
+                           Classes="field-label"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:T label_map}"
+                           Classes="field-label"/>
+                <TextBlock Grid.Row="0" Grid.Column="4" Text="{loc:T label_port}"
+                           Classes="field-label"/>
+
+                <ComboBox x:Name="CmbPlaylist" Grid.Row="1" Grid.Column="0" Height="32"
+                          ItemsSource="{Binding PlaylistIds}"
+                          SelectedItem="{Binding Playlist}"/>
+                <ComboBox x:Name="CmbMap" Grid.Row="1" Grid.Column="2" Height="32"
+                          ItemsSource="{Binding MapIds}"
+                          SelectedItem="{Binding Map}"/>
+                <TextBox x:Name="TxtDediPort" Grid.Row="1" Grid.Column="4"
+                         FontFamily="{StaticResource Mono}"
+                         Text="{Binding Port}"/>
+              </Grid>
+
+              <DockPanel Margin="0,0,0,12">
+                <Button Content="{loc:T reload_playlists}" Margin="0,0,8,0"
+                        Classes="ghost" Command="{Binding ReloadPlaylistsCommand}"/>
+                <Button x:Name="BtnChangeMapAdvanced" Content="{loc:T change_map}" Margin="0,0,12,0"
+                        Classes="accent"
+                        Click="OnChangeMap"/>
+                <TextBlock x:Name="TxtPlaylistSource" VerticalAlignment="Center"
+                           Classes="mono-note"/>
+              </DockPanel>
+
+              <TextBlock x:Name="TxtPlaylistDetail" Classes="mono-note"
+                         Text="{Binding DediPreview}" Margin="0,0,0,12"/>
+
+              <CheckBox Content="{loc:T developer}"
+                        Margin="0,0,0,8"
+                        IsChecked="{Binding Dev}"
+                        ToolTip.Tip="{loc:T tip_developer_dedi}"/>
+              <CheckBox Content="{loc:T host_online}"
+                        Margin="0,0,0,8"
+                        IsChecked="{Binding HostOnline}"
+                        ToolTip.Tip="{loc:T tip_host_online}"/>
+              <CheckBox Content="{loc:T lock_server}"
+                        Margin="0,0,0,8"
+                        IsChecked="{Binding PasswordProtect}"
+                        ToolTip.Tip="{loc:T tip_sv_password}"/>
+              <TextBox x:Name="TxtDediPassword" Height="32" Margin="0,0,0,12"
+                       PasswordChar="●"
+                       IsVisible="{Binding PasswordProtect}"
+                       ToolTip.Tip="{loc:T tip_password_charset}"
+                       Text="{Binding DediPassword}"/>
+
+              <Border Background="{StaticResource SurfaceSunken}" CornerRadius="4"
+                      Padding="12,8" Margin="0,0,0,12"
+                      ToolTip.Tip="{loc:T tip_mods_policy}">
+                <StackPanel>
+                  <TextBlock Text="{loc:T mods_policy}" Classes="section-label"/>
+                  <!-- The same link as the dedicated-server card, in the advanced
+                       column (R5Flowstate parity: CardDediPackage). Gated on the
+                       master server's dedi lane, never on a hardcoded URL. -->
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,8"
+                              IsVisible="{Binding DediPackageAvailable}">
+                    <TextBlock Text="{loc:T dedi_package_hint}" FontSize="12" TextWrapping="Wrap"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextMuted}"/>
+                    <Button Classes="link" FontSize="12" Margin="6,0,0,0"
+                            Content="{loc:T dedi_package_link}"
+                            ToolTip.Tip="{loc:T tip_dedi_package}"
+                            Click="OnOpenDediPackage"/>
+                  </StackPanel>
+                  <TextBlock Text="{loc:T label_extra_args}" Classes="field-label"/>
+                  <TextBox x:Name="TxtDediArgs" FontFamily="{StaticResource Mono}" FontSize="12" Margin="0,0,0,6"
+                           Text="{Binding DediArgs}"/>
+                  <TextBlock x:Name="TxtDediPreview" Classes="mono-note" Text="{Binding DediPreview}"/>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="card" Background="{StaticResource SurfaceSunken}"
+                  Padding="14,12" MinHeight="150">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Top" Text="{loc:T section_log}" Classes="section-label"/>
+              <ScrollViewer VerticalScrollBarVisibility="Auto" Height="160">
+                <TextBox x:Name="TxtLog" IsReadOnly="True" TextWrapping="Wrap"
+                         Classes="plain"
+                         Foreground="{StaticResource TextCode}"
+                         FontFamily="{StaticResource Mono}" FontSize="12"
+                         Text="{Binding Log}"/>
+              </ScrollViewer>
+            </DockPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+    </DockPanel>
+
+    <!-- First-run EA popup overlay. -->
+    <Grid Grid.Row="0" Grid.RowSpan="2" ZIndex="10"
+          IsVisible="{Binding ShowEaDialog}"
+          Background="#80000000">
+      <Border Background="{StaticResource SurfaceBg}"
+              BorderBrush="{StaticResource BorderStrong}" BorderThickness="1"
+              CornerRadius="8" Padding="20" MaxWidth="560"
+              HorizontalAlignment="Center" VerticalAlignment="Center">
+        <StackPanel Spacing="12">
+          <TextBlock Text="EA App not installed" FontSize="18" FontWeight="Bold"
+                     Foreground="{StaticResource TextPrimary}"/>
+          <TextBlock Text="{Binding EaDialogText}" TextWrapping="Wrap"
+                     Foreground="{StaticResource TextSecondary}"/>
+          <TextBlock Text="Install downloads the EA App installer from the official EA website, then sets it up through Proton in the shared prefix so the launcher and game stay authenticated. No Proton? Proton-GE is fetched first."
+                     TextWrapping="Wrap" Opacity="0.8"
+                     Foreground="{StaticResource TextMuted}"/>
+          <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+            <Button Content="Later" Classes="ghost" MinWidth="96"
+                    Command="{Binding DismissEaDialogCommand}"/>
+            <Button Content="Install" Classes="primary" Height="38" MinWidth="120"
+                    Command="{Binding InstallEaFromDialogCommand}"/>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <!-- Window edge, so the frame reads against a dark desktop. Overlay, not a
+         real border: it must not shift layout or shadow the resize grip. -->
+    <Border Grid.Row="0" Grid.RowSpan="2"
+            BorderBrush="{StaticResource WindowEdge}" BorderThickness="1"
+            IsHitTestVisible="False"/>
+  </Grid>
+</Window>

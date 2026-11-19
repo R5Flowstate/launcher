@@ -1,0 +1,18 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="R5Flowstate.Shell.Linux.App"
+             xmlns:local="using:R5Flowstate.Shell.Linux"
+             RequestedThemeVariant="Dark">
+
+    <Application.DataTemplates>
+        <local:ViewLocator />
+    </Application.DataTemplates>
+
+    <Application.Styles>
+        <!-- Fluent stays as the base control-theme provider (Window, ScrollViewer,
+             ComboBox chrome); every R5F override is layered on top of it. -->
+        <FluentTheme />
+        <!-- Real R5F theme, ported from the Windows Shell Theme.xaml. -->
+        <StyleInclude Source="avares://R5Flowstate.Shell.Linux/Themes/R5FTheme.axaml"/>
+    </Application.Styles>
+</Application>

@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The hosted console's Windows end, running inside the prefix.
+
+    Why this project exists: the game's console lives in a Windows process under
+    Proton, and the Windows launcher's console tap is the parent end of two named
+    pipes that only a Windows process can create. A native Linux launcher cannot
+    open a Wine kernel object, and it cannot read the game's own streams either —
+    `proton run` discards them (measured three ways; see Linux.Core/HostedConsole).
+
+    So this process does what the Windows launcher did: it creates the two pipe
+    ends the game's console setup expects (`R5F_CONSOLE_PIPE`/`R5F_CONSOLE_IN`)
+    and bridges them to the launcher over loopback TCP, which Proton does not
+    namespace and therefore crosses freely.
+
+    It references R5Flowstate.Spawn and uses its HostedConsoleTap verbatim. That
+    is the point: the game-facing half — the pipe names, the line rules, the
+    512-character command cap — is upstream's own code, not a re-implementation
+    that could drift from it.
+
+    Target: win-x64, self-contained, trimmed, and NOT single-file, exactly like
+    the art host (a single-file exe unpacks itself into a temp directory on every
+    run, which is a needless thing to ask Proton to do). install.sh publishes this
+    project into winhost/r5f-relay/ — a folder of its own, never the art host's:
+    two trimmed self-contained publishes in one folder overwrite each other's
+    framework, and the app that published first then dies at startup.
+
+    OutputType is WinExe so no console window is allocated — subsystem 2 in the PE
+    optional header rather than 3 — because one of these runs per role per launch
+    and the player saw a dark Wine console appear for each. The relay's own trace
+    (<c>Relay.Say</c>) already writes its stdout inside a try, so a process with no
+    console handle loses a diary entry and nothing else. Nothing on this side waits
+    on that stream: readiness is the loopback accept.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishTrimmed>true</PublishTrimmed>
+    <PublishSingleFile>false</PublishSingleFile>
+    <AssemblyName>r5f-relay</AssemblyName>
+    <RootNamespace>R5Flowstate.ConsoleRelay</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Version>2.0.0</Version>
+    <InformationalVersion>Linux-2.00</InformationalVersion>
+    <!-- Nothing here is reached by reflection; partial rather than full because
+         the console's own code is shared with the Windows launcher's assembly. -->
+    <TrimMode>partial</TrimMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\R5Flowstate.Spawn\R5Flowstate.Spawn.csproj" />
+  </ItemGroup>
+
+</Project>

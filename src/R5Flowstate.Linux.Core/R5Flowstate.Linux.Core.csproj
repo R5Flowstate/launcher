@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The rpak side of the game, for one thing: ArtCache, which is the file
+         format the hosted decoder writes and this side reads. It lives in Content
+         because both ends must agree on the key rule, and the key rule has to be
+         one implementation or a cache hit becomes a coin toss. -->
+    <ProjectReference Include="..\R5Flowstate.Content\R5Flowstate.Content.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The suite opens the seams that exist only to be asserted: a launch's
+         environment (ProtonLauncher.BuildStartInfo) and the argument splitter
+         under it. They are internal rather than public because no production
+         caller outside this assembly has any business building one — but the
+         selftest's whole job is to read back what the launcher would hand the
+         OS without starting anything, and it lives in the Shell. -->
+    <InternalsVisibleTo Include="R5Flowstate.Shell.Linux" />
+  </ItemGroup>
+
+</Project>

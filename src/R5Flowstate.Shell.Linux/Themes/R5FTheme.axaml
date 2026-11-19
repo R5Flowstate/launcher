@@ -1,0 +1,867 @@
+<!-- R5F theme — faithful Avalonia 11 port of the Windows Shell Themes/Theme.xaml.
+     Same palette, same variant names, expressed as Avalonia selector syntax:
+     WPF keyed styles (BaseButton, PrimaryButton, …) become control classes
+     (primary, danger, ghost, tab …); ControlTemplate.Triggers become nested
+     pseudo-class styles. WPF controls with no Avalonia equivalent are mapped:
+     PasswordBox → TextBox with PasswordChar, RichTextBox pane → read-only
+     TextBox, Hyperlink → Button.link, Segoe MDL2 glyphs → vector paths. -->
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <Styles.Resources>
+    <!-- ============================ PALETTE ============================ -->
+    <Color x:Key="AccentColor">#3DDA8A</Color>
+
+    <SolidColorBrush x:Key="WindowBg"      Color="#0B100D"/>
+    <SolidColorBrush x:Key="SurfaceBg"     Color="#111815"/>
+    <SolidColorBrush x:Key="SurfaceRaised" Color="#18211C"/>
+    <SolidColorBrush x:Key="SurfaceSunken" Color="#0C1210"/>
+    <SolidColorBrush x:Key="FieldBg"       Color="#1B2521"/>
+
+    <SolidColorBrush x:Key="BorderSoft"    Color="#1F2A24"/>
+    <SolidColorBrush x:Key="BorderLine"    Color="#26332C"/>
+    <SolidColorBrush x:Key="BorderStrong"  Color="#33453B"/>
+
+    <SolidColorBrush x:Key="TextPrimary"   Color="#E9F1EC"/>
+    <SolidColorBrush x:Key="TextSecondary" Color="#A9B8AF"/>
+    <SolidColorBrush x:Key="TextMuted"     Color="#71827A"/>
+    <SolidColorBrush x:Key="TextCode"      Color="#9BB0A4"/>
+
+    <SolidColorBrush x:Key="Accent"        Color="#3DDA8A"/>
+    <SolidColorBrush x:Key="WindowEdge"    Color="#1F6141" Opacity="0.60"/>
+    <SolidColorBrush x:Key="AccentBright"  Color="#9FF0C0"/>
+    <SolidColorBrush x:Key="AccentDim"     Color="#15291D"/>
+    <SolidColorBrush x:Key="AccentTrack"   Color="#1E3B2A"/>
+
+    <SolidColorBrush x:Key="PingFair"      Color="#E0C25A"/>
+
+    <SolidColorBrush x:Key="DangerFg"      Color="#F3B7BE"/>
+    <SolidColorBrush x:Key="DangerBg"      Color="#2A1418"/>
+    <SolidColorBrush x:Key="DangerLine"    Color="#D95060"/>
+
+    <SolidColorBrush x:Key="OverlayLight"  Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="OverlayDark"   Color="#000000"/>
+
+    <SolidColorBrush x:Key="PrimaryFill"   Color="#2FBF77"/>
+    <SolidColorBrush x:Key="PrimaryText"   Color="#06140D"/>
+    <SolidColorBrush x:Key="DangerFill"    Color="#C8465A"/>
+    <SolidColorBrush x:Key="UpdateFill"    Color="#D4A017"/>
+    <SolidColorBrush x:Key="UpdateText"    Color="#1A1404"/>
+    <SolidColorBrush x:Key="ChangeFill"    Color="#2E86C8"/>
+    <SolidColorBrush x:Key="ChangeText"    Color="#F0F7FF"/>
+    <SolidColorBrush x:Key="LeaveFill"     Color="#C87A2E"/>
+    <SolidColorBrush x:Key="LeaveText"     Color="#1A0F04"/>
+    <SolidColorBrush x:Key="RestartFill"   Color="#7A4FC8"/>
+    <SolidColorBrush x:Key="RestartText"   Color="#F4F0FF"/>
+
+    <LinearGradientBrush x:Key="HeaderFill" StartPoint="0%,0%" EndPoint="0%,100%">
+      <GradientStop Color="#16211A" Offset="0"/>
+      <GradientStop Color="#101713" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Segoe UI is Windows-only; Inter replaces it (WithInterFont in Program).
+         Consolas falls back to the system monospace stack on Linux. -->
+    <FontFamily x:Key="Mono">Consolas, DejaVu Sans Mono, monospace</FontFamily>
+  <ControlTheme x:Key="{x:Type Button}" TargetType="Button">
+    <Setter Property="Height" Value="32"/>
+    <Setter Property="Padding" Value="14,0"/>
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="FontWeight" Value="Medium"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+    <Setter Property="Background" Value="{StaticResource SurfaceRaised}"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border x:Name="Bd"
+                  Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="4"/>
+          <Border x:Name="Sheen" CornerRadius="4" Opacity="0"
+                  Background="{StaticResource OverlayLight}"/>
+          <Border x:Name="Press" CornerRadius="4" Opacity="0"
+                  Background="{StaticResource OverlayDark}"/>
+          <ContentPresenter x:Name="PART_ContentPresenter" Margin="{TemplateBinding Padding}"
+                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                          Content="{TemplateBinding Content}"
+                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                          Foreground="{TemplateBinding Foreground}"
+                          FontFamily="{TemplateBinding FontFamily}"
+                          FontSize="{TemplateBinding FontSize}"
+                          FontWeight="{TemplateBinding FontWeight}"
+                          />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <!-- ControlTemplate.Triggers → nested pseudo-class styles -->
+    <Style Selector="^:pointerover /template/ Border#Sheen">
+      <Setter Property="Opacity" Value="0.07"/>
+    </Style>
+    <Style Selector="^:pressed /template/ Border#Sheen">
+      <Setter Property="Opacity" Value="0"/>
+    </Style>
+    <Style Selector="^:pressed /template/ Border#Press">
+      <Setter Property="Opacity" Value="0.18"/>
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.38"/>
+    </Style>
+  </ControlTheme>
+  <ControlTheme x:Key="{x:Type CheckBox}" TargetType="CheckBox">
+    <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <StackPanel Orientation="Horizontal" Background="Transparent">
+          <Border x:Name="Box" Width="14" Height="14" CornerRadius="3"
+                  VerticalAlignment="Center"
+                  Background="{StaticResource FieldBg}"
+                  BorderBrush="{StaticResource BorderStrong}" BorderThickness="1"/>
+          <ContentPresenter x:Name="PART_ContentPresenter" Margin="6,0,0,0" VerticalAlignment="Center"
+                          Content="{TemplateBinding Content}"
+                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                          Foreground="{TemplateBinding Foreground}"
+                          FontFamily="{TemplateBinding FontFamily}"
+                          FontSize="{TemplateBinding FontSize}"
+                          FontWeight="{TemplateBinding FontWeight}"
+                          />
+        </StackPanel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:checked /template/ Border#Box">
+      <Setter Property="Background" Value="{StaticResource Accent}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+    </Style>
+    <Style Selector="^:pointerover /template/ Border#Box">
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.4"/>
+    </Style>
+  </ControlTheme>
+  <ControlTheme x:Key="{x:Type TextBox}" TargetType="TextBox">
+    <Setter Property="MinHeight" Value="32"/>
+    <Setter Property="Padding" Value="10,0"/>
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+    <Setter Property="Background" Value="{StaticResource FieldBg}"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CaretBrush" Value="{StaticResource AccentBright}"/>
+    <Setter Property="SelectionBrush" Value="{StaticResource Accent}"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border x:Name="Bd" CornerRadius="4"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                Padding="{TemplateBinding Padding}">
+          <ScrollViewer x:Name="PART_ScrollViewer" Focusable="False"
+                        HorizontalScrollBarVisibility="Disabled"
+                        VerticalScrollBarVisibility="Auto">
+            <TextPresenter x:Name="PART_TextPresenter"
+                           Text="{TemplateBinding Text, Mode=TwoWay}"
+                           CaretIndex="{TemplateBinding CaretIndex}"
+                           SelectionStart="{TemplateBinding SelectionStart}"
+                           SelectionEnd="{TemplateBinding SelectionEnd}"
+                           SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}"
+                           PasswordChar="{TemplateBinding PasswordChar}"
+                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                           TextWrapping="{TemplateBinding TextWrapping}"
+                           TextAlignment="{TemplateBinding TextAlignment}"
+                           Background="Transparent"
+                           SelectionBrush="{TemplateBinding SelectionBrush}"
+                           CaretBrush="{TemplateBinding CaretBrush}"/>
+          </ScrollViewer>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:focus /template/ Border#Bd">
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.45"/>
+    </Style>
+  </ControlTheme>
+  <ControlTheme x:Key="{x:Type ProgressBar}" TargetType="ProgressBar">
+    <Setter Property="Background" Value="{StaticResource AccentTrack}"/>
+    <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Grid x:Name="PART_Track">
+          <Border CornerRadius="4" Background="{TemplateBinding Background}"/>
+          <Border x:Name="PART_Indicator" HorizontalAlignment="Left"
+                  CornerRadius="4" Background="{TemplateBinding Foreground}"/>
+        </Grid>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+  </Styles.Resources>
+
+  <!-- ============================ TEXT ============================ -->
+
+  <Style Selector="TextBlock.section-label">
+    <Setter Property="FontSize" Value="11"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
+    <Setter Property="Margin" Value="0,0,0,8"/>
+  </Style>
+
+  <Style Selector="TextBlock.field-label">
+    <Setter Property="FontSize" Value="12"/>
+    <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+    <Setter Property="Margin" Value="0,0,0,4"/>
+  </Style>
+
+  <Style Selector="TextBlock.mono-note">
+    <Setter Property="FontFamily" Value="{StaticResource Mono}"/>
+    <Setter Property="FontSize" Value="11"/>
+    <Setter Property="Foreground" Value="{StaticResource TextCode}"/>
+    <Setter Property="TextWrapping" Value="Wrap"/>
+  </Style>
+
+  <!-- ============================ CARDS ============================ -->
+
+  <Style Selector="Border.card">
+    <Setter Property="Background" Value="{StaticResource SurfaceBg}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="10"/>
+    <Setter Property="Padding" Value="20,18"/>
+    <Setter Property="Margin" Value="0,0,0,12"/>
+  </Style>
+
+  <!-- Hairline divider; the only structural line in the layout. -->
+  <Style Selector="Border.rule">
+    <Setter Property="Height" Value="1"/>
+    <Setter Property="Background" Value="{StaticResource BorderSoft}"/>
+  </Style>
+
+  <!-- ============================ BUTTONS ============================
+       One base template for every variant; hover/press are neutral overlays
+       so the same template serves accent, danger and neutral fills. -->
+
+
+  <!-- The one solid fill in the app: nothing else competes with it. -->
+  <Style Selector="Button.primary">
+    <Setter Property="Height" Value="48"/>
+    <Setter Property="MinWidth" Value="168"/>
+    <Setter Property="Padding" Value="24,0"/>
+    <Setter Property="FontSize" Value="15"/>
+    <Setter Property="FontWeight" Value="Bold"/>
+    <Setter Property="Foreground" Value="{StaticResource PrimaryText}"/>
+    <Setter Property="Background" Value="{StaticResource PrimaryFill}"/>
+  </Style>
+
+  <Style Selector="Button.danger">
+    <Setter Property="Height" Value="48"/>
+    <Setter Property="MinWidth" Value="168"/>
+    <Setter Property="Padding" Value="24,0"/>
+    <Setter Property="FontSize" Value="15"/>
+    <Setter Property="FontWeight" Value="Bold"/>
+    <Setter Property="Foreground" Value="#FFF0F2"/>
+    <Setter Property="Background" Value="{StaticResource DangerFill}"/>
+  </Style>
+
+  <Style Selector="Button.danger-small">
+    <Setter Property="Foreground" Value="{StaticResource DangerFg}"/>
+    <Setter Property="Background" Value="{StaticResource DangerBg}"/>
+  </Style>
+
+  <Style Selector="Button.change-small">
+    <Setter Property="Foreground" Value="{StaticResource ChangeText}"/>
+    <Setter Property="Background" Value="{StaticResource ChangeFill}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+
+  <Style Selector="Button.leave-small">
+    <Setter Property="Foreground" Value="{StaticResource LeaveText}"/>
+    <Setter Property="Background" Value="{StaticResource LeaveFill}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+
+  <Style Selector="Button.restart-small">
+    <Setter Property="Foreground" Value="{StaticResource RestartText}"/>
+    <Setter Property="Background" Value="{StaticResource RestartFill}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+
+  <Style Selector="Button.update-small">
+    <Setter Property="Foreground" Value="{StaticResource UpdateText}"/>
+    <Setter Property="Background" Value="{StaticResource UpdateFill}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+
+  <Style Selector="Button.accent">
+    <Setter Property="Foreground" Value="{StaticResource AccentBright}"/>
+    <Setter Property="Background" Value="{StaticResource AccentDim}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+
+  <!-- Borderless-window caption controls (Segoe MDL2 glyphs → vector paths). -->
+  <Style Selector="Button.caption">
+    <Setter Property="Width" Value="46"/>
+    <Setter Property="Height" Value="34"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+    <Setter Property="FontSize" Value="10"/>
+    <Setter Property="Cursor" Value="Arrow"/>
+    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border x:Name="Bd" Background="{TemplateBinding Background}"/>
+          <ContentPresenter x:Name="PART_ContentPresenter" HorizontalAlignment="Center" VerticalAlignment="Center"
+                          Content="{TemplateBinding Content}"
+                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                          Foreground="{TemplateBinding Foreground}"
+                          FontFamily="{TemplateBinding FontFamily}"
+                          FontSize="{TemplateBinding FontSize}"
+                          FontWeight="{TemplateBinding FontWeight}"
+                          />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#Bd">
+      <Setter Property="Background" Value="#14FFFFFF"/>
+    </Style>
+    <Style Selector="^:pointerover">
+      <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+    </Style>
+    <Style Selector="^:pressed /template/ Border#Bd">
+      <Setter Property="Background" Value="#22FFFFFF"/>
+    </Style>
+  </Style>
+
+  <Style Selector="Button.caption-close">
+    <Setter Property="Width" Value="46"/>
+    <Setter Property="Height" Value="34"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+    <Setter Property="FontSize" Value="10"/>
+    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border x:Name="Bd" Background="{TemplateBinding Background}"/>
+          <ContentPresenter x:Name="PART_ContentPresenter" HorizontalAlignment="Center" VerticalAlignment="Center"
+                          Content="{TemplateBinding Content}"
+                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                          Foreground="{TemplateBinding Foreground}"
+                          FontFamily="{TemplateBinding FontFamily}"
+                          FontSize="{TemplateBinding FontSize}"
+                          FontWeight="{TemplateBinding FontWeight}"
+                          />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#Bd">
+      <Setter Property="Background" Value="#E81123"/>
+    </Style>
+    <Style Selector="^:pointerover">
+      <Setter Property="Foreground" Value="#FFFFFF"/>
+    </Style>
+    <Style Selector="^:pressed /template/ Border#Bd">
+      <Setter Property="Background" Value="#F1707A"/>
+    </Style>
+    <Style Selector="^:pressed">
+      <Setter Property="Foreground" Value="#FFFFFF"/>
+    </Style>
+  </Style>
+
+  <Style Selector="Button.ghost">
+    <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+
+  <!-- Tab strip. The underline indicator is driven by BorderBrush (as on
+       Windows); the "on" class replaces WPF's runtime TabButtonOn style swap. -->
+  <Style Selector="Button.tab">
+    <Setter Property="Height" Value="38"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Margin" Value="0,0,22,0"/>
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Grid RowDefinitions="*,2" Background="Transparent">
+          <ContentPresenter x:Name="PART_ContentPresenter" Grid.Row="0" Margin="{TemplateBinding Padding}"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                          Content="{TemplateBinding Content}"
+                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                          Foreground="{TemplateBinding Foreground}"
+                          FontFamily="{TemplateBinding FontFamily}"
+                          FontSize="{TemplateBinding FontSize}"
+                          FontWeight="{TemplateBinding FontWeight}"
+                          />
+          <Border Grid.Row="1" CornerRadius="1"
+                  Background="{TemplateBinding BorderBrush}"/>
+        </Grid>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover">
+      <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.38"/>
+    </Style>
+  </Style>
+
+  <Style Selector="Button.tab.on">
+    <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+
+  <!-- Mode rail chips. Selected colors are supplied by the item VM
+       (Windows used a DataTrigger on IsSelected; the Linux VM exposes
+       the resolved brushes so the same template stays in XAML). -->
+  <Style Selector="TextBlock.mode-rail-group">
+    <Setter Property="FontFamily" Value="{StaticResource Mono}"/>
+    <Setter Property="FontSize" Value="10.5"/>
+    <Setter Property="FontWeight" Value="Bold"/>
+    <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+  </Style>
+
+  <Style Selector="Button.mode-rail">
+    <Setter Property="Height" Value="34"/>
+    <Setter Property="Margin" Value="0,1"/>
+    <Setter Property="Padding" Value="9,0"/>
+    <Setter Property="FontSize" Value="13.5"/>
+    <Setter Property="FontWeight" Value="Normal"/>
+    <Setter Property="HorizontalAlignment" Value="Stretch"/>
+    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border x:Name="Bd" CornerRadius="6"
+                  Background="{TemplateBinding Background}"/>
+          <ContentPresenter x:Name="PART_ContentPresenter" Margin="{TemplateBinding Padding}"
+                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalAlignment="Center"
+                          Content="{TemplateBinding Content}"
+                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                          Foreground="{TemplateBinding Foreground}"
+                          FontFamily="{TemplateBinding FontFamily}"
+                          FontSize="{TemplateBinding FontSize}"
+                          FontWeight="{TemplateBinding FontWeight}"
+                          />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#Bd">
+      <Setter Property="Background" Value="{StaticResource FieldBg}"/>
+    </Style>
+  </Style>
+
+  <!-- Play-bar button: PrimaryButton geometry with its own rounded template. -->
+  <Style Selector="Button.play-bar">
+    <Setter Property="Height" Value="38"/>
+    <Setter Property="MinWidth" Value="132"/>
+    <Setter Property="Padding" Value="34,0"/>
+    <Setter Property="FontSize" Value="13.5"/>
+    <Setter Property="FontWeight" Value="Bold"/>
+    <Setter Property="Foreground" Value="{StaticResource PrimaryText}"/>
+    <Setter Property="Background" Value="{StaticResource PrimaryFill}"/>
+    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border x:Name="Bd"
+                  Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="8"/>
+          <Border x:Name="Sheen" CornerRadius="8" Opacity="0"
+                  Background="{StaticResource OverlayLight}"/>
+          <Border x:Name="Press" CornerRadius="8" Opacity="0"
+                  Background="{StaticResource OverlayDark}"/>
+          <ContentPresenter x:Name="PART_ContentPresenter" Margin="{TemplateBinding Padding}"
+                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                          Content="{TemplateBinding Content}"
+                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                          Foreground="{TemplateBinding Foreground}"
+                          FontFamily="{TemplateBinding FontFamily}"
+                          FontSize="{TemplateBinding FontSize}"
+                          FontWeight="{TemplateBinding FontWeight}"
+                          />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#Sheen">
+      <Setter Property="Opacity" Value="0.07"/>
+    </Style>
+    <Style Selector="^:pressed /template/ Border#Sheen">
+      <Setter Property="Opacity" Value="0"/>
+    </Style>
+    <Style Selector="^:pressed /template/ Border#Press">
+      <Setter Property="Opacity" Value="0.18"/>
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.38"/>
+    </Style>
+  </Style>
+
+  <Style Selector="Button.play-bar.danger">
+    <Setter Property="Foreground" Value="#FFF0F2"/>
+    <Setter Property="Background" Value="{StaticResource DangerFill}"/>
+  </Style>
+
+  <Style Selector="Button.play-bar.update">
+    <Setter Property="Foreground" Value="{StaticResource UpdateText}"/>
+    <Setter Property="Background" Value="{StaticResource UpdateFill}"/>
+  </Style>
+
+  <Style Selector="Button.play-bar.change">
+    <Setter Property="Foreground" Value="{StaticResource ChangeText}"/>
+    <Setter Property="Background" Value="{StaticResource ChangeFill}"/>
+  </Style>
+
+  <Style Selector="Button.play-bar.disconnect">
+    <Setter Property="Foreground" Value="{StaticResource LeaveText}"/>
+    <Setter Property="Background" Value="{StaticResource LeaveFill}"/>
+  </Style>
+
+  <Style Selector="Button.play-bar.restart">
+    <Setter Property="Foreground" Value="{StaticResource RestartText}"/>
+    <Setter Property="Background" Value="{StaticResource RestartFill}"/>
+  </Style>
+
+  <Style Selector="Button.lb-sort">
+    <Setter Property="Height" Value="26"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Margin" Value="0"/>
+    <Setter Property="FontSize" Value="11"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
+    <Setter Property="HorizontalContentAlignment" Value="Right"/>
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+
+  <Style Selector="Button.map-tile">
+    <Setter Property="Width" Value="196"/>
+    <Setter Property="Height" Value="118"/>
+    <Setter Property="Margin" Value="0,0,10,10"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Background" Value="{StaticResource SurfaceRaised}"/>
+    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border x:Name="Clip" CornerRadius="4"
+                  Background="{TemplateBinding Background}">
+            <Grid>
+              <Image Source="{Binding Art}" Stretch="UniformToFill"/>
+              <Border VerticalAlignment="Bottom" Height="46">
+                <Border.Background>
+                  <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                    <GradientStop Color="#000B100D" Offset="0"/>
+                    <GradientStop Color="#E60B100D" Offset="1"/>
+                  </LinearGradientBrush>
+                </Border.Background>
+              </Border>
+              <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Bottom"
+                         Margin="10,0,10,8" FontSize="12" FontWeight="SemiBold"
+                         Foreground="{StaticResource TextPrimary}"
+                         TextTrimming="CharacterEllipsis"/>
+            </Grid>
+          </Border>
+          <Border x:Name="Sheen" CornerRadius="4" Opacity="0"
+                  Background="{StaticResource OverlayLight}"/>
+          <Border x:Name="Ring" CornerRadius="4" BorderThickness="2"
+                  BorderBrush="{StaticResource Accent}"
+                  Opacity="{Binding RingOpacity}"/>
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ Border#Sheen">
+      <Setter Property="Opacity" Value="0.10"/>
+    </Style>
+  </Style>
+
+  <Style Selector="Button.favorite-star">
+    <Setter Property="Width" Value="28"/>
+    <Setter Property="Height" Value="28"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="FontSize" Value="15"/>
+    <Setter Property="FontWeight" Value="Bold"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
+  </Style>
+
+  <Style Selector="Button.footer-icon">
+    <Setter Property="Width" Value="26"/>
+    <Setter Property="Height" Value="26"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Margin" Value="0,0,6,0"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="Focusable" Value="False"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+
+  <!-- Hyperlink replacement: WPF inline Hyperlink becomes a text-styled button. -->
+  <Style Selector="Button.link">
+    <Setter Property="Height" Value="NaN"/>
+    <Setter Property="MinWidth" Value="0"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Foreground" Value="{StaticResource AccentBright}"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="FontWeight" Value="Medium"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border x:Name="Bd" Background="Transparent"/>
+          <ContentPresenter x:Name="PART_ContentPresenter" Margin="{TemplateBinding Padding}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                          Content="{TemplateBinding Content}"
+                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                          Foreground="{TemplateBinding Foreground}"
+                          FontFamily="{TemplateBinding FontFamily}"
+                          FontSize="{TemplateBinding FontSize}"
+                          FontWeight="{TemplateBinding FontWeight}"
+                          />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover TextBlock">
+      <Setter Property="TextDecorations" Value="Underline"/>
+    </Style>
+  </Style>
+
+  <!-- ============================ CHECKBOXES ============================ -->
+
+
+  <Style Selector="CheckBox.quiet-check">
+    <Setter Property="Margin" Value="0,0,14,0"/>
+    <Setter Property="FontSize" Value="12.5"/>
+  </Style>
+
+  <!-- Pill toggle (find-bar "Aa" case switch). -->
+  <Style Selector="CheckBox.option-chip">
+    <Setter Property="Height" Value="30"/>
+    <Setter Property="Padding" Value="10,0,12,0"/>
+    <Setter Property="Margin" Value="0,0,6,0"/>
+    <Setter Property="FontSize" Value="12"/>
+    <Setter Property="FontWeight" Value="Medium"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+    <Setter Property="Background" Value="{StaticResource SurfaceRaised}"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                CornerRadius="15" Padding="{TemplateBinding Padding}"
+                VerticalAlignment="Center">
+          <ContentPresenter x:Name="PART_ContentPresenter" HorizontalAlignment="Center" VerticalAlignment="Center"
+                          Content="{TemplateBinding Content}"
+                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                          Foreground="{TemplateBinding Foreground}"
+                          FontFamily="{TemplateBinding FontFamily}"
+                          FontSize="{TemplateBinding FontSize}"
+                          FontWeight="{TemplateBinding FontWeight}"
+                          />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:checked">
+      <Setter Property="Foreground" Value="{StaticResource AccentBright}"/>
+      <Setter Property="Background" Value="{StaticResource AccentDim}"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="^:checked /template/ Border#Bd">
+      <Setter Property="Background" Value="{StaticResource AccentDim}"/>
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.4"/>
+    </Style>
+  </Style>
+
+  <!-- ============================ INPUTS ============================ -->
+
+
+  <!-- Read-only log / body panes: no chrome, free height. -->
+  <Style Selector="TextBox.plain">
+    <Setter Property="MinHeight" Value="0"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="VerticalContentAlignment" Value="Top"/>
+  </Style>
+
+  <!-- Command line for a log pane: prompt glyph, monospace, no wrap. -->
+  <Style Selector="TextBox.console-input">
+    <Setter Property="FontFamily" Value="{StaticResource Mono}"/>
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="Padding" Value="26,0,10,0"/>
+    <Setter Property="TextWrapping" Value="NoWrap"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border x:Name="Bd" CornerRadius="4"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}">
+          <Grid>
+            <TextBlock Text="&gt;" Margin="11,0,0,0" VerticalAlignment="Center"
+                       FontFamily="{StaticResource Mono}" FontSize="13"
+                       Foreground="{StaticResource TextMuted}"/>
+            <ScrollViewer x:Name="PART_ScrollViewer" Focusable="False"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+              <TextPresenter x:Name="PART_TextPresenter"
+                             Text="{TemplateBinding Text, Mode=TwoWay}"
+                             CaretIndex="{TemplateBinding CaretIndex}"
+                             SelectionStart="{TemplateBinding SelectionStart}"
+                             SelectionEnd="{TemplateBinding SelectionEnd}"
+                             SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}"
+                             Margin="{TemplateBinding Padding}"
+                             VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                             TextWrapping="{TemplateBinding TextWrapping}"
+                                   Background="Transparent"
+                             SelectionBrush="{TemplateBinding SelectionBrush}"
+                             CaretBrush="{TemplateBinding CaretBrush}"/>
+            </ScrollViewer>
+          </Grid>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:focus /template/ Border#Bd">
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.45"/>
+    </Style>
+  </Style>
+
+  <!-- ============================ PROGRESS ============================ -->
+
+
+  <!-- ============================ COMBO ============================ -->
+  <!-- Fluent combo chrome recolored to the R5F palette; the popup border
+       follows the control's Background/BorderBrush. -->
+
+  <Style Selector="ComboBox">
+    <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+    <Setter Property="Background" Value="{StaticResource FieldBg}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="10,0"/>
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="MinHeight" Value="34"/>
+    <Setter Property="CornerRadius" Value="4"/>
+  </Style>
+
+  <Style Selector="ComboBoxItem">
+    <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Padding" Value="10,7"/>
+    <Setter Property="CornerRadius" Value="4"/>
+  </Style>
+
+  <Style Selector="ComboBoxItem:pointerover">
+    <Setter Property="Background" Value="{StaticResource AccentDim}"/>
+    <Setter Property="Foreground" Value="{StaticResource AccentBright}"/>
+  </Style>
+
+  <Style Selector="ComboBoxItem:selected">
+    <Setter Property="Background" Value="{StaticResource AccentDim}"/>
+    <Setter Property="Foreground" Value="{StaticResource AccentBright}"/>
+  </Style>
+
+  <!-- ============================ SCROLLBARS ============================ -->
+
+  <Style Selector="ScrollBar:vertical">
+    <Setter Property="Width" Value="10"/>
+  </Style>
+  <Style Selector="ScrollBar:horizontal">
+    <Setter Property="Height" Value="10"/>
+  </Style>
+  <Style Selector="ScrollBar Thumb">
+    <Setter Property="Background" Value="#2A4A38"/>
+    <Setter Property="CornerRadius" Value="4"/>
+    <Setter Property="Margin" Value="1,0"/>
+  </Style>
+  <Style Selector="ScrollBar:pointerover Thumb">
+    <Setter Property="Background" Value="#3A6A4C"/>
+  </Style>
+  <Style Selector="ScrollBar Thumb:pressed">
+    <Setter Property="Background" Value="{StaticResource Accent}"/>
+  </Style>
+
+  <!-- ============================ MENUS ============================ -->
+  <!-- The Res button's menu. On Windows these are three keyed styles
+       (DarkContextMenu / DarkMenuItem / DarkMenuSeparator), reached with
+       FindResource, each with a hand-written ControlTemplate because WPF has no
+       dark menu chrome at all: the check mark, the submenu arrow and the submenu
+       popup are drawn by hand there and switched by its ControlTemplate.Triggers
+       (HasItems, IsChecked, IsHighlighted, IsSubmenuOpen).
+       Avalonia's Fluent theme already draws and switches all four parts, and
+       porting the WPF template would mean restating PART_Popup and the items
+       presenter in an Avalonia dialect — a menu whose submenu does not open would
+       be a Res button offering aspect groups it cannot reach. So the port keeps the
+       palette and the shape and lets Fluent own the template, the same split this
+       theme already uses for the ComboBox above.
+       Scoped by a class rather than a key, because that is the idiom the rest of
+       this theme uses (ghost, quiet-check, console-input) and because a MenuItem
+       built in code has to carry its style with it: the submenu's items are not
+       children of the ContextMenu that was styled. -->
+
+  <Style Selector="ContextMenu.resmenu">
+    <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+    <Setter Property="Background" Value="{StaticResource SurfaceRaised}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource BorderSoft}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="4"/>
+    <Setter Property="FontSize" Value="13"/>
+  </Style>
+
+  <Style Selector="MenuItem.resmenu">
+    <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Padding" Value="10,6"/>
+    <Setter Property="FontSize" Value="13"/>
+  </Style>
+
+  <Style Selector="Separator.resmenu">
+    <Setter Property="Margin" Value="6,4"/>
+    <Setter Property="Height" Value="1"/>
+    <Setter Property="Background" Value="{StaticResource BorderSoft}"/>
+  </Style>
+
+  <!-- ============================ MISC ============================ -->
+
+  <Style Selector="ToolTip">
+    <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+    <Setter Property="Background" Value="{StaticResource SurfaceRaised}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="4"/>
+    <Setter Property="Padding" Value="10,7"/>
+    <Setter Property="FontSize" Value="12"/>
+  </Style>
+
+</Styles>
