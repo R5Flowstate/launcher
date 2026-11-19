@@ -110,6 +110,14 @@ public sealed class HostInstance
     [JsonPropertyName("auto_restart")]
     public bool AutoRestart { get; set; } = true;
 
+    /// <summary>Server tick rate: 20 (original netcode), 60 or 120. Hosts opt in; 120 Hz with a full lobby needs about 5 cores.</summary>
+    [JsonPropertyName("tick_rate")]
+    public int TickRate { get; set; } = TickRates.Stock;
+
+    /// <summary>Mods this server runs; written to mods/*.vdf right before it starts.</summary>
+    [JsonPropertyName("mods")]
+    public List<InstanceMod> Mods { get; set; } = new();
+
     public static bool IsValidName(string? name) =>
         !string.IsNullOrEmpty(name) && name.Length <= 24 &&
         name.All(c => char.IsAsciiLetterLower(c) || char.IsAsciiDigit(c) || c is '_' or '-');

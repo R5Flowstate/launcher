@@ -24,6 +24,11 @@ public partial class MainWindow
 
     string InstallRoot() => TxtInstallRoot?.Text?.Trim() ?? string.Empty;
 
+    static string ReadyStatus(InstallHealthReport health) =>
+        Loc.Get(health.Hd?.Status is InstallHealthStatus.Incomplete or InstallHealthStatus.Missing
+            ? "status_hd_unfinished"
+            : "ready_to_play");
+
     bool HdEnabledOnDisk(string install)
     {
         try
@@ -36,6 +41,20 @@ public partial class MainWindow
             Log($"HD state read failed: {ex.Message}");
             return false;
         }
+    }
+
+    // An S30.1 folder the launcher did not install keeps its packs; HD is then a launch
+    // option. An installed one downloads and removes them like any other build.
+    static bool S30HdIsLaunchOption(string install) =>
+        GameBuilds.IsS30(install)
+        && !System.IO.File.Exists(System.IO.Path.Combine(install, ProductConstants.InstallStateFileName));
+
+    // The S30.1 client streams HD only when both core packs are present.
+    static bool S30HdPacksPresent(string install)
+    {
+        var win64 = System.IO.Path.Combine(install, "paks", "Win64");
+        return System.IO.File.Exists(System.IO.Path.Combine(win64, "pc_all.opt.starpak"))
+            && System.IO.File.Exists(System.IO.Path.Combine(win64, "pc_roots(01).opt.starpak"));
     }
 
     HdSpaceReport? HdSpace(string install)
@@ -62,9 +81,20 @@ public partial class MainWindow
             return;
 
         var install = InstallRoot();
+        if (RowHdTextures is not null)
+            RowHdTextures.ToolTip = Loc.Get(S30HdIsLaunchOption(install) ? "tip_hd_textures_s30" : "tip_hd_textures");
         if (string.IsNullOrWhiteSpace(install))
         {
             SetHdRow(boxes, labels, false, false, Loc.Get("hd_no_install"));
+            return;
+        }
+
+        if (S30HdIsLaunchOption(install))
+        {
+            var packs = S30HdPacksPresent(install);
+            var on = packs && _settings.S30HdTextures;
+            SetHdRow(boxes, labels, on, packs,
+                Loc.Get(!packs ? "hd_s30_missing" : on ? "hd_s30_on" : "hd_s30_off"));
             return;
         }
 
@@ -74,9 +104,9 @@ public partial class MainWindow
             var present = HdTextureSet.AnyPresent(install);
             var spaceLocal = HdSpace(install);
             SetHdRow(boxes, labels, present, false,
-                present
-                    ? Loc.Format("hd_on_fmt", spaceLocal?.TotalGiB ?? 0)
-                    : Loc.Get("hd_unavailable"));
+                !present ? Loc.Get("hd_unavailable")
+                    : spaceLocal is null ? string.Empty
+                    : Loc.Format("hd_on_fmt", spaceLocal.TotalGiB));
             return;
         }
 
@@ -132,6 +162,17 @@ public partial class MainWindow
 
         var wanted = (sender as CheckBox)?.IsChecked == true;
 
+        if (S30HdIsLaunchOption(install))
+        {
+            _settings.S30HdTextures = wanted;
+            try { SettingsStore.Save(_settings); }
+            catch (Exception ex) { Log($"Settings save failed: {ex.Message}"); }
+            Log(wanted ? "S30.1 HD textures on." : "S30.1 HD textures off: the game launches with -hd_textures 0.");
+            RefreshHdTextures();
+            RefreshDesktopShortcut();
+            return;
+        }
+
         if (wanted && !ConfirmHdOn(install))
         {
             RefreshHdTextures();
@@ -142,6 +183,10 @@ public partial class MainWindow
             RefreshHdTextures();
             return;
         }
+
+        // The launch option follows the choice, or packs on disk would stay unused.
+        if (GameBuilds.IsS30(install))
+            _settings.S30HdTextures = wanted;
 
         // Mid-download: record it, act when the run ends.
         if (_installBusy)
@@ -259,7 +304,7 @@ public partial class MainWindow
             return false;
 
         var install = InstallRoot();
-        if (string.IsNullOrWhiteSpace(install))
+        if (string.IsNullOrWhiteSpace(install) || S30HdIsLaunchOption(install))
             return false;
 
         var health = HealthForUi(install);

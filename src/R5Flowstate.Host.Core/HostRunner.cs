@@ -76,8 +76,15 @@ public sealed class HostRunner
             _log("updating");
             var check = await HostInstaller.UpdateAsync(_installPath, config, fetcher, null, false, cancel).ConfigureAwait(false);
             _log("updated to " + Describe(check));
-            using (var mods = new HostMods(_installPath))
+            try
+            {
+                using var mods = new HostMods(_installPath);
                 await mods.SyncAsync(new Progress<string>(_log), cancel).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _log("mod sync failed, starting with the installed mods: " + ex.Message);
+            }
         }
     }
 

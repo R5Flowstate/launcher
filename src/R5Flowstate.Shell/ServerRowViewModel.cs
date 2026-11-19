@@ -33,8 +33,9 @@ public sealed class ServerRowViewModel : INotifyPropertyChanged
     public string PlaylistLabel { get; }
     public string PlayersLabel { get; }
     public bool HasPassword { get; }
-    public string Detail =>
-        $"{MapLabel}  ·  {PlaylistLabel}  ·  {PlayersLabel}";
+    public string Detail => Listing.TickRate > 0
+        ? $"{MapLabel}  ·  {PlaylistLabel}  ·  {PlayersLabel}  ·  {Listing.TickRate} Hz"
+        : $"{MapLabel}  ·  {PlaylistLabel}  ·  {PlayersLabel}";
     public bool CanJoin { get; }
     public string JoinHint { get; }
     public string JoinCaption => CanJoin ? Loc.Get("join") : Loc.Get("join_dash");
@@ -68,6 +69,8 @@ public sealed class ServerRowViewModel : INotifyPropertyChanged
             var parts = new List<string>();
             if (Listing.RequiredMods.Count > 0)
                 parts.Add(Loc.Get("mods_req_tip") + " " + string.Join(", ", Listing.RequiredMods));
+            if (Listing.RequiredPlugins.Count > 0)
+                parts.Add(Loc.Get("plugins_req_tip") + " " + string.Join(", ", Listing.RequiredPlugins));
             if (Listing.AllowedMods.Count > 0)
                 parts.Add(Loc.Get("mods_allowlist") + ": " + string.Join(", ", Listing.AllowedMods));
             if (!string.IsNullOrWhiteSpace(Listing.ModsProfile))

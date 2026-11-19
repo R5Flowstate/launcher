@@ -25,6 +25,8 @@ public static class Program
 
         if (JoinLink.TryParse(args, out var joinKey))
             JoinLink.StashPending(joinKey);
+        if (GameBuildLink.TryParse(args, out var build))
+            GameBuildLink.StashPending(build);
 
         if (!SingleInstance.Claim())
         {

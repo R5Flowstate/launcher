@@ -109,6 +109,16 @@ public static class VersionIdentity
         return CompiledSdkVersion;
     }
 
+    /// <summary>Each season has its own gate on the master server, so a list only holds that season's servers.</summary>
+    public static string WireForBuild(string wireVersion, GameBuild build)
+    {
+        const string s30Suffix = "-s30";
+        var seasonless = wireVersion.EndsWith(s30Suffix, StringComparison.Ordinal)
+            ? wireVersion[..^s30Suffix.Length]
+            : wireVersion;
+        return build == GameBuild.S30 ? seasonless + s30Suffix : seasonless;
+    }
+
     public static bool StampMatches(string installRoot, string expectedWireVersion)
     {
         var stamp = TryReadSdkVersionStamp(installRoot);

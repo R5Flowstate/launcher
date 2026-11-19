@@ -53,6 +53,12 @@
         <StackPanel>
           <TextBlock x:Name="TxtVersions" Text="Not installed" Foreground="{StaticResource TextSecondary}"/>
           <TextBlock x:Name="TxtStatus" Text="" Style="{StaticResource MonoNote}" Margin="0,4,0,0"/>
+          <StackPanel x:Name="PanelToolUpdate" Orientation="Horizontal" Margin="0,6,0,0" Visibility="Collapsed">
+            <TextBlock x:Name="TxtToolUpdate" VerticalAlignment="Center" FontWeight="SemiBold"
+                       Foreground="{StaticResource UpdateFill}"/>
+            <Button x:Name="BtnToolUpdate" Content="Restart to update" Style="{StaticResource UpdateButtonSmall}"
+                    Margin="10,0,0,0" Click="OnToolUpdate"/>
+          </StackPanel>
         </StackPanel>
         <StackPanel Grid.Column="1" VerticalAlignment="Center">
           <ProgressBar x:Name="BarProgress" Height="6" Minimum="0" Maximum="100" Value="0"/>
@@ -108,9 +114,9 @@
             <StackPanel x:Name="PanelInstance" IsEnabled="False">
               <TextBlock x:Name="TxtInstanceTitle" Text="SETTINGS" Style="{StaticResource SectionLabel}"/>
               <TextBlock Text="Server name" Style="{StaticResource FieldLabel}"/>
-              <TextBox x:Name="TxtHostname" Margin="0,0,0,10"/>
+              <TextBox x:Name="TxtHostname" Margin="0,0,0,10" TextChanged="OnFormChanged"/>
               <TextBlock Text="Description" Style="{StaticResource FieldLabel}"/>
-              <TextBox x:Name="TxtDescription" Margin="0,0,0,10"/>
+              <TextBox x:Name="TxtDescription" Margin="0,0,0,10" TextChanged="OnFormChanged"/>
               <Grid Margin="0,0,0,10">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="*"/>
@@ -119,11 +125,11 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel>
                   <TextBlock Text="Port" Style="{StaticResource FieldLabel}"/>
-                  <TextBox x:Name="TxtPort"/>
+                  <TextBox x:Name="TxtPort" TextChanged="OnFormChanged"/>
                 </StackPanel>
                 <StackPanel Grid.Column="2">
                   <TextBlock Text="Visibility" Style="{StaticResource FieldLabel}"/>
-                  <ComboBox x:Name="CmbVisibility" Style="{StaticResource DarkCombo}">
+                  <ComboBox x:Name="CmbVisibility" Style="{StaticResource DarkCombo}" SelectionChanged="OnFormChanged">
                     <ComboBoxItem Content="Public"/>
                     <ComboBoxItem Content="Hidden"/>
                     <ComboBoxItem Content="Offline"/>
@@ -133,35 +139,41 @@
               <TextBlock Text="Playlist" Style="{StaticResource FieldLabel}"/>
               <ComboBox x:Name="CmbPlaylist" Style="{StaticResource DarkCombo}" Margin="0,0,0,10"
                         SelectionChanged="OnPlaylistChanged"/>
-              <Grid Margin="0,0,0,4">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="*"/>
-                  <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="Map" Style="{StaticResource FieldLabel}"/>
-                <CheckBox x:Name="ChkAllMaps" Grid.Column="1" Content="All maps" Style="{StaticResource QuietCheck}"
-                          Checked="OnAllMapsChanged" Unchecked="OnAllMapsChanged"
-                          ToolTip="Offer every map in the install, not only the playlist's"/>
-              </Grid>
-              <ComboBox x:Name="CmbMap" Style="{StaticResource DarkCombo}" Margin="0,0,0,10"/>
+              <TextBlock Text="Map" Style="{StaticResource FieldLabel}"/>
+              <ComboBox x:Name="CmbMap" Style="{StaticResource DarkCombo}" Margin="0,0,0,10"
+                        SelectionChanged="OnMapChanged"/>
+              <TextBlock Text="Tick rate" Style="{StaticResource FieldLabel}"/>
+              <ComboBox x:Name="CmbTickRate" Style="{StaticResource DarkCombo}" Margin="0,0,0,10"
+                        SelectionChanged="OnFormChanged"
+                        ToolTip="20 Hz is the original netcode. 60 and 120 Hz use the overhauled netcode: less delay, more CPU (about 5 cores for a full lobby at 120 Hz).">
+                <ComboBoxItem Content="20 Hz (original)" Tag="20"/>
+                <ComboBoxItem Content="60 Hz" Tag="60"/>
+                <ComboBoxItem Content="120 Hz" Tag="120"/>
+              </ComboBox>
               <TextBlock Text="SERVER SETTINGS" Style="{StaticResource SectionLabel}" Margin="0,6,0,6"/>
               <TextBlock x:Name="TxtNoSettings" Text="This playlist has no server settings." Style="{StaticResource MonoNote}" Margin="0,0,0,10"/>
               <StackPanel x:Name="PanelSettings" Margin="0,0,0,6"/>
               <Button x:Name="BtnResetSettings" Content="Reset to playlist defaults" Style="{StaticResource GhostButton}"
                       HorizontalAlignment="Left" Margin="0,0,0,14" Click="OnResetSettings"/>
+              <TextBlock Text="MODS" Style="{StaticResource SectionLabel}" Margin="0,6,0,6"/>
+              <TextBlock x:Name="TxtNoMods" Text="No mods installed. Add them on the Mods tab." Style="{StaticResource MonoNote}"
+                         Margin="0,0,0,10" TextWrapping="Wrap"/>
+              <StackPanel x:Name="PanelInstanceMods" Margin="0,0,0,14"/>
               <TextBlock Text="Join password (empty = none)" Style="{StaticResource FieldLabel}"/>
-              <PasswordBox x:Name="PwdJoin" Margin="0,0,0,10"/>
+              <PasswordBox x:Name="PwdJoin" Margin="0,0,0,10" PasswordChanged="OnFormChanged"/>
               <TextBlock Text="RCON password" Style="{StaticResource FieldLabel}"/>
-              <PasswordBox x:Name="PwdRcon" Margin="0,0,0,10"/>
+              <PasswordBox x:Name="PwdRcon" Margin="0,0,0,10" PasswordChanged="OnFormChanged"/>
               <TextBlock Text="Stats host key (leaderboards)" Style="{StaticResource FieldLabel}"/>
-              <PasswordBox x:Name="PwdStats" Margin="0,0,0,10"/>
+              <PasswordBox x:Name="PwdStats" Margin="0,0,0,10" PasswordChanged="OnFormChanged"/>
               <TextBlock Text="Extra launch arguments" Style="{StaticResource FieldLabel}"/>
-              <TextBox x:Name="TxtExtra" Margin="0,0,0,10" FontFamily="Consolas"/>
-              <CheckBox x:Name="ChkAutoRestart" Content="Restart after a crash" Margin="0,0,0,14"/>
-              <Button Content="Save" Style="{StaticResource PrimaryButton}" Click="OnSaveInstance"/>
-              <TextBlock Text="Saved changes apply on the next start." Style="{StaticResource MonoNote}" Margin="0,8,0,0"/>
+              <TextBox x:Name="TxtExtra" Margin="0,0,0,10" FontFamily="Consolas" TextChanged="OnFormChanged"/>
+              <CheckBox x:Name="ChkAutoRestart" Content="Restart after a crash" Margin="0,0,0,10"
+                        Checked="OnFormChanged" Unchecked="OnFormChanged"/>
+              <TextBlock Text="Changes save as you make them. A running server picks them up when it restarts."
+                         Style="{StaticResource MonoNote}" TextWrapping="Wrap"/>
               <TextBlock Text="LAUNCH LINE" Style="{StaticResource SectionLabel}" Margin="0,14,0,4"/>
-              <TextBox x:Name="TxtArgs" IsReadOnly="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11"/>
+              <TextBox x:Name="TxtArgs" IsReadOnly="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11"
+                       Height="Auto" MinHeight="32" Padding="10,6" VerticalContentAlignment="Top"/>
             </StackPanel>
           </ScrollViewer>
         </Border>
@@ -189,8 +201,9 @@
               <Button x:Name="BtnStop" Grid.Column="3" Content="Stop" Style="{StaticResource DangerButtonSmall}" Margin="6,0,0,0" Click="OnStop"/>
             </Grid>
             <TextBox x:Name="TxtConsole" Grid.Row="1" IsReadOnly="True" FontFamily="Consolas" FontSize="11.5"
+                     Height="Auto" Padding="10,8" VerticalAlignment="Stretch" VerticalContentAlignment="Stretch"
                      TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
-                     VerticalContentAlignment="Top" Background="{StaticResource SurfaceSunken}"/>
+                     Background="{StaticResource SurfaceSunken}"/>
             <Grid Grid.Row="2" Margin="0,8,0,0">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
@@ -215,9 +228,12 @@
         <Border Style="{StaticResource Card}" Margin="0">
           <DockPanel>
             <TextBlock DockPanel.Dock="Top" Text="INSTALLED" Style="{StaticResource SectionLabel}"/>
+            <TextBlock DockPanel.Dock="Top" Style="{StaticResource MonoNote}" Margin="0,0,0,8" TextWrapping="Wrap"
+                       Text="Each server picks its own mods in its settings. A mod that owns the server's playlist or map is always on and required."/>
+            <TextBlock x:Name="TxtModUpdates" DockPanel.Dock="Top" Margin="0,0,0,8" FontWeight="SemiBold" TextWrapping="Wrap"
+                       Foreground="{StaticResource UpdateFill}" Visibility="Collapsed"/>
             <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
               <Button Content="Remove" Style="{StaticResource DangerButtonSmall}" Click="OnModRemove"/>
-              <Button Content="Required / optional" Style="{StaticResource GhostButton}" Margin="6,0,0,0" Click="OnModTogglePolicy"/>
               <Button Content="Update all" Style="{StaticResource GhostButton}" Margin="6,0,0,0" Click="OnModUpdateAll"/>
               <Button Content="Sync to lock" Style="{StaticResource GhostButton}" Margin="6,0,0,0" Click="OnModSync"
                       ToolTip="Reinstall exactly the versions pinned in mods.lock.json"/>
@@ -240,7 +256,6 @@
             <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
               <StackPanel Orientation="Horizontal">
                 <Button Content="Install" Style="{StaticResource PrimaryButton}" Click="OnModInstall"/>
-                <CheckBox x:Name="ChkModOptional" Content="Optional for players" Margin="12,0,0,0" VerticalAlignment="Center"/>
               </StackPanel>
               <Grid Margin="0,10,0,0">
                 <Grid.ColumnDefinitions>
@@ -250,6 +265,17 @@
                 <TextBox x:Name="TxtProfileCode" ToolTip="Thunderstore / launcher profile code"/>
                 <Button Grid.Column="1" Content="Import profile" Style="{StaticResource GhostButton}" Margin="6,0,0,0" Click="OnModImport"/>
               </Grid>
+            </StackPanel>
+            <StackPanel x:Name="PanelModProgress" DockPanel.Dock="Bottom" Margin="0,10,0,0" Visibility="Collapsed">
+              <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="TxtModProgress" Style="{StaticResource MonoNote}" TextTrimming="CharacterEllipsis"/>
+                <TextBlock x:Name="TxtModProgressPct" Grid.Column="1" Style="{StaticResource MonoNote}" Margin="8,0,0,0"/>
+              </Grid>
+              <ProgressBar x:Name="BarModProgress" Height="8" Minimum="0" Maximum="100" Value="0"/>
             </StackPanel>
             <TextBlock x:Name="TxtModDetail" DockPanel.Dock="Bottom" Style="{StaticResource MonoNote}" Margin="0,8,0,0"
                        TextWrapping="Wrap" MaxHeight="80"/>

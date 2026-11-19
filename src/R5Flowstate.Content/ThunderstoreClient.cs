@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using R5Flowstate.Contracts;
@@ -30,6 +31,7 @@ public sealed class ThunderstoreClient : IDisposable
 
     static readonly TimeSpan ApiTimeout = TimeSpan.FromSeconds(30);
     static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(30);
+    static readonly TimeSpan PackageListTimeout = TimeSpan.FromMinutes(2);
 
     static readonly JsonSerializerOptions s_json = new()
     {
@@ -42,6 +44,7 @@ public sealed class ThunderstoreClient : IDisposable
     readonly bool _ownsHttp;
     readonly string _indexBase;
     readonly bool _indexIsLocal;
+    volatile bool _disposed;
 
     public ThunderstoreClient(string? indexBaseUrl = null)
         : this(indexBaseUrl, CreateHttp(), ownsHttp: true)
@@ -112,13 +115,16 @@ public sealed class ThunderstoreClient : IDisposable
             return await ListLocalAsync(cancel).ConfigureAwait(false);
 
         EnsureLiveCatalog();
+        ObjectDisposedException.ThrowIf(_disposed, this);
 
+        // Disposal fails every later request, so neither the fallback nor the
+        // combined message below would say anything about the network.
         Exception? indexError = null;
         try
         {
             return await ListViaIndexAsync(cancel).ConfigureAwait(false);
         }
-        catch (Exception ex) when (!cancel.IsCancellationRequested)
+        catch (Exception ex) when (!cancel.IsCancellationRequested && !_disposed)
         {
             indexError = ex;
         }
@@ -127,7 +133,7 @@ public sealed class ThunderstoreClient : IDisposable
         {
             return await ListViaPackageEndpointAsync(cancel).ConfigureAwait(false);
         }
-        catch (Exception ex) when (!cancel.IsCancellationRequested)
+        catch (Exception ex) when (!cancel.IsCancellationRequested && !_disposed)
         {
             throw new InvalidOperationException(
                 "Thunderstore listing failed (index: " +
@@ -144,6 +150,8 @@ public sealed class ThunderstoreClient : IDisposable
             throw new InvalidOperationException("Profile create needs the Thunderstore host, not a local index.");
         EnsureLiveCatalog();
 
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         var body = EncodeProfile(profile);
         var url = CombineUrl(_indexBase, "api/experimental/legacyprofile/create/");
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancel);
@@ -153,10 +161,18 @@ public sealed class ThunderstoreClient : IDisposable
             Content = new StringContent(body, Encoding.UTF8, "text/plain"),
         };
         EnsureThunderstoreHost(url);
-        using var response = await SendNoRedirectAsync(request, cts.Token).ConfigureAwait(false);
-        var bytes = await ReadCappedAsync(
-            response, MaxProfileBytes, MaxProfileDecodedBytes, cts.Token).ConfigureAwait(false);
-        EnsureSuccess(response, bytes);
+        byte[] bytes;
+        try
+        {
+            using var response = await SendNoRedirectAsync(request, cts.Token).ConfigureAwait(false);
+            bytes = await ReadCappedAsync(
+                response, MaxProfileBytes, MaxProfileDecodedBytes, cts.Token).ConfigureAwait(false);
+            EnsureSuccess(response, bytes);
+        }
+        catch (OperationCanceledException) when (!cancel.IsCancellationRequested && !_disposed)
+        {
+            throw TimedOut(url, ApiTimeout);
+        }
 
         var json = Encoding.UTF8.GetString(bytes);
         using var doc = JsonDocument.Parse(json);
@@ -188,19 +204,26 @@ public sealed class ThunderstoreClient : IDisposable
             throw new InvalidOperationException("Profile get needs the Thunderstore host, not a local index.");
         EnsureLiveCatalog();
 
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         var url = CombineUrl(_indexBase, "api/experimental/legacyprofile/get/" + code + "/");
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-        cts.CancelAfter(ApiTimeout);
-        var bytes = await GetFollowAsync(
-            url, MaxProfileBytes, MaxProfileDecodedBytes, cts.Token).ConfigureAwait(false);
+        var bytes = await GetWithinAsync(
+            url, MaxProfileBytes, MaxProfileDecodedBytes, ApiTimeout, cancel).ConfigureAwait(false);
         return DecodeProfile(bytes);
     }
 
+    /// <summary>
+    /// With <paramref name="expectedSha256"/> the bytes are hashed while they stream and a mismatch
+    /// deletes the partial file and throws <see cref="ModHashMismatchException"/>; nothing lands at
+    /// <paramref name="destPath"/> unless it is the reviewed copy.
+    /// </summary>
     public async Task DownloadAsync(
         string url,
         string destPath,
         IProgress<ContentInstallProgress>? progress = null,
-        CancellationToken cancel = default)
+        CancellationToken cancel = default,
+        string? expectedSha256 = null,
+        long expectedSize = -1)
     {
         if (string.IsNullOrWhiteSpace(url))
             throw new ArgumentException("URL is required.", nameof(url));
@@ -211,17 +234,18 @@ public sealed class ThunderstoreClient : IDisposable
         if (_indexIsLocal && ChannelSource.LooksLocal(url))
         {
             var local = ChannelSource.LocalPath(url);
-            await CopyLocalAsync(local, destPath, progress, cancel).ConfigureAwait(false);
+            await CopyLocalAsync(local, destPath, progress, cancel, expectedSha256, expectedSize).ConfigureAwait(false);
             return;
         }
 
         if (_indexIsLocal && Path.IsPathRooted(url) && File.Exists(url))
         {
-            await CopyLocalAsync(url, destPath, progress, cancel).ConfigureAwait(false);
+            await CopyLocalAsync(url, destPath, progress, cancel, expectedSha256, expectedSize).ConfigureAwait(false);
             return;
         }
 
         EnsureLiveCatalog();
+        ObjectDisposedException.ThrowIf(_disposed, this);
 
         var dir = Path.GetDirectoryName(destPath);
         if (!string.IsNullOrEmpty(dir))
@@ -236,7 +260,10 @@ public sealed class ThunderstoreClient : IDisposable
             var declared = response.Content.Headers.ContentLength ?? 0;
             if (declared > MaxDownloadBytes)
                 throw new InvalidOperationException("Download exceeds size cap.");
+            if (expectedSize >= 0 && declared > 0 && declared != expectedSize)
+                throw new ModHashMismatchException("Download size does not match the reviewed copy.");
 
+            using var hash = expectedSha256 is null ? null : IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             await using var input = await response.Content.ReadAsStreamAsync(cancel).ConfigureAwait(false);
             await using (var output = new FileStream(
                              tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1024 * 1024, useAsync: true))
@@ -277,6 +304,9 @@ public sealed class ThunderstoreClient : IDisposable
                     done += read;
                     if (done > MaxDownloadBytes)
                         throw new InvalidOperationException("Download exceeds size cap.");
+                    if (expectedSize >= 0 && done > expectedSize)
+                        throw new ModHashMismatchException("Download is larger than the reviewed copy.");
+                    hash?.AppendData(buffer, 0, read);
                     await output.WriteAsync(buffer.AsMemory(0, read), cancel).ConfigureAwait(false);
 
                     var now = DateTime.UtcNow;
@@ -296,6 +326,8 @@ public sealed class ThunderstoreClient : IDisposable
                 }
             }
 
+            if (hash is not null)
+                CheckHash(hash, expectedSha256!);
             File.Move(tmp, destPath, overwrite: true);
         }
         catch
@@ -305,8 +337,16 @@ public sealed class ThunderstoreClient : IDisposable
         }
     }
 
+    static void CheckHash(IncrementalHash hash, string expected)
+    {
+        var got = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+        if (!string.Equals(got, expected, StringComparison.OrdinalIgnoreCase))
+            throw new ModHashMismatchException("A download did not match the reviewed copy and was discarded.");
+    }
+
     public void Dispose()
     {
+        _disposed = true;
         if (_ownsHttp)
             _http.Dispose();
     }
@@ -314,10 +354,8 @@ public sealed class ThunderstoreClient : IDisposable
     async Task<IReadOnlyList<ModPackage>> ListViaIndexAsync(CancellationToken cancel)
     {
         var url = CombineUrl(_indexBase, "c/" + Community + "/api/v1/package-listing-index/");
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-        cts.CancelAfter(ApiTimeout);
-        var bytes = await GetFollowAsync(
-            url, MaxIndexBytes, MaxIndexDecodedBytes, cts.Token).ConfigureAwait(false);
+        var bytes = await GetWithinAsync(
+            url, MaxIndexBytes, MaxIndexDecodedBytes, ApiTimeout, cancel).ConfigureAwait(false);
         var parsed = ParseIndexOrPackages(bytes);
         if (parsed.Packages is not null)
             return Normalize(parsed.Packages);
@@ -330,10 +368,8 @@ public sealed class ThunderstoreClient : IDisposable
         foreach (var chunk in parsed.ChunkUrls)
         {
             cancel.ThrowIfCancellationRequested();
-            using var chunkCts = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-            chunkCts.CancelAfter(ApiTimeout);
-            var chunkBytes = await FetchBytesAsync(
-                chunk, localDir: null, MaxPackageListBytes, MaxPackageListDecodedBytes, chunkCts.Token)
+            var chunkBytes = await GetWithinAsync(
+                chunk, MaxPackageListBytes, MaxPackageListDecodedBytes, ApiTimeout, cancel)
                 .ConfigureAwait(false);
             var chunkParsed = ParseIndexOrPackages(chunkBytes);
             if (chunkParsed.Packages is not null)
@@ -346,10 +382,9 @@ public sealed class ThunderstoreClient : IDisposable
     async Task<IReadOnlyList<ModPackage>> ListViaPackageEndpointAsync(CancellationToken cancel)
     {
         var url = CombineUrl(_indexBase, "c/" + Community + "/api/v1/package/");
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-        cts.CancelAfter(TimeSpan.FromMinutes(2));
-        var bytes = await GetFollowAsync(
-            url, MaxPackageListBytes, MaxPackageListDecodedBytes, cts.Token).ConfigureAwait(false);
+        var bytes = await GetWithinAsync(
+            url, MaxPackageListBytes, MaxPackageListDecodedBytes, PackageListTimeout, cancel)
+            .ConfigureAwait(false);
         var parsed = ParseIndexOrPackages(bytes);
         if (parsed.Packages is null)
             throw new InvalidOperationException("Thunderstore /package/ did not return a package array.");
@@ -433,6 +468,31 @@ public sealed class ThunderstoreClient : IDisposable
         if (!SafePath.TryJoin(localDir, url, out var full))
             throw new InvalidOperationException("Refusing chunk path outside the index directory: " + url);
         return full;
+    }
+
+    /// <summary>
+    /// Our own deadline surfaces as a <see cref="TimeoutException"/> naming the host; a bare
+    /// "A task was canceled." reads the same as the launcher closing.
+    /// </summary>
+    async Task<byte[]> GetWithinAsync(
+        string url, int maxBytes, int maxDecoded, TimeSpan timeout, CancellationToken cancel)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+        cts.CancelAfter(timeout);
+        try
+        {
+            return await GetFollowAsync(url, maxBytes, maxDecoded, cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancel.IsCancellationRequested && !_disposed)
+        {
+            throw TimedOut(url, timeout);
+        }
+    }
+
+    static TimeoutException TimedOut(string url, TimeSpan timeout)
+    {
+        var host = Uri.TryCreate(url, UriKind.Absolute, out var u) ? u.Host : "Thunderstore";
+        return new TimeoutException($"no answer from {host} within {timeout.TotalSeconds:0}s");
     }
 
     async Task<byte[]> GetFollowAsync(string url, int maxBytes, int maxDecoded, CancellationToken cancel)
@@ -800,7 +860,9 @@ public sealed class ThunderstoreClient : IDisposable
         string src,
         string dest,
         IProgress<ContentInstallProgress>? progress,
-        CancellationToken cancel)
+        CancellationToken cancel,
+        string? expectedSha256 = null,
+        long expectedSize = -1)
     {
         var dir = Path.GetDirectoryName(dest);
         if (!string.IsNullOrEmpty(dir))
@@ -818,10 +880,26 @@ public sealed class ThunderstoreClient : IDisposable
         var tmp = dest + ".partial";
         try
         {
+            if (expectedSize >= 0 && input.Length != expectedSize)
+                throw new ModHashMismatchException("Download size does not match the reviewed copy.");
             await using (var output = new FileStream(
                              tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1024 * 1024, useAsync: true))
             {
                 await input.CopyToAsync(output, cancel).ConfigureAwait(false);
+            }
+
+            if (expectedSha256 is not null)
+            {
+                using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                await using (var check = new FileStream(tmp, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, useAsync: true))
+                {
+                    var buf = new byte[1024 * 1024];
+                    int n;
+                    while ((n = await check.ReadAsync(buf, cancel).ConfigureAwait(false)) > 0)
+                        hash.AppendData(buf, 0, n);
+                }
+
+                CheckHash(hash, expectedSha256);
             }
 
             File.Move(tmp, dest, overwrite: true);
@@ -834,4 +912,13 @@ public sealed class ThunderstoreClient : IDisposable
     }
 
     readonly record struct IndexParse(List<ModPackage>? Packages, List<string>? ChunkUrls);
+}
+
+/// <summary>The downloaded bytes are not the reviewed copy; the file was deleted before extraction.</summary>
+public sealed class ModHashMismatchException : InvalidOperationException
+{
+    public ModHashMismatchException(string message)
+        : base(message)
+    {
+    }
 }

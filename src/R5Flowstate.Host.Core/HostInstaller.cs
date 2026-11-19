@@ -63,6 +63,9 @@ public static class HostInstaller
     /// Brings the install to the CHANNEL tip. Refuses while a dedi from this
     /// install is running: the platform track rewrites server.dll.
     /// </summary>
+    // Shipped for players' mod-system smoke test; a public server has no use for it.
+    static readonly string[] HostOffByDefaultMods = { "Cafe.HelloMod" };
+
     public static async Task<HostUpdateCheck> UpdateAsync(
         string installPath,
         HostConfig config,
@@ -116,6 +119,16 @@ public static class HostInstaller
                 ManifestSha256 = track.Tip.ContentManifestSha256,
             };
             state.Save(installPath);
+        }
+
+        if (!state.ModDefaultsApplied)
+        {
+            foreach (var id in HostOffByDefaultMods)
+            {
+                if (ModsStore.Discover(installPath).Any(m => string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase)))
+                    ModsStore.SetEnabled(installPath, id, false);
+            }
+            state.ModDefaultsApplied = true;
         }
 
         state.GateName = check.Channel.EffectiveGateName;

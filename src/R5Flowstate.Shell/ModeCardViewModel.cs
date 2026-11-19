@@ -91,8 +91,6 @@ public sealed class ModeCardViewModel : INotifyPropertyChanged
                 return byTitle;
             return mapTitle.Trim();
         }
-        if (!string.IsNullOrWhiteSpace(stem) && Loc.TryGet("map_title." + stem, out var byStem))
-            return byStem;
         return MapOption.PlayerName(stem, names);
     }
 
@@ -140,6 +138,7 @@ public sealed class ModeCardViewModel : INotifyPropertyChanged
     {
         ModeGroups.Apex => Loc.Get("group_apex"),
         ModeGroups.Custom => Loc.Get("group_custom"),
+        ModeGroups.Training => Loc.Get("group_training"),
         _ => Loc.Get("group_flowstate"),
     };
 
@@ -161,9 +160,9 @@ public sealed class ModeCardViewModel : INotifyPropertyChanged
     public string FixedMapLabel => Maps.Count > 0 ? Maps[0].DisplayName : string.Empty;
 
     /// <summary>Rail row trailing count. A pinned mode plays one map, so it shows
-    /// a dot rather than a meaningless "1".</summary>
+    /// no count at all rather than a meaningless \"1\".</summary>
     public string MapCountLabel => MapIsPinned || Maps.Count <= 1
-        ? "·"
+        ? string.Empty
         : Maps.Count.ToString(CultureInfo.InvariantCulture);
 
     public bool IsSelected
@@ -202,6 +201,29 @@ public sealed class ModeCardViewModel : INotifyPropertyChanged
     public string SelectedMapStem =>
         SelectedMap?.Stem ?? (Maps.Count > 0 ? Maps[0].Stem : string.Empty);
 
+    /// <summary>Every word must hit the title, the id, the group, or a map.</summary>
+    public bool MatchesQuery(string? query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return true;
+        foreach (var token in query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (!FieldHas(token))
+                return false;
+        }
+        return true;
+
+        bool FieldHas(string token) =>
+            Has(Title, token) || Has(Id, token) || Has(Blurb, token) ||
+            Has(PlaylistId, token) || Has(FallbackPlaylistId, token) ||
+            Has(GroupTitle, token) ||
+            Maps.Any(m => Has(m.DisplayName, token) || Has(m.Stem, token) || Has(m.PlaylistId, token));
+
+        static bool Has(string? hay, string needle) =>
+            !string.IsNullOrEmpty(hay) &&
+            hay.Contains(needle, StringComparison.OrdinalIgnoreCase);
+    }
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
@@ -227,8 +249,15 @@ public sealed class MapOption
 
     public override string ToString() => DisplayName;
 
+    /// <summary>S30.1 reuses some stems for other content, so its own titles are looked up first.</summary>
+    public static bool UseS30Titles { get; set; }
+
+    static bool TryLocalized(string stem, out string name) =>
+        (UseS30Titles && Loc.TryGet("map_title.s30." + stem, out name))
+        || Loc.TryGet("map_title." + stem, out name);
+
     /// <summary>
-    /// "mp_rr_desertlands_hu (World's Edge)" when the install names the stem,
+    /// "World's Edge  (mp_rr_desertlands_hu)" when the stem has a name,
     /// otherwise the stem alone. The stem stays visible either way -- it is what
     /// gets passed to +map and what a bug report needs to quote.
     /// </summary>
@@ -237,10 +266,12 @@ public sealed class MapOption
         if (string.IsNullOrWhiteSpace(stem))
             return string.Empty;
         var s = stem.Trim();
+        if (TryLocalized(s, out var localized))
+            return $"{localized}  ({s})";
         if (names is not null && names.TryGetValue(s, out var friendly) &&
             !string.IsNullOrWhiteSpace(friendly))
         {
-            return $"{s}  ({friendly.Trim()})";
+            return $"{friendly.Trim()}  ({s})";
         }
         return s;
     }
@@ -251,6 +282,8 @@ public sealed class MapOption
         if (string.IsNullOrWhiteSpace(stem))
             return string.Empty;
         var s = stem.Trim();
+        if (TryLocalized(s, out var localized))
+            return localized;
         if (names is not null && names.TryGetValue(s, out var friendly) &&
             !string.IsNullOrWhiteSpace(friendly))
             return friendly.Trim();

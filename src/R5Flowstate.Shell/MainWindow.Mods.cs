@@ -17,6 +17,8 @@ public partial class MainWindow
 {
     const int MaxModPolicyEntries = 64;
     const string SessionModsBackupName = "mods.vdf.launcher-bak";
+    // What the filter wrote; restore keeps any row that differs from it.
+    const string SessionModsFilteredName = "mods.vdf.launcher-session";
     const string ModPolicyFileName = "mod_policy.txt";
     const int MaxBrowseCategoryChips = 8;
     static readonly TimeSpan CatalogMaxAge = TimeSpan.FromMinutes(10);
@@ -36,7 +38,9 @@ public partial class MainWindow
     readonly List<DediModPolicyRowViewModel> _dediModRows = new();
     readonly List<ModFilterChip> _browseChips = new();
     readonly ObservableCollection<ModQueueItem> _modQueue = new();
+    // Built from the R5Flowstate-signed curated list only; nothing outside it is listed or installable.
     IReadOnlyList<ModPackage> _tsPackages = Array.Empty<ModPackage>();
+    CuratedList? _curated;
     DateTime _catalogLoadedUtc = DateTime.MinValue;
     Task? _catalogLoad;
 
@@ -116,11 +120,20 @@ public partial class MainWindow
     bool _sessionModsClientSeen;
     bool _sessionModsForceRelaunch;
     string _sessionModsInstall = string.Empty;
-    string _sessionModsWritten = string.Empty;
-    string _sessionModsBackup = string.Empty;
 
-    ThunderstoreClient ModsThunderstore() =>
-        _thunderstore ??= new ThunderstoreClient();
+    /// <summary>
+    /// Cancelled before the services are disposed, so a request still in flight at
+    /// close ends as a cancellation and a late continuation cannot build a new client.
+    /// </summary>
+    readonly CancellationTokenSource _modsLifetime = new();
+
+    CancellationToken ModsLifetime => _modsLifetime.Token;
+
+    ThunderstoreClient ModsThunderstore()
+    {
+        ModsLifetime.ThrowIfCancellationRequested();
+        return _thunderstore ??= new ThunderstoreClient();
+    }
 
     ModInstaller ModsInstaller() =>
         _modInstaller ??= new ModInstaller(ModsThunderstore());
@@ -129,6 +142,7 @@ public partial class MainWindow
 
     void DisposeModsServices()
     {
+        _modsLifetime.Cancel();
         foreach (var item in _modQueue)
         {
             try { item.Cts?.Cancel(); }
@@ -374,11 +388,29 @@ public partial class MainWindow
         try
         {
             var skipped = new List<string>();
-            var found = await Task.Run(() => ModsStore.Discover(root, skipped)).ConfigureAwait(true);
+            var curated = _curated;
+            var found = await Task.Run(() =>
+            {
+                var revokedFrom = curated ?? CuratedCatalog.LoadLastKnown(root);
+                try
+                {
+                    ModRevocation.Reconcile(root, revokedFrom);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+                {
+                    Log("Mods: revoked mod update failed: " + ex.Message);
+                }
+
+                var mods = ModsStore.Discover(root, skipped);
+                var records = VerifiedInstalls.Read(root);
+                return mods.Select(m => (Mod: m,
+                    Verified: VerifiedInstalls.IsVerified(root, m, records, curated),
+                    Revoked: VerifiedInstalls.IsRevoked(m, revokedFrom))).ToList();
+            }).ConfigureAwait(true);
 
             _modRows.Clear();
-            foreach (var mod in found)
-                _modRows.Add(new ModRowViewModel(mod));
+            foreach (var (mod, verified, revoked) in found)
+                _modRows.Add(new ModRowViewModel(mod, verified, revoked));
             ApplyCatalogToInstalled();
 
             BindInstalledMods();
@@ -770,6 +802,16 @@ public partial class MainWindow
         if (dlg.ShowDialog(this) != true)
             return;
 
+        var ans = MessageBox.Show(
+            this,
+            Loc.Get("mods_unverified_install_confirm"),
+            Loc.Get("mods_file_title"),
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No);
+        if (ans != MessageBoxResult.Yes)
+            return;
+
         SetModsBusy(true);
         SetModsStatus(Loc.Get("mods_installing"));
         try
@@ -815,17 +857,53 @@ public partial class MainWindow
         if (!force && _tsPackages.Count > 0 && DateTime.UtcNow - _catalogLoadedUtc < CatalogMaxAge)
             return;
 
-        _catalogLoad = LoadCatalogCoreAsync(reportErrors);
+        _catalogLoad = LoadCatalogCoreAsync(reportErrors, refresh: force);
         await _catalogLoad.ConfigureAwait(true);
     }
 
-    async Task LoadCatalogCoreAsync(bool reportErrors)
+    /// <summary>Each season has its own mod list, so nothing from the old one may stay installable.</summary>
+    async Task ReloadCatalogForBuildAsync()
+    {
+        _curated = null;
+        _tsPackages = Array.Empty<ModPackage>();
+        _catalogLoadedUtc = DateTime.MinValue;
+        _browseRows.Clear();
+        _browseSelected = null;
+        BindBrowseMods(null);
+        UpdateModsSectionLabels();
+        await EnsureCatalogAsync(force: true, reportErrors: false).ConfigureAwait(true);
+        if (_catalogRoot != ModsInstallRoot())
+            await EnsureCatalogAsync(force: true, reportErrors: false).ConfigureAwait(true);
+    }
+
+    string? _catalogRoot;
+
+    async Task LoadCatalogCoreAsync(bool reportErrors, bool refresh)
     {
         if (reportErrors)
             SetModsStatus(Loc.Get("mods_catalog_loading"));
         try
         {
-            var packages = await ModsThunderstore().ListPackagesAsync().ConfigureAwait(true);
+            var root = ModsInstallRoot();
+            _catalogRoot = root;
+            var curated = await CuratedCatalog.LoadAsync(root, refresh, ModsLifetime,
+                log: line => Log("Mods: " + line), gameCopyOptional: true).ConfigureAwait(true);
+            IReadOnlyList<ModPackage> listing = Array.Empty<ModPackage>();
+            try
+            {
+                listing = await ModsThunderstore().ListPackagesAsync(ModsLifetime).ConfigureAwait(true);
+            }
+            catch (Exception ex) when (!ModsLifetime.IsCancellationRequested)
+            {
+                Log("Mods: Thunderstore listing unavailable, showing reviewed fields only: " + ex.Message);
+            }
+
+            if (root != ModsInstallRoot())
+                return;
+
+            var packages = CuratedCatalog.ToPackages(curated, listing);
+            var listChanged = _curated?.Serial != curated.Serial;
+            _curated = curated;
             _tsPackages = packages;
             _catalogLoadedUtc = DateTime.UtcNow;
 
@@ -833,10 +911,13 @@ public partial class MainWindow
             _browseRows.Clear();
             foreach (var pkg in packages)
             {
-                if (pkg.IsDeprecated || pkg.IsNsfw || pkg.Versions.Count == 0)
+                if (pkg.Versions.Count == 0)
                     continue;
-                _browseRows.Add(new BrowseModRowViewModel(pkg));
+                _browseRows.Add(new BrowseModRowViewModel(pkg, curated.Find(pkg.FullName)?.Official == true));
             }
+
+            if (listChanged && _modRows.Count > 0)
+                _ = LoadInstalledModsCoreAsync();
 
             _browseSelected = null;
             RebuildBrowseChips();
@@ -848,6 +929,25 @@ public partial class MainWindow
             UpdateModsSectionLabels();
             if (reportErrors)
                 SetModsStatus(_browseRows.Count == 0 ? Loc.Get("mods_browse_empty") : string.Empty);
+        }
+        catch (Exception) when (ModsLifetime.IsCancellationRequested)
+        {
+            // The launcher is closing; nothing failed.
+        }
+        catch (CuratedListException ex)
+        {
+            var hadList = _curated is not null;
+            _curated = null;
+            if (hadList && _modRows.Count > 0)
+                _ = LoadInstalledModsCoreAsync();
+            _tsPackages = Array.Empty<ModPackage>();
+            _browseRows.Clear();
+            _browseSelected = null;
+            BindBrowseMods(null);
+            UpdateModsSectionLabels();
+            Log("Mods: reviewed list unavailable: " + ex.Message + (ex.InnerException is null ? string.Empty : " (" + ex.InnerException.Message + ")"));
+            if (reportErrors)
+                SetModsStatus(Loc.Get("mods_catalog_unavailable"));
         }
         catch (Exception ex)
         {
@@ -1124,7 +1224,13 @@ public partial class MainWindow
                 continue;
             }
 
-            var item = new ModQueueItem(step, QueueKind(step), reason, IconFor(step.Package)) { Root = root };
+            var item = new ModQueueItem(step, QueueKind(step), reason, IconFor(step.Package))
+            {
+                Root = root,
+                Pinned = _catalogRoot == root
+                    ? _curated?.FindVersion(step.Package.FullName, step.Version.VersionNumber)
+                    : null,
+            };
             _modQueue.Add(item);
             items.Add(item);
         }
@@ -1188,8 +1294,17 @@ public partial class MainWindow
         var progress = new Progress<ContentInstallProgress>(p => OnQueueProgress(item, p));
         try
         {
-            await ModsInstaller().InstallAsync(root, item.Step.Package, item.Version, progress, cts.Token)
+            var pinned = item.Pinned ?? throw new InvalidOperationException(Loc.Get("mods_not_reviewed"));
+            if ((_curated ?? CuratedCatalog.LoadLastKnown(root))?.IsRevoked(item.Step.Package.FullName, pinned.Version) == true)
+                throw new InvalidOperationException(Loc.Get("mods_not_reviewed"));
+            var installed = await ModsInstaller().InstallAsync(root, item.Step.Package, item.Version, progress, cts.Token,
+                    pinned.Sha256, pinned.Size)
                 .ConfigureAwait(true);
+            if (SafePath.TryJoin(ModsStore.ModsDirectory(root), installed.FolderName, out var installedDir))
+            {
+                VerifiedInstalls.Record(root, installed.FolderName,
+                    item.Step.Package.FullName + "-" + pinned.Version, pinned.Sha256, installedDir);
+            }
             item.DownloadedBytes = item.SizeBytes;
             item.DoneText = Loc.Format(
                 "mods_q_done",
@@ -1432,7 +1547,7 @@ public partial class MainWindow
         try
         {
             var code = await ModsThunderstore()
-                .CreateProfileAsync(new ModProfile { Packages = pins })
+                .CreateProfileAsync(new ModProfile { Packages = pins }, ModsLifetime)
                 .ConfigureAwait(true);
             if (TxtModsProfile is not null)
                 TxtModsProfile.Text = code;
@@ -1486,7 +1601,7 @@ public partial class MainWindow
         var unresolved = new List<string>();
         try
         {
-            var profile = await ModsThunderstore().GetProfileAsync(code).ConfigureAwait(true);
+            var profile = await ModsThunderstore().GetProfileAsync(code, ModsLifetime).ConfigureAwait(true);
             await EnsureCatalogAsync(force: false, reportErrors: false).ConfigureAwait(true);
             roots = new List<(ModPackage, string?)>();
             foreach (var pin in profile.Packages)
@@ -1561,9 +1676,14 @@ public partial class MainWindow
             return true;
 
         IReadOnlyList<InstalledMod> discovered;
+        var revokedFrom = _curated ?? CuratedCatalog.LoadLastKnown(root);
         try
         {
-            discovered = await Task.Run(() => ModsStore.Discover(root)).ConfigureAwait(true);
+            discovered = await Task.Run(() =>
+            {
+                ModRevocation.Reconcile(root, revokedFrom);
+                return ModRevocation.Usable(ModsStore.Discover(root), revokedFrom);
+            }).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -1748,12 +1868,12 @@ public partial class MainWindow
         List<string> unresolved)
     {
         if (_tsPackages.Count == 0)
-            _tsPackages = await ModsThunderstore().ListPackagesAsync().ConfigureAwait(true);
+            await EnsureCatalogAsync(force: false, reportErrors: false).ConfigureAwait(true);
 
         var roots = new List<(ModPackage, string?)>();
         if (!string.IsNullOrWhiteSpace(listing.ModsProfile))
         {
-            var profile = await ModsThunderstore().GetProfileAsync(listing.ModsProfile.Trim())
+            var profile = await ModsThunderstore().GetProfileAsync(listing.ModsProfile.Trim(), ModsLifetime)
                 .ConfigureAwait(true);
             // The profile only chooses versions for mods the server requires; any
             // other pin it lists is not the server's to install.
@@ -1789,7 +1909,9 @@ public partial class MainWindow
         }
 
         return ModInstallPlanner.Plan(
-            _tsPackages, roots, ModsStore.Discover(root), unresolved, keepInstalledRoots: true);
+            _tsPackages, roots,
+            ModRevocation.Usable(ModsStore.Discover(root), _curated ?? CuratedCatalog.LoadLastKnown(root)),
+            unresolved, keepInstalledRoots: true);
     }
 
     /// <summary>A catalog mod id is <c>Owner.Name</c>; only that exact package satisfies it.</summary>
@@ -1844,13 +1966,9 @@ public partial class MainWindow
             return false;
         }
 
-        if (!SafePath.TryJoin(modsDir, ModsStore.ModListFileName, out var vdfPath))
-        {
-            SetBrowserStatus(Loc.Get("mods_session_path"));
-            return false;
-        }
-
-        if (!SafePath.TryJoin(modsDir, SessionModsBackupName, out var bakPath))
+        if (!SafePath.TryJoin(modsDir, ModsStore.ModListFileName, out var vdfPath) ||
+            !SafePath.TryJoin(modsDir, SessionModsBackupName, out var bakPath) ||
+            !SafePath.TryJoin(modsDir, SessionModsFilteredName, out var filteredPath))
         {
             SetBrowserStatus(Loc.Get("mods_session_path"));
             return false;
@@ -1879,23 +1997,18 @@ public partial class MainWindow
             }
 
             ModsStore.SetModList(root, next);
+            File.WriteAllText(filteredPath, File.Exists(vdfPath) ? File.ReadAllText(vdfPath) : string.Empty);
 
-            _sessionModsWritten = File.Exists(vdfPath) ? File.ReadAllText(vdfPath) : string.Empty;
-            _sessionModsBackup = bakPath;
             _sessionModsInstall = root;
             _sessionModsPending = true;
             _sessionModsClientSeen = false;
+            Log($"Join mods: {next.Count(r => !r.Enabled)} mod(s) off for this server until the game closes.");
             return true;
         }
         catch (Exception ex)
         {
             SetBrowserStatus(ex.Message);
-            try
-            {
-                if (File.Exists(bakPath) && SafePath.TryJoin(modsDir, ModsStore.ModListFileName, out var restoreTo))
-                    File.Copy(bakPath, restoreTo, overwrite: true);
-            }
-            catch { /* best-effort */ }
+            RestoreSessionModsOnDisk(root);
             return false;
         }
     }
@@ -1933,50 +2046,80 @@ public partial class MainWindow
             RestoreSessionMods(force: false);
     }
 
+    /// <summary>
+    /// A filter left on disk by a launcher that did not close cleanly: adopted while its
+    /// client still runs, restored otherwise.
+    /// </summary>
+    void RecoverSessionModsAtStartup()
+    {
+        var root = ModsInstallRoot();
+        if (string.IsNullOrWhiteSpace(root) || !SessionModsBackupExists(root))
+            return;
+
+        if (ProcessSpawner.IsRoleAlive(LaunchRole.Client, root))
+        {
+            _sessionModsInstall = root;
+            _sessionModsPending = true;
+            _sessionModsClientSeen = true;
+            Log("Join mods: a server session filter is still active; it is undone when the game closes.");
+            return;
+        }
+
+        RestoreSessionModsOnDisk(root);
+    }
+
+    /// <summary>Every launch that is not a server join calls this with force, so it boots on the player's own list.</summary>
     void RestoreSessionMods(bool force)
     {
         if (!_sessionModsPending && !force)
             return;
-        if (!_sessionModsPending)
-            return;
 
-        var root = _sessionModsInstall;
-        var bak = _sessionModsBackup;
-        var written = _sessionModsWritten;
+        var root = _sessionModsPending ? _sessionModsInstall : ModsInstallRoot();
         _sessionModsPending = false;
         _sessionModsClientSeen = false;
         _sessionModsInstall = string.Empty;
-        _sessionModsWritten = string.Empty;
-        _sessionModsBackup = string.Empty;
+        RestoreSessionModsOnDisk(root);
+    }
 
-        if (string.IsNullOrEmpty(root) || string.IsNullOrEmpty(bak))
+    static bool SessionModsBackupExists(string root)
+    {
+        try
+        {
+            return SafePath.TryJoin(ModsStore.ModsDirectory(root), SessionModsBackupName, out var bak) &&
+                   File.Exists(bak);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    void RestoreSessionModsOnDisk(string root)
+    {
+        if (string.IsNullOrWhiteSpace(root))
             return;
 
         try
         {
             var modsDir = ModsStore.ModsDirectory(root);
-            if (!SafePath.TryJoin(modsDir, ModsStore.ModListFileName, out var vdfPath))
+            if (!SafePath.TryJoin(modsDir, SessionModsBackupName, out var bak) || !File.Exists(bak))
                 return;
-            if (!File.Exists(bak))
+            if (!SafePath.TryJoin(modsDir, SessionModsFilteredName, out var filtered) ||
+                !SafePath.TryJoin(modsDir, ModsStore.ModListFileName, out var vdfPath))
                 return;
 
-            if (File.Exists(vdfPath))
-            {
-                var current = File.ReadAllText(vdfPath);
-                if (!string.Equals(current, written, StringComparison.Ordinal))
-                {
-                    Log("Join mods: leaving mods.vdf in place; it changed after the session filter.");
-                    TryDeleteFile(bak);
-                    return;
-                }
-            }
-
-            File.Copy(bak, vdfPath, overwrite: true);
+            // Without the record of what the filter wrote, every row counts as the filter's.
+            var filteredText = File.Exists(filtered) ? File.ReadAllText(filtered)
+                : File.Exists(vdfPath) ? File.ReadAllText(vdfPath)
+                : string.Empty;
+            ModsStore.RestoreFilteredModList(root, File.ReadAllText(bak), filteredText);
+            TryDeleteFile(filtered);
             TryDeleteFile(bak);
             Log("Join mods: restored mods.vdf after the session.");
         }
         catch (Exception ex)
         {
+            // The backup stays, so the next launch or launcher start tries again.
             Log("Join mods restore failed: " + ex.Message);
         }
     }
@@ -2033,7 +2176,7 @@ public partial class MainWindow
                 allowed.Where(r => r.Enabled).Select(r => r.Id),
                 StringComparer.OrdinalIgnoreCase);
 
-            foreach (var mod in found)
+            foreach (var mod in found.OrderBy(m => reqSet.Contains(m.Id) || allowSet.Contains(m.Id) ? 0 : 1))
             {
                 var index = 0;
                 if (reqSet.Contains(mod.Id))
@@ -2066,6 +2209,7 @@ public partial class MainWindow
         {
             _suppressDediModEvents = false;
         }
+        PaintDediPolicySegments();
     }
 
     void OnDediModPolicyChanged(object sender, SelectionChangedEventArgs e)
@@ -2077,17 +2221,20 @@ public partial class MainWindow
         var idx = CmbModPolicy.SelectedIndex;
         _dediModPolicy = idx is >= 0 and <= 2 ? idx : 0;
         PersistDediModPolicy();
+        PaintDediPolicySegments();
         RefreshArgPreviews();
     }
 
-    void OnDediModRowPolicyChanged(object sender, SelectionChangedEventArgs e)
+    void OnDediModRowPolicyClick(object sender, RoutedEventArgs e)
     {
         if (!IsLoaded || _suppressDediModEvents)
             return;
-        if (sender is not ComboBox { Tag: DediModPolicyRowViewModel row })
+        if (sender is not Button { DataContext: DediModPolicyRowViewModel row, Tag: string tag }
+            || !int.TryParse(tag, out var index))
             return;
-        row.PolicyIndex = ((ComboBox)sender).SelectedIndex;
+        row.PolicyIndex = index;
         PersistDediModPolicy();
+        PaintDediPolicySegments();
         RefreshArgPreviews();
     }
 

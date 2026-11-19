@@ -76,10 +76,36 @@ public static class ModOwnership
 
     /// <summary>Stock tables the mod replaces: <c>"DatatableOverrides" { "survival_loot" "1" }</c>.</summary>
     public static IReadOnlyList<string>? ReadDatatableOverrides(ModVdfDocument doc, out string error)
+        => ReadTableBlock(doc, "DatatableOverrides", "datatable override", out error);
+
+    /// <summary>
+    /// Stock tables the mod adds rows to: <c>"DatatableAppends" { "survival_weapon_mods" "1" }</c>,
+    /// shipped as <c>datatable_append/&lt;table&gt;.csv</c>. A table cannot be both replaced and appended.
+    /// </summary>
+    public static IReadOnlyList<string>? ReadDatatableAppends(ModVdfDocument doc, out string error)
+    {
+        var appends = ReadTableBlock(doc, "DatatableAppends", "datatable append", out error);
+        if (appends is null)
+            return null;
+
+        var overrides = ReadTableBlock(doc, "DatatableOverrides", "datatable override", out _) ?? Array.Empty<string>();
+        foreach (var table in appends)
+        {
+            if (overrides.Contains(table))
+            {
+                error = "datatable '" + table + "' is both replaced and appended";
+                return null;
+            }
+        }
+
+        return appends;
+    }
+
+    static IReadOnlyList<string>? ReadTableBlock(ModVdfDocument doc, string block, string what, out string error)
     {
         error = string.Empty;
         var tables = new List<string>();
-        foreach (var entry in BlockEntries(doc, "DatatableOverrides"))
+        foreach (var entry in BlockEntries(doc, block))
         {
             var table = entry.ToLowerInvariant();
             var slash = table.IndexOf('/');
@@ -87,7 +113,7 @@ public static class ModOwnership
                      && slash != 0 && (slash < 0 || (slash < table.Length - 1 && table.IndexOf('/', slash + 1) < 0));
             if (!ok || tables.Count >= MaxOverrides)
             {
-                error = "invalid or excess datatable override '" + entry + "'";
+                error = "invalid or excess " + what + " '" + entry + "'";
                 return null;
             }
 
@@ -146,12 +172,15 @@ public static class ModOwnership
         IReadOnlyList<string> maps,
         IReadOnlyList<string> datatableOverrides,
         string relative,
-        string? installPath)
+        string? installPath,
+        IReadOnlyList<string>? datatableAppends = null)
     {
         var rel = relative.Replace('\\', '/').ToLowerInvariant();
         if (FixedFiles.Contains(rel))
             return true;
         if (datatableOverrides.Any(t => rel == "datatable/" + t + ".csv"))
+            return true;
+        if (datatableAppends is not null && datatableAppends.Any(t => rel == "datatable_append/" + t + ".csv"))
             return true;
 
         var parts = rel.Split('/');

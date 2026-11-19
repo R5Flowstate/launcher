@@ -22,7 +22,10 @@ static class Program
           instance list [--json] | remove NAME | args NAME
             --port N --playlist P --map M --visibility public|hidden|offline
             --hostname TEXT --description TEXT --override VAR=VALUE --extra "ARGS"
+            --mod ID  --optional-mod ID  --no-mod ID     mods this server runs (repeatable;
+                                                         its playlist/map mod is always on)
             --password X|- --rcon-password X|- --stats-key X|-   ('-' reads stdin)
+            --tickrate 20|60|120                          server tick rate (20 = original netcode)
             --no-restart
 
           run   [NAME...] [--no-auto-update]           run instances in the foreground
@@ -198,6 +201,7 @@ static class Program
                     i.Playlist,
                     i.Map,
                     visibility = i.Visibility.ToString().ToLowerInvariant(),
+                    tick_rate = i.TickRate,
                     pid = pids.TryGetValue(i.Name, out var pid) ? pid : (int?)null,
                 }),
             }, new JsonSerializerOptions { WriteIndented = true }));
@@ -241,7 +245,11 @@ static class Program
                     Console.WriteLine(JsonSerializer.Serialize(cfg.Instances, new JsonSerializerOptions { WriteIndented = true }));
                 else
                     foreach (var i in cfg.Instances)
-                        Console.WriteLine($"{i.Name,-12} port {i.Port,-6} {i.Visibility.ToString().ToLowerInvariant(),-8} {i.Playlist ?? "-"} {i.Map ?? "-"}");
+                    {
+                        var plan = InstanceMods.Plan(path, i);
+                        Console.WriteLine($"{i.Name,-12} port {i.Port,-6} {i.Visibility.ToString().ToLowerInvariant(),-8} {i.Playlist ?? "-"} {i.Map ?? "-"}"
+                            + "  mods: " + (plan.Enabled.Count == 0 ? "none" : string.Join(",", plan.Enabled)));
+                    }
                 return 0;
 
             case "add":
@@ -291,7 +299,7 @@ static class Program
             {
                 var inst = cfg.Find(name ?? "") ?? throw new InvalidOperationException("no instance " + name);
                 using var s = new DediSupervisor(path, cfg, inst);
-                Console.WriteLine(LaunchArgs.FormatArgumentsOnly(s.BuildArgs()));
+                Console.WriteLine(DediSupervisor.Describe(s.BuildArgs()));
                 return 0;
             }
         }
@@ -322,6 +330,12 @@ static class Program
                 _ => throw new ArgumentException("visibility is public, hidden or offline"),
             };
         }
+        if (a.Get("tickrate") is { } tr)
+        {
+            if (!int.TryParse(tr, out var hz) || Array.IndexOf(TickRates.Offered, hz) < 0)
+                throw new ArgumentException("tickrate is 20, 60 or 120");
+            inst.TickRate = hz;
+        }
         if (a.Get("hostname") is { } hn)
             inst.Hostname = hn.Length == 0 ? null : hn;
         if (a.Get("description") is { } desc)
@@ -330,6 +344,17 @@ static class Program
             inst.ExtraArgs = extra.Length == 0 ? null : extra;
         if (a.Has("no-restart"))
             inst.AutoRestart = false;
+        foreach (var (flag, on, required) in new[] { ("mod", true, true), ("optional-mod", true, false), ("no-mod", false, false) })
+        {
+            foreach (var id in a.All(flag))
+            {
+                if (!ModId.IsValid(id))
+                    throw new ArgumentException("not a mod id: " + id);
+                inst.Mods.RemoveAll(m => string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase));
+                if (on)
+                    inst.Mods.Add(new InstanceMod { Id = id, Required = required });
+            }
+        }
         foreach (var ov in a.All("override"))
         {
             var eq = ov.IndexOf('=');
@@ -352,14 +377,17 @@ static class Program
             var entry = PlaylistCatalogLoader.Load(path).Find(inst.Playlist);
             if (entry is not null)
             {
+                var declared = ForcedLegend.WithLegend(entry.Settings, path);
                 foreach (var (k, v) in inst.PlaylistOverrides)
                 {
-                    var decl = entry.Settings.FirstOrDefault(s => s.Var == k)
+                    var decl = declared.FirstOrDefault(s => s.Var == k)
                         ?? throw new ArgumentException(inst.Playlist + " has no server setting " + k
-                            + (entry.Settings.Count == 0 ? "" : " (it has: " + string.Join(", ", entry.Settings.Select(s => s.Var)) + ")"));
+                            + (declared.Count == 0 ? "" : " (it has: " + string.Join(", ", declared.Select(s => s.Var)) + ")"));
                     if (!decl.Validate(v, out var reason))
                         throw new ArgumentException(k + ": " + reason);
                 }
+                if (HostCapacity.Conflict(declared, inst.PlaylistOverrides) is { } conflict)
+                    throw new ArgumentException(conflict);
             }
         }
 

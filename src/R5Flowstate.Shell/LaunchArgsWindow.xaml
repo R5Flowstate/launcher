@@ -3,11 +3,11 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:R5Flowstate.Shell"
         Title="{loc:T launch_args_title}"
-        Icon="Assets/app.ico"
+        Icon="{DynamicResource AppIcon}"
         Width="720" SizeToContent="Height"
         MinWidth="560" MaxHeight="780"
         ResizeMode="CanResizeWithGrip"
-        Background="{StaticResource WindowBg}" Foreground="{StaticResource TextPrimary}"
+        Background="{DynamicResource WindowBg}" Foreground="{DynamicResource TextPrimary}"
         FontFamily="Segoe UI"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
@@ -18,43 +18,15 @@
               Style="{StaticResource AccentButton}" Click="OnClose"/>
     </DockPanel>
     <TextBlock DockPanel.Dock="Top" FontSize="13"
-               Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"
-               Text="{loc:T launch_args_hint}" Margin="0,0,0,14"/>
+               Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap"
+               Text="{loc:T launch_args_hint_client}" Margin="0,0,0,14"/>
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-      <StackPanel>
-        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
-          <StackPanel>
-            <TextBlock Text="{loc:T section_client}" Style="{StaticResource SectionLabel}"/>
-            <TextBlock Text="{loc:T label_extra_args}" Style="{StaticResource FieldLabel}"/>
-            <TextBox x:Name="TxtClientExtra" FontFamily="Consolas" FontSize="12"
-                     Margin="0,0,0,10" MinHeight="32"
-                     TextChanged="OnExtrasChanged"/>
-            <TextBlock Text="{loc:T launch_args_applied}" Style="{StaticResource FieldLabel}"/>
-            <TextBox x:Name="TxtClientApplied" IsReadOnly="True" TextWrapping="Wrap"
-                     Style="{StaticResource PlainTextBox}"
-                     FontFamily="Consolas" FontSize="12"
-                     Foreground="{StaticResource TextCode}"
-                     MinHeight="56" MaxHeight="140"
-                     VerticalScrollBarVisibility="Auto"/>
-          </StackPanel>
-        </Border>
-        <Border Style="{StaticResource Card}">
-          <StackPanel>
-            <TextBlock Text="{loc:T section_dedi}" Style="{StaticResource SectionLabel}"/>
-            <TextBlock Text="{loc:T label_extra_args}" Style="{StaticResource FieldLabel}"/>
-            <TextBox x:Name="TxtDediExtra" FontFamily="Consolas" FontSize="12"
-                     Margin="0,0,0,10" MinHeight="32"
-                     TextChanged="OnExtrasChanged"/>
-            <TextBlock Text="{loc:T launch_args_applied}" Style="{StaticResource FieldLabel}"/>
-            <TextBox x:Name="TxtDediApplied" IsReadOnly="True" TextWrapping="Wrap"
-                     Style="{StaticResource PlainTextBox}"
-                     FontFamily="Consolas" FontSize="12"
-                     Foreground="{StaticResource TextCode}"
-                     MinHeight="56" MaxHeight="140"
-                     VerticalScrollBarVisibility="Auto"/>
-          </StackPanel>
-        </Border>
-      </StackPanel>
+      <Border Style="{StaticResource Card}">
+        <StackPanel>
+          <TextBlock Text="{loc:T section_client}" Style="{StaticResource SectionLabel}"/>
+          <loc:ArgsEditor x:Name="ClientArgs"/>
+        </StackPanel>
+      </Border>
     </ScrollViewer>
   </DockPanel>
 </Window>

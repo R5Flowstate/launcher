@@ -149,9 +149,22 @@ public static class ContentTrackInstaller
                     }
 
                     using var journal = DownloadJournal.Open(journalPath);
+                    var host = Uri.TryCreate(casBaseUrl, UriKind.Absolute, out var casUri)
+                        ? casUri.Host
+                        : "local";
+                    ContentDiagnostics.Write(
+                        $"Fetch {preset} pass {pass}: {plan.Work.Count()} files, " +
+                        $"{ContentDiagnostics.Bytes(need)} from {host}.");
+                    var clock = System.Diagnostics.Stopwatch.StartNew();
                     var exec = await ContentExecutor.ExecuteAsync(
                         plan, manifest, installPath, casBaseUrl, direct,
                         concurrency, journal, progress, cancel).ConfigureAwait(false);
+                    var secs = Math.Max(0.001, clock.Elapsed.TotalSeconds);
+                    ContentDiagnostics.Write(
+                        $"Fetch {preset} pass {pass} {(exec.Success ? "done" : "stopped")}: " +
+                        $"{exec.ObjectsFetched} objects, {ContentDiagnostics.Bytes(exec.BytesFetched)} " +
+                        $"in {secs:0}s ({ContentDiagnostics.Bytes((long)(exec.BytesFetched / secs))}/s)" +
+                        (exec.Success ? "." : $"; {exec.Reason}: {exec.Error} [{exec.OffendingPath}]"));
 
                     result.VolumeRegets += exec.ObjectsFetched;
 

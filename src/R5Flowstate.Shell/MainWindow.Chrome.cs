@@ -7,12 +7,15 @@ namespace R5Flowstate.Shell;
 public partial class MainWindow
 {
     const int WmGetMinMaxInfo = 0x0024;
+    const int WmDestroy = 0x0002;
     const uint MonitorDefaultToNearest = 2;
 
     IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         if (msg == WmGetMinMaxInfo && TryClampMaximizedToWorkArea(hwnd, lParam))
             handled = true;
+        else if (msg == WmDestroy)
+            TaskbarIdentity.Clear(hwnd);
         return IntPtr.Zero;
     }
 

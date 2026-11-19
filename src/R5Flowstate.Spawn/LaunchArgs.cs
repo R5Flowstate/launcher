@@ -76,6 +76,27 @@ public sealed class ClientArgOptions
     /// <summary>-width / -height. Both must be positive or neither is emitted.</summary>
     public int Width { get; init; }
     public int Height { get; init; }
+
+    /// <summary>+cl_local_match_tickrate: tick rate of matches started from the in-game lobby. 0 omits it.</summary>
+    public int LocalMatchTickRate { get; init; }
+
+    /// <summary>Argument keys the player unticked. Core keys are never removed.</summary>
+    public IReadOnlyCollection<string>? Disabled { get; init; }
+}
+
+/// <summary>Server tick rates the launcher offers. 20 is the stock netcode.</summary>
+public static class TickRates
+{
+    public const int Stock = 20;
+    public const int Max = 120;
+    public static readonly int[] Offered = { 20, 60, 120 };
+
+    public static bool IsValid(int hz) => hz >= Stock && hz <= Max;
+
+    public static bool IsOverhauled(int hz) => hz > Stock && hz <= Max;
+
+    public static int Normalize(int hz, int fallback) =>
+        Array.IndexOf(Offered, hz) >= 0 ? hz : fallback;
 }
 
 /// <summary>Maps to +spire_host_visibility on the dedicated server.</summary>
@@ -128,6 +149,21 @@ public sealed class DediArgOptions
     /// before +map (the level loads with them).
     /// </summary>
     public IReadOnlyList<KeyValuePair<string, string>>? PlaylistOverrides { get; init; }
+
+    /// <summary>Connection slots. 0 omits -maxplayers. First occurrence wins over a later extra.</summary>
+    public int MaxPlayers { get; init; }
+
+    /// <summary>Server tick rate. 20 (or 0) runs the stock netcode; 21..120 the overhauled +bridge_netmode 1.</summary>
+    public int TickRate { get; init; }
+
+    /// <summary>Argument keys the host unticked. Core keys are never removed.</summary>
+    public IReadOnlyCollection<string>? Disabled { get; init; }
+}
+
+/// <summary>One launch argument: its key (-flag or +convar) and the tokens it spans.</summary>
+public sealed record ArgEntry(string Key, IReadOnlyList<string> Tokens)
+{
+    public string Text => string.Join(' ', Tokens);
 }
 
 /// <summary>
@@ -195,6 +231,9 @@ public static class LaunchArgs
                 Append(tokens, lang);
             }
         }
+
+        if (TickRates.IsValid(options.LocalMatchTickRate))
+            AppendPair(tokens, "+cl_local_match_tickrate", options.LocalMatchTickRate.ToString(CultureInfo.InvariantCulture));
 
         AppendExtras(tokens, options.Extra, options.ExtraTokens);
         if (options.ForceOnline)
@@ -272,6 +311,9 @@ public static class LaunchArgs
             }
         }
 
+        RemoveDisabled(tokens, options.Disabled, ClientCoreKeys);
+        if (profile == LaunchProfile.ShippingPlayer)
+            StripUnsignedPluginFlags(tokens);
         return tokens;
     }
 
@@ -285,10 +327,25 @@ public static class LaunchArgs
 
         Append(tokens, "-dedicated");
         AppendPair(tokens, "-port", portStr);
+        // The engine keeps 5 slots of the cap for joining players, out of reach of bots;
+        // a cap equal to the player count would leave a bot mode 5 short.
+        if (options.MaxPlayers is >= HostCapacity.PlayersMin and <= HostCapacity.PlayersMax)
+        {
+            var cap = options.MaxPlayers > 1
+                ? Math.Min(HostCapacity.PlayersMax, options.MaxPlayers + 5)
+                : options.MaxPlayers;
+            AppendPair(tokens, "-maxplayers", cap.ToString(CultureInfo.InvariantCulture));
+        }
 
         // Server defaults (always).
         AppendPair(tokens, "+sv_allowSendTableTransmitToClients", "1");
         AppendPair(tokens, "+stringtable_compress", "1");
+
+        if (TickRates.IsOverhauled(options.TickRate))
+        {
+            AppendPair(tokens, "+bridge_netmode", "1");
+            AppendPair(tokens, "+bridge_tickrate", options.TickRate.ToString(CultureInfo.InvariantCulture));
+        }
 
         switch (profile)
         {
@@ -362,7 +419,60 @@ public static class LaunchArgs
         }
 
         AppendExtras(tokens, options.Extra, options.ExtraTokens);
+        RemoveDisabled(tokens, options.Disabled, DediCoreKeys);
+        if (profile == LaunchProfile.ShippingPlayer)
+            StripUnsignedPluginFlags(tokens);
         return tokens;
+    }
+
+    /// <summary>Client keys the launcher owns: auth, identity, the connect target and the map.</summary>
+    public static readonly IReadOnlySet<string> ClientCoreKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "-offline", "+cl_onlineAuthEnable", "-offlinename", "+connect", "+map", "+bridge_connect_password",
+        "+miles_language",
+    };
+
+    /// <summary>Server keys the launcher owns: process role, port, auth, publishing, playlist, map and mod policy.</summary>
+    public static readonly IReadOnlySet<string> DediCoreKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "-dedicated", "-port", "-maxplayers", "+sv_allowSendTableTransmitToClients", "+stringtable_compress",
+        "+spire_host_visibility", "-offline", "+sv_onlineAuthEnable", "+sv_password", "+launchplaylist",
+        "+playlist_override_set", "+map", "+exec", "+sv_modPolicy", "+sv_requiredMods", "+sv_allowedMods",
+    };
+
+    /// <summary>Groups an argv into entries: each -flag or +convar with the values that follow it.</summary>
+    public static IReadOnlyList<ArgEntry> SplitEntries(IReadOnlyList<string> tokens)
+    {
+        var entries = new List<ArgEntry>();
+        List<string>? current = null;
+        foreach (var t in tokens)
+        {
+            if (IsArgKey(t) || current is null)
+            {
+                current = new List<string> { t };
+                entries.Add(new ArgEntry(t, current));
+            }
+            else
+            {
+                current.Add(t);
+            }
+        }
+        return entries;
+    }
+
+    static bool IsArgKey(string token) =>
+        token.Length > 1 && (token[0] == '+' || (token[0] == '-' && !char.IsAsciiDigit(token[1]) && token[1] != '.'));
+
+    static void RemoveDisabled(List<string> tokens, IReadOnlyCollection<string>? disabled, IReadOnlySet<string> core)
+    {
+        if (disabled is null || disabled.Count == 0)
+            return;
+        var off = new HashSet<string>(disabled.Where(k => !core.Contains(k)), StringComparer.OrdinalIgnoreCase);
+        if (off.Count == 0)
+            return;
+        var kept = SplitEntries(tokens).Where(e => !off.Contains(e.Key)).SelectMany(e => e.Tokens).ToList();
+        tokens.Clear();
+        tokens.AddRange(kept);
     }
 
     /// <summary>Relative cfg path: letters, digits, '_' and single '/' separators.</summary>
@@ -810,6 +920,35 @@ public static class LaunchArgs
         }
         return false;
     }
+
+    /// <summary>
+    /// Unsigned plugin lanes stay off player-profile processes. A typed extra cannot put them back.
+    /// </summary>
+    public static void StripUnsignedPluginFlags(List<string> tokens)
+    {
+        for (var i = 0; i < tokens.Count;)
+        {
+            var t = tokens[i];
+            if (IsUnsignedPluginFlag(t))
+            {
+                tokens.RemoveAt(i);
+                if (string.Equals(t, "-plugin_dev", StringComparison.OrdinalIgnoreCase) &&
+                    i < tokens.Count &&
+                    !tokens[i].StartsWith('-') &&
+                    !tokens[i].StartsWith('+'))
+                    tokens.RemoveAt(i);
+                continue;
+            }
+
+            i++;
+        }
+    }
+
+    public static bool IsUnsignedPluginFlag(string token) =>
+        token.Equals("-plugins_unsigned", StringComparison.OrdinalIgnoreCase) ||
+        token.Equals("-plugin_dev", StringComparison.OrdinalIgnoreCase) ||
+        token.StartsWith("-plugins_unsigned=", StringComparison.OrdinalIgnoreCase) ||
+        token.StartsWith("-plugin_dev=", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Drop -dev / -developer / -devsdk from a client argv.</summary>
     public static void StripDevClientTokens(List<string> tokens)

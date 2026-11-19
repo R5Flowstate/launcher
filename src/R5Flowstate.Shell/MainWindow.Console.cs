@@ -41,12 +41,6 @@ public partial class MainWindow
         if (TabBlockedBySetup())
             return;
 
-        if (!_settings.SimpleMode && _simpleTab == SimpleTab.Console)
-        {
-            ApplySimpleTab(SimpleTab.Play);
-            return;
-        }
-
         ApplySimpleTab(SimpleTab.Console);
     }
 
@@ -73,6 +67,7 @@ public partial class MainWindow
         try { SettingsStore.Save(_settings); }
         catch (Exception ex) { Log($"Settings save failed: {ex.Message}"); }
         RefreshDx12Chrome();
+        RefreshDesktopShortcut();
         // The renderer is the EXE, so a live game keeps the old one until it is
         // relaunched -- repaint so the button offers that restart right away.
         RefreshSimplePlayButton();
@@ -306,8 +301,8 @@ public partial class MainWindow
     /// A browser join runs no dedi of ours, so the server pane would sit there
     /// empty with a command box that reaches nothing.
     /// </summary>
-    private bool ConsoleServerPaneOpen() =>
-        LocalDediAlive() || (_joinedServer is null && !WatchingReplay());
+    /// <summary>Local play runs in one process with one console; this pane is for a separate server only.</summary>
+    private bool ConsoleServerPaneOpen() => LocalDediAlive();
 
     private bool WatchingReplay() => _replayClientPid is not null;
 
@@ -356,7 +351,8 @@ public partial class MainWindow
     private bool ConsolePickersOpen()
     {
         return _simpleTab == SimpleTab.Console
-            && ConsoleServerPaneOpen()
+            && _joinedServer is null
+            && !WatchingReplay()
             && _simplePlayKind is not (SimplePlayKind.Install
                 or SimplePlayKind.Repair
                 or SimplePlayKind.Update
@@ -837,6 +833,7 @@ public partial class MainWindow
 
     private void OnHostedClientLine(string line)
     {
+        NoteListenLine(line);
         var text = HostReadyGate.ClientErrorDialogText(line);
         if (text is null)
             return;

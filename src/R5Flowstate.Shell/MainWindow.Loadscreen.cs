@@ -1,5 +1,9 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Windows;
+using System.Windows.Input;
+using System.Windows.Controls;
+using System.Windows.Media.Animation;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -35,7 +39,7 @@ public partial class MainWindow
         OnLaunchOptionsChanged(sender, e);
     }
 
-    private void OnSimpleOfflineChanged(object sender, RoutedEventArgs e)
+    private void OnUseEaPersonaChanged(object sender, RoutedEventArgs e)
     {
         if (!IsLoaded || _suppressArgsPersist)
             return;
@@ -81,8 +85,8 @@ public partial class MainWindow
             if (ChkSimpleCheats is not null)
                 ChkSimpleCheats.IsChecked = _settings.Cheats;
             SyncDeveloperChecks();
-            if (ChkSimpleOffline is not null)
-                ChkSimpleOffline.IsChecked = _settings.OfflineNoAuth;
+            if (ChkUseEaPersona is not null)
+                ChkUseEaPersona.IsChecked = !_settings.OfflineNoAuth;
             SyncOfflineNameText();
             if (ChkSimplePassword is not null)
                 ChkSimplePassword.IsChecked = IsPasswordProtectOn();
@@ -102,49 +106,43 @@ public partial class MainWindow
 
     private void BindSimpleMapPicker(ModeCardViewModel card)
     {
-        // The picker earns its place only when there is a real choice to make.
+        // The strip and picker earn their place only when there is a real choice to make.
+        var choice = !card.MapIsPinned && card.Maps.Count > 1;
+        if (BarMapStrip is not null)
+            BarMapStrip.Visibility = choice ? Visibility.Visible : Visibility.Collapsed;
         if (BtnMapPicker is not null)
-            BtnMapPicker.Visibility = !card.MapIsPinned && card.Maps.Count > 1
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-        if (PanelMapPicker is not null && (card.MapIsPinned || card.Maps.Count <= 1))
-            PanelMapPicker.Visibility = Visibility.Collapsed;
-        else if (PanelMapPicker?.Visibility == Visibility.Visible)
+            BtnMapPicker.Visibility = choice ? Visibility.Visible : Visibility.Collapsed;
+        if (choice)
+        {
             EnsureMapTiles();
+        }
+        else
+        {
+            _thumbCts?.Cancel();
+            if (PanelMapPicker is not null)
+                PanelMapPicker.Visibility = Visibility.Collapsed;
+        }
 
         BindConsoleMapPicker();
     }
 
     private void RefreshHeroChrome()
     {
+        var heroBefore = TxtHeroTitle?.Text + "|" + TxtHeroMap?.Text;
         if (TxtHeroTitle is not null)
             TxtHeroTitle.Text = _selectedMode?.Title ?? Loc.Get("pick_a_map");
-        if (TxtHeroSubtitle is not null)
-        {
-            // A mode that IS its arena (Firing Range, Lobby) would otherwise read
-            // its own name twice.
-            var map = string.Equals(_selectedMode?.SelectedMap?.DisplayName,
-                          _selectedMode?.Title, StringComparison.OrdinalIgnoreCase)
-                      ? string.Empty
-                      : _selectedMode?.SelectedMap?.DisplayName ?? string.Empty;
-
-            if (_selectedMode is null)
-                TxtHeroSubtitle.Text = string.Empty;
-            else if (string.IsNullOrWhiteSpace(_selectedMode.Blurb))
-                TxtHeroSubtitle.Text = map;
-            else if (string.IsNullOrWhiteSpace(map))
-                TxtHeroSubtitle.Text = _selectedMode.Blurb;
-            else
-                TxtHeroSubtitle.Text = map + "  ·  " + _selectedMode.Blurb;
-        }
-
-        if (TxtHeroCommand is not null)
-        {
-            var stem = _selectedMode?.SelectedMapStem;
-            TxtHeroCommand.Text = _selectedMode is null || string.IsNullOrWhiteSpace(stem)
+        // A mode that IS its arena (Firing Range, Lobby) would otherwise read its own name twice.
+        if (TxtHeroMap is not null)
+            TxtHeroMap.Text = string.Equals(_selectedMode?.SelectedMap?.DisplayName,
+                                  _selectedMode?.Title, StringComparison.OrdinalIgnoreCase)
                 ? string.Empty
-                : $"+launchplaylist {_selectedMode.PlaylistId}   +map {stem}";
-        }
+                : _selectedMode?.SelectedMap?.DisplayName ?? string.Empty;
+        if (TxtHeroStem is not null)
+            TxtHeroStem.Text = _selectedMode?.SelectedMap?.Stem ?? string.Empty;
+        if (TxtHeroSubtitle is not null)
+            TxtHeroSubtitle.Text = _selectedMode?.Blurb ?? string.Empty;
+        if (heroBefore != TxtHeroTitle?.Text + "|" + TxtHeroMap?.Text)
+            AnimateHeroText();
     }
 
     private readonly List<MapTileViewModel> _mapTiles = new();
@@ -159,6 +157,36 @@ public partial class MainWindow
 
     /// <summary>Matches the 196px map tile. Do not decode a hero just to shrink it.</summary>
     private const int ThumbWidth = 196;
+
+    // Tiles flex between the arrows so a whole number always fits; the row keeps the art's proportions.
+    private const double StripArrowSpace = 38;
+    private const double StripGap = 8;
+    private const double StripMinTileWidth = 116;
+    private const double StripArtAspect = 2.2;
+    private const double StripLabelHeight = 0;
+    private const double StripGlowPad = 10;
+    // Only the row's transform animates, so a move costs no layout.
+    private const int StripSlideMs = 170;
+    // Saving and decoding wait until the slide has finished, so they can never hitch it.
+    private const int MapCommitDelayMs = 220;
+    private static readonly IEasingFunction s_stripEase = CreateStripEase();
+    private readonly List<Button> _stripPool = new();
+    private readonly List<int> _stripPoolOffsets = new();
+    private readonly TranslateTransform _stripShift = new();
+    private readonly Canvas _stripRow = new();
+    private List<MapTileViewModel> _stripTiles = new();
+    private MapTileViewModel? _stripCenter;
+    private int _stripRestHalf;
+    private int _stripSlideId;
+    private DispatcherTimer? _mapCommitTimer;
+    private MapTileViewModel? _mapCommitTile;
+
+    private static IEasingFunction CreateStripEase()
+    {
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        ease.Freeze();
+        return ease;
+    }
 
     private void OnToggleMapPicker(object sender, RoutedEventArgs e)
     {
@@ -178,18 +206,67 @@ public partial class MainWindow
         if (sender is not FrameworkElement { Tag: MapTileViewModel tile } || _selectedMode is null)
             return;
 
+        SelectMapTile(tile);
+    }
+
+    private void OnMapPrevious(object sender, RoutedEventArgs e) => StepMap(-1);
+
+    private void OnMapNext(object sender, RoutedEventArgs e) => StepMap(1);
+
+    private void OnMapStripWheel(object sender, MouseWheelEventArgs e)
+    {
+        StepMap(e.Delta < 0 ? 1 : -1);
+        e.Handled = true;
+    }
+
+    private void StepMap(int step)
+    {
+        var count = _mapTiles.Count;
+        if (count < 2)
+            return;
+        var at = _mapTiles.FindIndex(t => t.IsSelected);
+        SelectMapTile(_mapTiles[((at < 0 ? 0 : at) + step + count) % count]);
+    }
+
+    private void SelectMapTile(MapTileViewModel tile)
+    {
+        if (_selectedMode is null)
+            return;
+
         _selectedMode.SelectedMap = tile.Option;
         foreach (var t in _mapTiles)
             t.IsSelected = ReferenceEquals(t, tile);
 
-        BindConsoleMapPicker();
-
         if (PanelMapPicker is not null)
             PanelMapPicker.Visibility = Visibility.Collapsed;
-        _thumbCts?.Cancel();
-
-        PersistSettingsFromUi();
+        RefreshMapStrip();
         RefreshHeroChrome();
+
+        _mapCommitTile = tile;
+        if (_mapCommitTimer is null)
+        {
+            _mapCommitTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(MapCommitDelayMs) };
+            _mapCommitTimer.Tick += (_, _) => CommitMapSelection();
+        }
+        _mapCommitTimer.Stop();
+        _mapCommitTimer.Start();
+    }
+
+    private void CommitMapSelection()
+    {
+        _mapCommitTimer?.Stop();
+        var tile = _mapCommitTile;
+        _mapCommitTile = null;
+        if (tile is null || !tile.IsSelected)
+            return;
+
+        var clock = Stopwatch.StartNew();
+        BindConsoleMapPicker();
+        // Only the mode's map changed, so skip the full settings pass and its folder checks.
+        CaptureModeSettingsFromUi();
+        try { SettingsStore.Save(_settings); }
+        catch (Exception ex) { Log($"Settings save failed: {ex.Message}"); }
+        StartMissingThumbs();
 
         // The tile you picked is the screen you get; Reload is how you ask for
         // another, rather than the hero silently rolling its own.
@@ -204,6 +281,8 @@ public partial class MainWindow
         }
 
         RefreshChangeMapButton();
+        if (clock.ElapsedMilliseconds > 50)
+            Log($"Map change blocked the UI for {clock.ElapsedMilliseconds} ms.");
     }
 
     private void EnsureMapTiles()
@@ -217,8 +296,8 @@ public partial class MainWindow
             && TilesMatch(_selectedMode.Maps))
         {
             SyncTileSelection();
-            if (_mapTiles.Exists(t => t.Art is null))
-                StartMissingThumbs();
+            RefreshMapStrip();
+            StartMissingThumbs();
             return;
         }
 
@@ -265,18 +344,162 @@ public partial class MainWindow
         ListMapTiles.ItemsSource = null;
         ListMapTiles.ItemsSource = _mapTiles;
 
+        RefreshMapStrip();
         StartMissingThumbs();
+    }
+
+    /// <summary>
+    /// The selected map sits in the middle. A move rebuilds the slots around the new center and starts
+    /// the whole row shifted back by the same distance, so it slides into place.
+    /// </summary>
+    private void RefreshMapStrip()
+    {
+        if (BarMapStrip is null || CanvasMapStrip is null || BtnMapPicker is null)
+            return;
+
+        var width = BarMapStrip.ActualWidth;
+        var count = _mapTiles.Count;
+        var selectedAt = _mapTiles.FindIndex(t => t.IsSelected);
+        if (width <= 0 || count == 0 || selectedAt < 0)
+            return;
+
+        var row = width - 2 * StripArrowSpace;
+        var fit = (int)((row + StripGap) / (StripMinTileWidth + StripGap));
+        fit = Math.Max(3, fit % 2 == 0 ? fit - 1 : fit);
+        var tileWidth = Math.Floor((row - (fit - 1) * StripGap) / fit);
+        var artHeight = Math.Round(tileWidth / StripArtAspect);
+        var tileHeight = artHeight + StripLabelHeight;
+        var slotWidth = tileWidth + StripGap;
+
+        // Two maps cannot wrap without showing one twice, so they keep one side empty.
+        var wraps = count >= 3;
+        var shown = wraps ? Math.Min(fit, count % 2 == 0 ? count - 1 : count) : 3;
+        var half = (shown - 1) / 2;
+        var rowWidth = shown * slotWidth - StripGap;
+
+        CanvasMapStrip.Width = rowWidth;
+        CanvasMapStrip.Height = tileHeight + 2 * StripGlowPad;
+        StripGlow.Width = tileWidth + 8;
+        StripGlow.Height = tileHeight + 8;
+        Canvas.SetLeft(StripGlow, rowWidth / 2 - tileWidth / 2 - 4);
+        Canvas.SetTop(StripGlow, StripGlowPad - 4);
+        Canvas.SetTop(_stripRow, StripGlowPad);
+        BtnMapPrev.Height = artHeight;
+        BtnMapNext.Height = artHeight;
+
+        var center = _mapTiles[selectedAt];
+        var previousAt = _stripCenter is null ? -1 : _mapTiles.IndexOf(_stripCenter);
+        var move = previousAt < 0 ? 0 : selectedAt - previousAt;
+        if (wraps && Math.Abs(move) > count / 2)
+            move -= Math.Sign(move) * count;
+        _stripCenter = center;
+        _stripRestHalf = half;
+
+        if (_stripRow.Parent is null)
+        {
+            _stripRow.RenderTransform = _stripShift;
+            CanvasMapStrip.Children.Add(_stripRow);
+        }
+
+        var used = 0;
+        var reach = half + Math.Abs(move);
+        var visible = new List<(int Offset, MapTileViewModel Tile)>();
+        for (var offset = -reach; offset <= reach; offset++)
+        {
+            var onNow = Math.Abs(offset) <= half;
+            if (!onNow && Math.Abs(offset + move) > half)
+                continue;
+
+            var index = selectedAt + offset;
+            if (wraps)
+                index = ((index % count) + count) % count;
+            else if (index < 0 || index >= count)
+                continue;
+
+            var tile = _mapTiles[index];
+            var slot = StripSlot(used++);
+            if (!ReferenceEquals(slot.DataContext, tile))
+            {
+                slot.DataContext = tile;
+                slot.Tag = tile;
+                slot.ToolTip = tile.DisplayName + "\n" + tile.Stem;
+            }
+            slot.Width = tileWidth;
+            slot.Height = tileHeight;
+            Canvas.SetLeft(slot, rowWidth / 2 + offset * slotWidth - tileWidth / 2);
+            slot.Visibility = Visibility.Visible;
+            _stripPoolOffsets[used - 1] = offset;
+            if (onNow)
+                visible.Add((offset, tile));
+        }
+        for (var i = used; i < _stripPool.Count; i++)
+        {
+            _stripPool[i].Visibility = Visibility.Collapsed;
+            _stripPoolOffsets[i] = int.MaxValue;
+        }
+
+        _stripTiles = visible.OrderBy(v => Math.Abs(v.Offset)).Select(v => v.Tile).Distinct().ToList();
+        BtnMapPicker.Visibility = count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        if (TxtMapPickerLabel is not null)
+            TxtMapPickerLabel.Text = Loc.Format("all_maps_n", count);
+
+        SlideMapStrip(move * slotWidth);
+    }
+
+    private Button StripSlot(int index)
+    {
+        while (_stripPool.Count <= index)
+        {
+            var slot = new Button { Style = (Style)FindResource("MapStripTile") };
+            slot.Click += OnMapTileClick;
+            _stripPool.Add(slot);
+            _stripPoolOffsets.Add(int.MaxValue);
+            _stripRow.Children.Add(slot);
+        }
+        return _stripPool[index];
+    }
+
+    private void SlideMapStrip(double distance)
+    {
+        var id = ++_stripSlideId;
+        var from = _stripShift.X + distance;
+        if (Math.Abs(from) < 0.5)
+        {
+            SettleMapStrip();
+            return;
+        }
+
+        var slide = new DoubleAnimation(from, 0, TimeSpan.FromMilliseconds(StripSlideMs)) { EasingFunction = s_stripEase };
+        slide.Completed += (_, _) =>
+        {
+            if (id == _stripSlideId)
+                SettleMapStrip();
+        };
+        _stripShift.BeginAnimation(TranslateTransform.XProperty, slide);
+    }
+
+    private void SettleMapStrip()
+    {
+        _stripShift.BeginAnimation(TranslateTransform.XProperty, null);
+        _stripShift.X = 0;
+        for (var i = 0; i < _stripPool.Count; i++)
+        {
+            if (Math.Abs(_stripPoolOffsets[i]) > _stripRestHalf)
+                _stripPool[i].Visibility = Visibility.Collapsed;
+        }
     }
 
     private void StartMissingThumbs()
     {
-        if (_mapTiles.Count == 0)
+        // Only art someone can see: the strip until the full picker opens.
+        var wanted = PanelMapPicker?.Visibility == Visibility.Visible ? _mapTiles : _stripTiles;
+        if (!wanted.Exists(t => t.Art is null))
             return;
 
         _thumbCts?.Cancel();
         var cts = new CancellationTokenSource();
         _thumbCts = cts;
-        _ = LoadThumbnailsAsync(_mapTiles.ToList(), cts.Token);
+        _ = LoadThumbnailsAsync(wanted.ToList(), cts.Token);
     }
 
     /// <summary>
@@ -326,7 +549,7 @@ public partial class MainWindow
                     // hero uses -- a different screen each time it is built.
                     if (lobby)
                     {
-                        var art = LoadscreenResolver.ListArtPaks(root);
+                        var art = LoadscreenResolver.ListLobbyPaks(root);
                         if (art.Count == 0)
                             return (null, (string?)null);
                         var pick = art[Random.Shared.Next(art.Count)];
@@ -425,8 +648,7 @@ public partial class MainWindow
 
         if (_loadscreenCache.TryGetValue(pakPath, out var cached))
         {
-            if (ImgLoadscreen is not null)
-                ImgLoadscreen.Source = cached;
+            SetHeroImage(cached);
             return;
         }
 
@@ -448,7 +670,7 @@ public partial class MainWindow
 
         if (!string.Equals(_artPaksRoot, root, StringComparison.OrdinalIgnoreCase))
         {
-            _artPaks = LoadscreenResolver.ListArtPaks(root);
+            _artPaks = LoadscreenResolver.ListLobbyPaks(root);
             _artPaksRoot = root;
         }
 
@@ -473,8 +695,7 @@ public partial class MainWindow
 
         if (_loadscreenCache.TryGetValue(pick, out var cached))
         {
-            if (ImgLoadscreen is not null)
-                ImgLoadscreen.Source = cached;
+            SetHeroImage(cached);
             return;
         }
 
@@ -517,15 +738,13 @@ public partial class MainWindow
         {
             if (!string.IsNullOrWhiteSpace(error))
                 Log("Loadscreen: " + error);
-            if (ImgLoadscreen is not null)
-                ImgLoadscreen.Source = null;
+            SetHeroImage(null);
             return;
         }
 
         var bmp = ToBitmap(pixels);
         Remember(_loadscreenCache, _loadscreenLru, LoadscreenCacheCap, pakPath, bmp);
-        if (ImgLoadscreen is not null)
-            ImgLoadscreen.Source = bmp;
+        SetHeroImage(bmp);
     }
 
     private void QueueLoadscreen()
@@ -613,8 +832,7 @@ public partial class MainWindow
     private void ShowLoadscreen(string? stem, BitmapSource? image)
     {
         _shownLoadscreenStem = stem;
-        if (ImgLoadscreen is not null)
-            ImgLoadscreen.Source = image;
+        SetHeroImage(image);
     }
 
     private static string CacheKey(string root, string stem) =>

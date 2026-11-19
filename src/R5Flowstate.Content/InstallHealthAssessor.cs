@@ -51,6 +51,13 @@ public static class InstallHealthAssessor
             }
         }
 
+        // A complete S30.1 folder that was never installed from the channel is only preflighted.
+        if (state is null && GameBuilds.HasS30Worker(installPath))
+        {
+            return MasterTreeReady(report, installPath, requireClient, requireServer, channel,
+                "S30.1 install (not on the CDN) - preflight only.");
+        }
+
         // No channel + no state → not enforced (local master preflight only).
         if (channel is null && state is null)
         {
@@ -92,7 +99,7 @@ public static class InstallHealthAssessor
                 readyFlag: state?.ClientReady ?? false,
                 installedVer: state?.ClientCatalogVersion,
                 installedHash: state?.ClientContentHash,
-                incomplete: state?.Incomplete ?? true,
+                incomplete: TrackIncomplete(state, state?.ClientReady ?? false),
                 keepLocalFiles: keepLocalFiles);
         }
 
@@ -107,7 +114,7 @@ public static class InstallHealthAssessor
                 readyFlag: state?.ServerReady ?? false,
                 installedVer: state?.ServerCatalogVersion,
                 installedHash: state?.ServerContentHash,
-                incomplete: state?.Incomplete ?? true,
+                incomplete: TrackIncomplete(state, state?.ServerReady ?? false),
                 keepLocalFiles: keepLocalFiles);
         }
 
@@ -122,7 +129,7 @@ public static class InstallHealthAssessor
                 readyFlag: state?.PlatformReady ?? false,
                 installedVer: state?.PlatformCatalogVersion,
                 installedHash: state?.PlatformContentHash,
-                incomplete: state?.Incomplete ?? true,
+                incomplete: TrackIncomplete(state, state?.PlatformReady ?? false),
                 keepLocalFiles: keepLocalFiles);
         }
 
@@ -140,13 +147,13 @@ public static class InstallHealthAssessor
                 readyFlag: state?.HdReady ?? false,
                 installedVer: state?.HdCatalogVersion,
                 installedHash: state?.HdContentHash,
-                incomplete: state?.Incomplete ?? true,
+                incomplete: TrackIncomplete(state, state?.HdReady ?? false),
                 keepLocalFiles: keepLocalFiles);
         }
 
         var statuses = new List<InstallHealthStatus>();
         if (report.Hd is not null && hdEnabled)
-            statuses.Add(report.Hd.Status);
+            statuses.Add(OptionalTrackStatus(report.Hd.Status));
         if (report.Client is not null && requireClient)
             statuses.Add(report.Client.Status);
         if (report.Server is not null && requireServer)
@@ -169,6 +176,19 @@ public static class InstallHealthAssessor
         AttachOverlay(report, installPath, channel);
         return report;
     }
+
+    // Incomplete covers the whole last job. A track whose own ready flag is set
+    // finished in that job (ready is cleared when a job starts on it), so an
+    // interrupted HD download must not make the base game unplayable.
+    static bool TrackIncomplete(InstallState? state, bool readyFlag) =>
+        (state?.Incomplete ?? true) && !readyFlag;
+
+    // HD is optional: a partial set never blocks play. Not UpdateAvailable --
+    // Worst() ranks that above Incomplete and would hide a broken base track.
+    static InstallHealthStatus OptionalTrackStatus(InstallHealthStatus s) =>
+        s is InstallHealthStatus.Incomplete or InstallHealthStatus.Missing
+            ? InstallHealthStatus.Ready
+            : s;
 
     static TrackHealth AssessTrack(
         string preset,
@@ -566,6 +586,9 @@ public static class InstallHealthAssessor
         {
             if (File.Exists(Path.Combine(installPath, "client_marker.txt")))
                 return true;
+            if (GameBuilds.IsS30(installPath))
+                return File.Exists(Path.Combine(installPath, "r5apex_dx12.exe"))
+                       && FileExistsAny(installPath, "loader.dll");
             // s21-full: r5apex.exe + loader.dll + client.dll at root (or game\).
             return FileExistsAny(installPath, "r5apex.exe")
                    && FileExistsAny(installPath, "client.dll")
@@ -694,7 +717,7 @@ public static class InstallHealthAssessor
         if (report.Platform is not null)
             statuses.Add(report.Platform.Status);
         if (report.Hd is not null)
-            statuses.Add(report.Hd.Status);
+            statuses.Add(OptionalTrackStatus(report.Hd.Status));
         report.Overall = Worst(statuses);
 
         if (report.Overall is not InstallHealthStatus.Ready)

@@ -104,7 +104,8 @@ public sealed class ReplayRowViewModel : INotifyPropertyChanged
 public partial class MainWindow
 {
     // Game-side contract: platform/demos/<yyyy-mm-dd>/<name>.r5dem (or .part while
-    // recording or after a killed client). Names are [A-Za-z0-9_-]{1,64}.
+    // recording or after a killed client); S30 writes platform/demos/<name>.s30dem.
+    // Names are [A-Za-z0-9_-]{1,64}. Both clients take -replay <name> [-replay_seek <s>].
     private static readonly Regex ReplayNameRx = new("^[A-Za-z0-9_-]{1,64}$", RegexOptions.Compiled);
     // A clip is "<replay>_c<mmss>" or "<replay>_c<mmss>_<n>".
     private static readonly Regex ReplayClipRx = new("^(.+)_c[0-9]{4}(?:_[0-9]{1,2})?$", RegexOptions.Compiled);
@@ -209,6 +210,7 @@ public partial class MainWindow
         var files = new DirectoryInfo(dir)
             .EnumerateFiles("*", SearchOption.AllDirectories)
             .Where(f => f.Extension.Equals(".r5dem", StringComparison.OrdinalIgnoreCase) ||
+                        f.Extension.Equals(S30ReplayReader.Extension, StringComparison.OrdinalIgnoreCase) ||
                         f.Extension.Equals(".part", StringComparison.OrdinalIgnoreCase))
             .Where(f => (f.Attributes & FileAttributes.ReparsePoint) == 0)
             .OrderByDescending(f => f.LastWriteTimeUtc)
@@ -245,8 +247,9 @@ public partial class MainWindow
                 doneBytes += f.Length;
                 readIndex++;
                 Report(readIndex, doneBytes);
-                // A .part is still growing; cache only finished replays.
-                if (read is not null && f.Extension.Equals(".r5dem", StringComparison.OrdinalIgnoreCase))
+                // A .part is still growing; cache only finished replays. An .s30dem the client
+                // has not finalized yet changes size when it is, so its entry goes stale by itself.
+                if (read is not null && !f.Extension.Equals(".part", StringComparison.OrdinalIgnoreCase))
                     cache.Put(f, read);
                 if (read is null)
                     continue;

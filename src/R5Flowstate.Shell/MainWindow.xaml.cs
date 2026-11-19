@@ -36,6 +36,8 @@ public partial class MainWindow : Window
     private PlaylistCatalog _catalog = new();
     private int? _lastClientPid;
     private int? _lastDediPid;
+    private int? _localPlayClientPid;
+    private DateTime _localPlayClientModsStamp;
     private bool _suppressArgsPersist;
     private bool _suppressDediUi;
     private bool _quickPlayBusy;
@@ -55,6 +57,7 @@ public partial class MainWindow : Window
     private int _proofSweepBusy;
     private DispatcherTimer? _shellUpdateWatch;
     private readonly List<ModeCardViewModel> _modeCards = new();
+    private ICollectionView? _modeView;
     private ModeCardViewModel? _selectedMode;
     private SimplePlayKind _simplePlayKind = SimplePlayKind.Play;
     private LocalRconSession? _localRcon;
@@ -196,6 +199,7 @@ public partial class MainWindow : Window
         SetUp,
         SwitchAdvanced,
         Installing,
+        Rehost,
     }
 
     /// <summary>A game session is up, whatever the button currently offers to do about it.</summary>
@@ -208,6 +212,7 @@ public partial class MainWindow : Window
         try
         {
             InitializeComponent();
+            WireShellChrome();
             Loaded += OnWindowLoaded;
             SourceInitialized += OnSourceInitialized;
             Closing += OnWindowClosing;
@@ -216,6 +221,9 @@ public partial class MainWindow : Window
             Activated += OnWindowActivated;
 
             _settings = SettingsStore.Load();
+            Log($"Launcher {LauncherVersion.Display} started ({Environment.OSVersion.VersionString}).");
+            // Workers must not wait on the UI thread to log.
+            ContentDiagnostics.Sink = line => Dispatcher.BeginInvoke(() => Log(line));
             if (string.IsNullOrWhiteSpace(_settings.UiLanguage))
             {
                 _settings.UiLanguage = Loc.Code;
@@ -224,6 +232,8 @@ public partial class MainWindow : Window
                 catch { }
             }
             Loc.LanguageChanged += OnLocLanguageChanged;
+
+            AdoptRequestedBuildAtStartup();
 
             if (Application.Current is App app &&
                 !string.IsNullOrWhiteSpace(app.CliInstallRoot) &&
@@ -242,14 +252,15 @@ public partial class MainWindow : Window
             TxtInstallRoot.Text = _settings.InstallPath;
             if (TxtSimpleInstallRoot is not null)
                 TxtSimpleInstallRoot.Text = _settings.InstallPath;
+            SyncGameBuild(_settings.InstallPath);
             TxtClientArgs.Text = _settings.ClientLaunchArguments;
             TxtDediArgs.Text = _settings.DediLaunchArguments;
             // Stored pairs from before the two toggles were made exclusive can carry
             // both; hosting is the deliberate opt-in, so it keeps the conflict.
             if (_settings.DediHostOnline && _settings.OfflineNoAuth)
                 _settings.OfflineNoAuth = false;
-            if (ChkSimpleOffline is not null)
-                ChkSimpleOffline.IsChecked = _settings.OfflineNoAuth;
+            if (ChkUseEaPersona is not null)
+                ChkUseEaPersona.IsChecked = !_settings.OfflineNoAuth;
             SyncOfflineNameText();
             if (ChkDediOnline is not null)
                 ChkDediOnline.IsChecked = _settings.DediHostOnline;
@@ -259,15 +270,16 @@ public partial class MainWindow : Window
             ChkFilterMaps.IsChecked = _settings.FilterMapsByPlaylist;
             if (ChkOpenConsoleOnLaunch is not null)
                 ChkOpenConsoleOnLaunch.IsChecked = _settings.OpenConsoleOnLaunch;
-            if (ChkShowUnlistedMaps is not null)
-                ChkShowUnlistedMaps.IsChecked = _settings.ShowUnlistedMaps;
             if (ChkJoinWithoutDev is not null)
                 ChkJoinWithoutDev.IsChecked = _settings.JoinWithoutDev;
             if (ChkKeepLocalFiles is not null)
                 ChkKeepLocalFiles.IsChecked = _settings.KeepLocalFiles;
             if (ChkJoinPlaytests is not null)
                 ChkJoinPlaytests.IsChecked = _settings.JoinPlaytests;
-            ApplyRingSwitch();
+            SyncShortcutCheckbox();
+            if (File.Exists(GameShortcutPath()))
+                RenameLauncherShortcut();
+            ApplyTickRateSegments();
             if (ChkUseDx12 is not null)
                 ChkUseDx12.IsChecked = _settings.UseDx12;
             if (ChkClientDx12 is not null)
@@ -288,7 +300,6 @@ public partial class MainWindow : Window
 
             ApplyShellMode(simple: _settings.SimpleMode, persist: false);
 
-            TxtStatus.Text = Loc.Get("loading");
             TxtLog.Text = $"[{DateTime.Now:HH:mm:ss}] R5Flowstate Shell — LOCAL testing only.{Environment.NewLine}";
             if (Application.Current is App a && !string.IsNullOrWhiteSpace(a.CliInstallRoot))
                 Log($"CLI --install-root: {a.CliInstallRoot}");
@@ -314,6 +325,7 @@ public partial class MainWindow : Window
                 src.CompositionTarget.RenderMode = RenderMode.SoftwareOnly;
             }
             src.AddHook(WndProc);
+            TaskbarIdentity.Apply(src.Handle, ActiveBuild);
         }
     }
 
@@ -444,12 +456,10 @@ public partial class MainWindow : Window
         RefreshSimpleInstallCopy();
         RefreshDx12Chrome();
         RefreshChangeMapButton();
-        RefreshHeaderSubtitle();
+        PaintBuildUi(ActiveBuild);
         ApplyNotesPage();
         ApplyWindowStateChrome();
         SetShellUpdateChrome(_shellUpdateState, _shellUpdateVer);
-        if (BtnModeToggle is not null)
-            BtnModeToggle.ToolTip = Loc.Get(_settings.SimpleMode ? "tip_mode_advanced" : "tip_mode_simple");
         ShowSimpleSetupLayout(PanelSimpleSetup?.Visibility == Visibility.Visible);
         ApplySimpleTab(_simpleTab);
         RefreshConnectionChrome();
@@ -499,6 +509,8 @@ public partial class MainWindow : Window
             RefreshArgPreviews();
             RefreshInstallStateLabels();
             UpdateKillButtons();
+
+            RecoverSessionModsAtStartup();
 
             _procWatch = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
             _procWatch.Tick += (_, _) =>
@@ -675,11 +687,14 @@ public partial class MainWindow : Window
         if (_installPresent == present)
             return;
 
+        // The first sample is the starting state, not a change.
+        var transition = _installPresent is not null;
         _installPresent = present;
         if (!IsLoaded)
             return;
 
-        Log(present ? "Install folder is present again." : "Install folder went missing.");
+        if (transition)
+            Log(present ? "Install folder is present again." : "Install folder went missing.");
         InvalidateHealthMemo();
         if (!present)
             ShowSimpleSetupLayout(true);
@@ -743,6 +758,7 @@ public partial class MainWindow : Window
     private async Task StartupChannelFlowAsync()
     {
         await LoadChannelAsync().ConfigureAwait(true);
+        _buildChannelLoading = false;
         await RefreshDownloadGateAsync().ConfigureAwait(true);
         await MaybeAutoApplySmallUpdateAsync().ConfigureAwait(true);
 
@@ -751,6 +767,7 @@ public partial class MainWindow : Window
             Log("Install directory missing client triad (r5apex.exe / loader.dll / client.dll). Set path above.");
             UpdateStatus(Loc.Get("status_set_dir"));
             SetSimpleStatus(Loc.Get("status_pick_folder_install"));
+            RefreshSimpleInstallCopy();
             ApplyInstallDiskStatus();
             // Without this the big button keeps whatever caption it was last
             // painted with, which reads as PLAY on a folder that is gone.
@@ -828,7 +845,9 @@ public partial class MainWindow : Window
                 ? Path.GetTempPath()
                 : TxtInstallRoot.Text.Trim(),
             ProductConstants.ContentCacheDirName,
-            _settings.JoinPlaytests ? "channel-playtest" : "channel");
+            ActiveBuild == GameBuild.S30 ? "channel-s30"
+            : _settings.JoinPlaytests ? "channel-playtest"
+            : "channel");
 
     /// <summary>
     /// Synchronous, disk-only manifest recovery for paths that cannot await
@@ -855,6 +874,29 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>Until S30.1 has its own channel, its server gate is derived from the live channel's.</summary>
+    private async Task LoadLiveGateAsync()
+    {
+        try
+        {
+            var cache = Path.Combine(Path.GetTempPath(), "R5Flowstate", "live-gate");
+            var live = await Task.Run(() =>
+            {
+                using var fetcher = new FileSystemFetcher(TimeSpan.FromSeconds(15)) { NotFoundIsFinal = true };
+                return ChannelSource.LoadAsync(ProductConstants.DefaultChannelUrl, fetcher, cache)
+                    .GetAwaiter().GetResult();
+            }).ConfigureAwait(true);
+            _liveGate = live.EffectiveGateName;
+            Log("Live gate for the server list: " + _liveGate);
+        }
+        catch (Exception ex)
+        {
+            Log("Live gate failed: " + ex.Message);
+        }
+    }
+
+    private string? _liveGate;
+
     private async Task<bool> LoadChannelAsync()
     {
         try
@@ -868,7 +910,7 @@ public partial class MainWindow : Window
                     var cache = ChannelCacheDir();
                     var manifest = await Task.Run(() =>
                     {
-                        using var fetcher = new FileSystemFetcher(TimeSpan.FromSeconds(15));
+                        using var fetcher = new FileSystemFetcher(TimeSpan.FromSeconds(15)) { NotFoundIsFinal = true };
                         return ChannelSource.LoadAsync(url, fetcher, cache)
                             .GetAwaiter().GetResult();
                     }).ConfigureAwait(true);
@@ -887,6 +929,8 @@ public partial class MainWindow : Window
                 catch (Exception ex)
                 {
                     Log("Channel URL failed (" + configured + "): " + ex.Message);
+                    if (ActiveBuild == GameBuild.S30)
+                        await LoadLiveGateAsync().ConfigureAwait(true);
                 }
             }
 
@@ -900,6 +944,15 @@ public partial class MainWindow : Window
                 Log("Channel loaded from cache: " + configured);
                 BindNotesLocal();
                 return true;
+            }
+
+            // Local fixtures describe S21 content; S30.1 offers nothing until its own channel answers.
+            if (ActiveBuild == GameBuild.S30)
+            {
+                TxtIdentity.Text = "S30.1 channel not published.";
+                _manifest = null;
+                BindNotesLocal();
+                return false;
             }
 
             var path = ResolveChannelPath();
@@ -956,11 +1009,11 @@ public partial class MainWindow : Window
             var cache = Path.Combine(
                 string.IsNullOrWhiteSpace(root) ? Path.GetTempPath() : root,
                 ProductConstants.ContentCacheDirName,
-                "channel");
+                ActiveBuild == GameBuild.S30 ? "channel-s30" : "channel");
             var url = configured;
             manifest = await Task.Run(() =>
             {
-                using var fetcher = new FileSystemFetcher(TimeSpan.FromSeconds(15));
+                using var fetcher = new FileSystemFetcher(TimeSpan.FromSeconds(15)) { NotFoundIsFinal = true };
                 return ChannelSource.LoadAsync(url, fetcher, cache)
                     .GetAwaiter().GetResult();
             }).ConfigureAwait(true);
@@ -1002,8 +1055,8 @@ public partial class MainWindow : Window
         var label = "v" + LauncherVersion.Display;
         if (TxtSimpleVersion is not null)
             TxtSimpleVersion.Text = label;
-        if (TxtAdvancedVersion is not null)
-            TxtAdvancedVersion.Text = label;
+        if (TxtAboutVersion is not null)
+            TxtAboutVersion.Text = label;
     }
 
     List<PatchNoteEntry> _notesGame = new();
@@ -1060,7 +1113,7 @@ public partial class MainWindow : Window
         {
             (gameRows, launcherRows) = await Task.Run(() =>
             {
-                using var fetcher = new FileSystemFetcher(TimeSpan.FromSeconds(15));
+                using var fetcher = new FileSystemFetcher(TimeSpan.FromSeconds(15)) { NotFoundIsFinal = true };
                 var g = NotesSource.LoadAsync(manifest, channelUrl, fetcher, cache)
                     .GetAwaiter().GetResult();
                 var l = NotesSource.LoadLauncherAsync(fetcher, cache)
@@ -1227,7 +1280,7 @@ public partial class MainWindow : Window
         {
             var mods = ModPlaylistSources(root);
             _catalogModsKey = ModPlaylistSourcesKey(mods);
-            _catalog = PlaylistCatalogLoader.Load(root, Loc.Code, _settings.ShowUnlistedMaps, Loc.Lookup, mods);
+            _catalog = PlaylistCatalogLoader.Load(root, Loc.Code, Loc.Lookup, mods);
         }
         catch (Exception ex)
         {
@@ -1268,7 +1321,7 @@ public partial class MainWindow : Window
             ? Path.GetFileName(_catalog.LocalizationPath)
             : "no loc";
         TxtPlaylistSource.Text =
-            $"{src}  |  {_catalog.HostPlaylists.Count} playlists  |  {_catalog.AllMaps.Count} maps  |  {loc}";
+            $"{src}  |  {_catalog.HostPlaylists.Count} playlists  |  {_catalog.InstalledMaps.Count} maps  |  {loc}";
         Log($"Playlists reloaded: {src}, host={_catalog.HostPlaylists.Count}, file={_catalog.Entries.Count}, maps={_catalog.AllMaps.Count}");
         RefreshArgPreviews();
         RefreshSimplePlayButton();
@@ -1280,8 +1333,9 @@ public partial class MainWindow : Window
         if (ChkFilterMaps.IsChecked == true)
             maps = _catalog.MapsForPlaylist(SelectedPlaylistId());
         else
-            maps = _catalog.AllMaps;
+            maps = _catalog.InstalledMaps;
 
+        MapLabelConverter.Names = _catalog.MapNames;
         CmbMap.ItemsSource = maps;
         if (!string.IsNullOrWhiteSpace(prefer) && maps.Any(m =>
                 string.Equals(m, prefer, StringComparison.OrdinalIgnoreCase)))
@@ -1370,16 +1424,6 @@ public partial class MainWindow : Window
         FillMapCombo(keep);
         PersistSettingsFromUi();
         RefreshArgPreviews();
-    }
-
-    private void OnShowUnlistedMapsChanged(object sender, RoutedEventArgs e)
-    {
-        if (!IsLoaded || _suppressArgsPersist)
-            return;
-        _settings.ShowUnlistedMaps = ChkShowUnlistedMaps?.IsChecked == true;
-        try { SettingsStore.Save(_settings); }
-        catch (Exception ex) { Log($"Settings save failed: {ex.Message}"); }
-        ReloadPlaylistsAndMaps(selectSaved: true);
     }
 
     private void OnJoinWithoutDevChanged(object sender, RoutedEventArgs e)
@@ -1541,8 +1585,6 @@ public partial class MainWindow : Window
             ApplyDeveloperMaster(IsDeveloperOn());
         _settings.Cheats = IsCheatsOn();
         _settings.FilterMapsByPlaylist = ChkFilterMaps.IsChecked == true;
-        if (ChkShowUnlistedMaps is not null)
-            _settings.ShowUnlistedMaps = ChkShowUnlistedMaps.IsChecked == true;
         if (ChkJoinWithoutDev is not null)
             _settings.JoinWithoutDev = ChkJoinWithoutDev.IsChecked == true;
         if (ChkKeepLocalFiles is not null)
@@ -1568,6 +1610,7 @@ public partial class MainWindow : Window
         }
 
         RefreshArgPreviews();
+        RefreshDesktopShortcut();
     }
 
     private void CaptureModeSettingsFromUi()
@@ -1591,22 +1634,26 @@ public partial class MainWindow : Window
 
         try
         {
-            var client = BuildClientArgs(includeConnect: false);
-            var dedi = BuildDediArgs(mapOverride: null);
+            var previewRoot = ReadInstallPathBox();
+            var client = WithGameBuildArgs(LaunchRole.Client, previewRoot, BuildClientArgs(includeConnect: false));
+            var dedi = WithGameBuildArgs(LaunchRole.Dedicated, previewRoot, BuildDediArgs(mapOverride: null));
             var dediLine = LaunchArgs.RedactSensitiveArgs(LaunchArgs.FormatArgumentsOnly(dedi));
-            TxtClientPreview.Text = "full: r5apex.exe " + LaunchArgs.FormatArgumentsOnly(client);
+            var clientExe = _settings.UseDx12 || GameBuilds.IsS30(previewRoot)
+                ? ProcessSpawner.ClientDx12ExeName
+                : ProcessSpawner.ClientExeName;
+            TxtClientPreview.Text = clientExe + " " + LaunchArgs.FormatArgumentsOnly(client);
             // sv_cheats only when Dev profile is on (or typed into Extra args).
             if (ContainsArgToken(dedi, "+sv_cheats"))
             {
                 TxtDediPreview.Text =
-                    "full: r5apex_ds.exe " + dediLine +
+                    ProcessSpawner.DediExeName + " " + dediLine +
                     Environment.NewLine +
                     "note: +sv_cheats 1 (Cheats or Extra args)";
             }
             else
             {
                 TxtDediPreview.Text =
-                    "full: r5apex_ds.exe " + dediLine +
+                    ProcessSpawner.DediExeName + " " + dediLine +
                     Environment.NewLine +
                     "note: sv_cheats off unless Extra args / console";
             }
@@ -1823,6 +1870,7 @@ public partial class MainWindow : Window
                     keepLocalFiles: _settings.KeepLocalFiles).ConfigureAwait(true);
             }
 
+            Log((restoreOfficial ? "Restore official" : "Repair") + " result: " + health.Summary);
             RefreshInstallStateLabels();
             if (health.NeedsUpdate)
             {
@@ -1847,7 +1895,7 @@ public partial class MainWindow : Window
                 UpdateStatus(Loc.Get("status_content_healthy"));
                 SetSimpleStatus(health.HasOverlayEdits
                     ? Loc.Format("status_scripts_differ", health.OverlayEditCount)
-                    : Loc.Get("ready_to_play"));
+                    : ReadyStatus(health));
             }
             else
             {
@@ -1952,6 +2000,8 @@ public partial class MainWindow : Window
         try
         {
             Log($"Content install start: mode={mode} path={installPath}");
+            if (ActiveBuild == GameBuild.S30)
+                GameBuilds.MarkS30(installPath);
             TxtInstallStatus.Text = Loc.Format("status_installing_mode", mode);
             BarInstall.Value = 0;
             ShowSimpleInstallBar(true);
@@ -1991,7 +2041,9 @@ public partial class MainWindow : Window
                     $"OK mode={mode} client={state.ClientReady} server={state.ServerReady}";
                 Log($"Content install complete: client_ready={state.ClientReady} server_ready={state.ServerReady}");
                 UpdateStatus(Loc.Get("status_content_complete"));
-                SetSimpleStatus(Loc.Get("ready_to_play"));
+                SetSimpleStatus(Loc.Get(state.HdEnabled && !state.HdReady
+                    ? "status_hd_unfinished"
+                    : "ready_to_play"));
                 ReloadPlaylistsAndMaps(selectSaved: true);
             }
         }
@@ -2067,6 +2119,7 @@ public partial class MainWindow : Window
         RefreshHdTextures();
         RefreshSimplePlayButton(health);
         MaybeAnnounceHdTextures();
+        MaybeOfferDesktopShortcut();
         RefreshDx12Chrome();
     }
 
@@ -2343,6 +2396,8 @@ public partial class MainWindow : Window
         }
         RefreshDediModPolicyUi();
         PersistDediModPolicy();
+        if (!await RefreshPluginsForPlayAsync(TxtInstallRoot.Text.Trim()).ConfigureAwait(true))
+            return;
         SpawnRole(LaunchRole.Dedicated, BuildDediArgs(mapOverride: null));
         _livePlaylist = SelectedPlaylistId();
         _liveMap = SelectedMap();
@@ -2388,18 +2443,19 @@ public partial class MainWindow : Window
         var playlist = SelectedPlaylistId();
         if (string.IsNullOrWhiteSpace(playlist))
             playlist = "survival_dev";
-        // Advanced PLAY always uses Divided Moon; sync map combo after gate succeeds.
-        await RunPlayAsync(playlist, QuickPlayMap, syncMapCombo: true).ConfigureAwait(true);
+        var map = SelectedMap();
+        await RunPlayAsync(playlist, string.IsNullOrWhiteSpace(map) ? QuickPlayMap : map, syncMapCombo: true)
+            .ConfigureAwait(true);
     }
 
-    /// <summary>Advanced header PLAY mirrors the Simple button's play/stop state.</summary>
+    /// <summary>The Advanced tab's play button mirrors the Play tab's play/stop state.</summary>
     private void PaintQuickPlayButton()
     {
         if (BtnQuickPlay is null)
             return;
 
         var stop = SessionLive;
-        BtnQuickPlay.Content = stop ? Loc.Get("stop") : Loc.Get("play");
+        BtnQuickPlay.Content = stop ? Loc.Get("stop") : Loc.Get("play_setup");
         if (BtnQuickPlay.TryFindResource(stop ? "DangerButton" : "PrimaryButton") is Style style)
             BtnQuickPlay.Style = style;
     }
@@ -2436,6 +2492,7 @@ public partial class MainWindow : Window
             PersistSettingsFromUi();
             var root = TxtInstallRoot.Text.Trim();
             var port = SelectedPort();
+            var reuseClient = CanReuseLocalClient(root);
 
             // Both tracks required; auto-repair corrupt; refuse CHANNEL updates.
             var (contentOk, contentReason) = await EnsurePlayContentAsync(
@@ -2459,6 +2516,9 @@ public partial class MainWindow : Window
                 return;
             }
 
+            if (!await RefreshPluginsForPlayAsync(root).ConfigureAwait(true))
+                return;
+
             if (syncMapCombo)
             {
                 _suppressDediUi = true;
@@ -2467,6 +2527,13 @@ public partial class MainWindow : Window
                 PersistSettingsFromUi();
             }
 
+            if (await UseListenHostAsync(root).ConfigureAwait(true))
+            {
+                await StartListenSessionAsync(root, playlistId, map).ConfigureAwait(true);
+                return;
+            }
+
+            _listenSession = false;
             Log($"Play: dedi +map {map} playlist={playlistId} port={port}; client waits for host-ready then +connect 127.0.0.1:{port}");
             UpdateStatus(Loc.Get("status_starting_server"));
             if (simple)
@@ -2478,16 +2545,21 @@ public partial class MainWindow : Window
             _playCts = new CancellationTokenSource();
             var playCt = _playCts.Token;
             // Kill prior on background so UI stays responsive.
-            var killed = await Task.Run(() => ProcessSpawner.KillAll(root)).ConfigureAwait(true);
+            var killed = reuseClient
+                ? await Task.Run(() => ProcessSpawner.KillRole(LaunchRole.Dedicated, root)).ConfigureAwait(true)
+                : await Task.Run(() => ProcessSpawner.KillAll(root)).ConfigureAwait(true);
             if (killed > 0)
                 Log($"Play: killed {killed} prior process(es)");
+            if (reuseClient)
+                Log("Play: the game is still open; it reconnects once the new server is ready");
             // Play Local owns the port: a dedi left over from a crash or another
             // deploy root survives the path-scoped kill above and the new one then
             // spins on WSAEADDRINUSE forever.
             var strays = await Task.Run(ProcessSpawner.KillAllDediImages).ConfigureAwait(true);
             if (strays > 0)
                 Log($"Play: killed {strays} stray dedi instance(s)");
-            ResetClientConsoleForNewSession();
+            if (!reuseClient)
+                ResetClientConsoleForNewSession();
 
             var portFree = await Task.Run(() => ProcessSpawner.WaitPortFree(port, 5000), playCt)
                 .ConfigureAwait(true);
@@ -2502,7 +2574,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            if (!TryHostPassword(out _, out var pwRefuse))
+            if (!TryHostPassword(out var hostPassword, out var pwRefuse))
             {
                 Log("Play refused: " + pwRefuse);
                 if (simple)
@@ -2616,6 +2688,15 @@ public partial class MainWindow : Window
             if (simple)
                 SetSimpleStatus(Loc.Get("status_starting_game"));
 
+            if (reuseClient && TryReconnectLocalClient(root, port, hostPassword))
+            {
+                UpdateKillButtons();
+                UpdateStatus($"Quick Play OK (reconnected)  |  {PidLine()}  |  {map} -> 127.0.0.1:{port}");
+                if (simple)
+                    SetSimpleStatus(Loc.Get("status_playing"));
+                return;
+            }
+
             // 127.0.0.1 last via IncludeConnect (after extras).
             var clientArgs = BuildClientArgs(
                 includeConnect: true,
@@ -2636,6 +2717,8 @@ public partial class MainWindow : Window
 
             _lastClientPid = clientResult.ProcessId;
             _replayClientPid = null;
+            _localPlayClientPid = clientResult.ProcessId;
+            _localPlayClientModsStamp = ModListStamp(root);
             Log($"[Play] client pid={clientResult.ProcessId} {LaunchArgs.RedactSensitiveArgs(clientResult.CommandLine ?? string.Empty)}");
             UpdateKillButtons();
             UpdateStatus($"Quick Play OK  |  {PidLine()}  |  {map} → 127.0.0.1:{port}");
@@ -2670,6 +2753,58 @@ public partial class MainWindow : Window
             else
                 UpdateKillButtons();
         }
+    }
+
+    /// <summary>
+    /// The Play Local client outlived its server. It can take a fresh local
+    /// server in place only while it still boots on the same mod list, carries
+    /// no join filter, and answers on its command pipe.
+    /// </summary>
+    private bool CanReuseLocalClient(string root)
+    {
+        if (_localPlayClientPid is not { } pid || _joinedServer is not null || _sessionModsPending)
+            return false;
+        if (!ProcessSpawner.GetTrackedPids(LaunchRole.Client).Contains(pid))
+            return false;
+        if (!ClientIsSteerable() || ProcessSpawner.IsRoleAlive(LaunchRole.Dedicated, root))
+            return false;
+        return ModListStamp(root) == _localPlayClientModsStamp;
+    }
+
+    private static DateTime ModListStamp(string root)
+    {
+        try
+        {
+            return SafePath.TryJoin(ModsStore.ModsDirectory(root), ModsStore.ModListFileName, out var vdf)
+                && File.Exists(vdf)
+                ? File.GetLastWriteTimeUtc(vdf)
+                : DateTime.MinValue;
+        }
+        catch
+        {
+            return DateTime.MinValue;
+        }
+    }
+
+    /// <summary>False falls back to a fresh client launch.</summary>
+    private bool TryReconnectLocalClient(string root, int port, string password)
+    {
+        if (!ClientIsSteerable() || !TryFormatConsoleTarget("127.0.0.1", port, out var target))
+            return false;
+
+        var pw = string.IsNullOrEmpty(password) || !LaunchArgs.IsSafeServerPassword(password) ? null : password;
+        if (_consoleClient?.TryWriteCommand(LaunchArgs.FormatBridgeConnectLine(target, pw)) != true)
+        {
+            Log("Play: the open game did not take the connect; starting a new one");
+            ProcessSpawner.KillRole(LaunchRole.Client, root);
+            _localPlayClientPid = null;
+            ResetClientConsoleForNewSession();
+            return false;
+        }
+
+        AppendConsoleLine(LaunchRole.Client, "] " + LaunchArgs.FormatBridgeConnectLine(target, pw is null ? null : "****"));
+        Log($"[Play] reconnected the open game to {target}");
+        return true;
     }
 
     OverlayExtractPolicy DecideOverlayEdits(OverlayEditReport report)
@@ -2792,7 +2927,7 @@ public partial class MainWindow : Window
     private bool IsJoinWithoutDevOn() => _settings.JoinWithoutDev;
 
     private bool IsOfflineOn() =>
-        ChkSimpleOffline?.IsChecked == true;
+        ChkUseEaPersona?.IsChecked == false;
 
     private bool IsDediHostOnlineOn() =>
         ChkDediOnline?.IsChecked == true;
@@ -2815,7 +2950,7 @@ public partial class MainWindow : Window
 
     private void ApplyOfflineNoAuth(bool on)
     {
-        SetCheckSilently(ChkSimpleOffline, on);
+        SetCheckSilently(ChkUseEaPersona, !on);
         _settings.OfflineNoAuth = on;
         SyncOfflineNameText();
         try { SettingsStore.Save(_settings); }
@@ -2909,12 +3044,68 @@ public partial class MainWindow : Window
             menu.Items.Add(header);
         }
 
+        menu.Items.Add(new Separator { Style = (Style)FindResource("DarkMenuSeparator") });
+        menu.Items.Add(BuildCustomResolutionItem(itemStyle, menu));
+
         target.ContextMenu = menu;
+    }
+
+    /// <summary>Last menu row: type any size and apply it.</summary>
+    MenuItem BuildCustomResolutionItem(Style itemStyle, ContextMenu menu)
+    {
+        TextBox Field(int value) => new()
+        {
+            Text = value.ToString(CultureInfo.InvariantCulture),
+            Width = 58,
+            Height = 26,
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
+
+        var w = Field(_settings.ClientWidth);
+        var h = Field(_settings.ClientHeight);
+        void Apply()
+        {
+            CommitClientResolution(
+                ParseResolutionField(w.Text, _settings.ClientWidth),
+                ParseResolutionField(h.Text, _settings.ClientHeight));
+            menu.IsOpen = false;
+        }
+
+        var apply = new Button { Content = Loc.Get("res_apply"), Height = 26, Padding = new Thickness(10, 0, 10, 0),
+            Margin = new Thickness(8, 0, 0, 0), Style = (Style)FindResource("AccentButton") };
+        apply.Click += (_, _) => Apply();
+        foreach (var box in new[] { w, h })
+        {
+            box.KeyDown += (_, e) =>
+            {
+                if (e.Key == System.Windows.Input.Key.Enter)
+                {
+                    e.Handled = true;
+                    Apply();
+                }
+            };
+        }
+
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(new TextBlock { Text = Loc.Get("res_custom"), VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 10, 0) });
+        row.Children.Add(w);
+        row.Children.Add(new TextBlock { Text = "x", VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(6, 0, 6, 0) });
+        row.Children.Add(h);
+        row.Children.Add(apply);
+        return new MenuItem { Header = row, Style = itemStyle, StaysOpenOnClick = true };
     }
     private void OnResolutionPresetClick(object sender, RoutedEventArgs e)
     {
         if (sender is not Button target)
             return;
+        // The Play bar's picker sits in a popup that closes under its own menu, so the menu opens on the pill.
+        if (ReferenceEquals(target, BtnResolutionPreset))
+        {
+            PopGame.IsOpen = false;
+            target = BtnPillGame;
+        }
         BuildResolutionPresetMenu(target);
         if (target.ContextMenu is not ContextMenu menu)
             return;
@@ -2961,31 +3152,56 @@ public partial class MainWindow : Window
     {
         PersistSettingsFromUi();
         var dlg = new LaunchArgsWindow { Owner = this };
-        dlg.ExtrasChanged += (clientExtra, dediExtra) =>
+        dlg.ArgsChanged += (extra, disabled) =>
         {
             var restore = _suppressArgsPersist;
             _suppressArgsPersist = true;
             try
             {
                 if (TxtClientArgs is not null)
-                    TxtClientArgs.Text = clientExtra;
-                if (TxtDediArgs is not null)
-                    TxtDediArgs.Text = dediExtra;
+                    TxtClientArgs.Text = extra;
             }
             finally
             {
                 _suppressArgsPersist = restore;
             }
 
+            _settings.ClientDisabledArgs = disabled;
             PersistSettingsFromUi();
-            dlg.SetApplied(TxtClientPreview?.Text ?? string.Empty, TxtDediPreview?.Text ?? string.Empty);
+            dlg.SetApplied(ClientAppliedLine());
         };
         dlg.Load(
             TxtClientArgs?.Text ?? _settings.ClientLaunchArguments ?? string.Empty,
-            TxtDediArgs?.Text ?? _settings.DediLaunchArguments ?? string.Empty,
-            TxtClientPreview?.Text ?? string.Empty,
-            TxtDediPreview?.Text ?? string.Empty);
+            _settings.ClientDisabledArgs,
+            BuildClientArgs(includeConnect: false, raw: true),
+            ClientAppliedLine());
         dlg.ShowDialog();
+    }
+
+    string ClientAppliedLine() =>
+        LaunchArgs.RedactSensitiveArgs(LaunchArgs.FormatArgumentsOnly(BuildClientArgs(includeConnect: false)));
+
+    string DediAppliedLine(string? playlist) =>
+        LaunchArgs.RedactSensitiveArgs(LaunchArgs.FormatArgumentsOnly(BuildDediArgs(null, NullIfBlank(playlist))));
+
+    static string? NullIfBlank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s;
+
+    void OnDediArgsChanged(string extra, string disabled)
+    {
+        var restore = _suppressArgsPersist;
+        _suppressArgsPersist = true;
+        try
+        {
+            if (TxtDediArgs is not null)
+                TxtDediArgs.Text = extra;
+        }
+        finally
+        {
+            _suppressArgsPersist = restore;
+        }
+
+        _settings.DediDisabledArgs = disabled;
+        PersistSettingsFromUi();
     }
 
     private void OnResolutionPresetPicked(object sender, RoutedEventArgs e)
@@ -3050,6 +3266,10 @@ public partial class MainWindow : Window
             TxtClientWidth.Text = width;
         if (TxtClientHeight is not null)
             TxtClientHeight.Text = height;
+        if (TxtResLabel is not null)
+            TxtResLabel.Text = width + " x " + height;
+        if (TxtPillGame is not null)
+            TxtPillGame.Text = width + " x " + height;
         if (TxtServersWidth is not null)
             TxtServersWidth.Text = width;
         if (TxtServersHeight is not null)
@@ -3154,7 +3374,8 @@ public partial class MainWindow : Window
         string? connectPassword = null,
         string? map = null,
         bool noTimeout = false,
-        bool forceOnline = false)
+        bool forceOnline = false,
+        bool raw = false)
     {
         var password = connectPassword ?? (includePassword ? ReadPasswordBox() : string.Empty);
         if (!LaunchArgs.IsSafeServerPassword(password))
@@ -3169,7 +3390,7 @@ public partial class MainWindow : Window
             OfflineName = _settings.OfflineName,
             ForceOnline = forceOnline,
             DropDev = dropDev,
-            Extra = TxtClientArgs.Text ?? string.Empty,
+            Extra = raw ? string.Empty : TxtClientArgs.Text ?? string.Empty,
             ExtraTokens = ReplayClientTokens(),
             IncludeConnect = includeConnect,
             ConnectHost = connectHost,
@@ -3181,10 +3402,12 @@ public partial class MainWindow : Window
             Width = _settings.ClientWidth,
             Height = _settings.ClientHeight,
             WindowMode = _settings.ClientWindowMode,
+            LocalMatchTickRate = _settings.TickRate,
+            Disabled = raw ? null : ArgsEditor.ParseKeys(_settings.ClientDisabledArgs),
         });
     }
 
-    private IReadOnlyList<string> BuildDediArgs(string? mapOverride, string? playlistOverride = null)
+    private IReadOnlyList<string> BuildDediArgs(string? mapOverride, string? playlistOverride = null, bool raw = false)
     {
         var password = ReadPasswordBox();
         if (!LaunchArgs.IsSafeServerPassword(password))
@@ -3194,18 +3417,26 @@ public partial class MainWindow : Window
         }
 
         var launchPlaylist = playlistOverride ?? SelectedPlaylistId();
+        var playlistSettings = HostSettingsFor(launchPlaylist);
         return LaunchArgs.BuildDediArgs(DediProfile(), new DediArgOptions
         {
             Port = SelectedPort(),
             LaunchPlaylist = launchPlaylist,
             PlaylistOverrides = HostOverridesFor(launchPlaylist),
+            MaxPlayers = HostCapacity.SlotCount(
+                playlistSettings,
+                string.IsNullOrWhiteSpace(launchPlaylist)
+                    ? null
+                    : HostSettings.ValuesFor(launchPlaylist.Trim(), playlistSettings)),
             Map = mapOverride ?? SelectedMap(),
             OfflineNoAuth = IsOfflineOn(),
             Visibility = DediVisibility(),
             Cheats = IsCheatsOn(),
             Password = password,
-            Extra = TxtDediArgs.Text ?? string.Empty,
+            Extra = raw ? string.Empty : TxtDediArgs.Text ?? string.Empty,
             ExtraTokens = BuildDediModPolicyTokens(),
+            TickRate = _settings.TickRate,
+            Disabled = raw ? null : ArgsEditor.ParseKeys(_settings.DediDisabledArgs),
         });
     }
 
@@ -3360,10 +3591,15 @@ public partial class MainWindow : Window
         bool forceHostedConsole = false,
         IReadOnlyDictionary<string, string>? extraEnv = null,
         bool grantHostConsole = false,
-        bool ownConsole = false)
+        bool ownConsole = false,
+        bool joinSession = false)
     {
         var root = TxtInstallRoot.Text.Trim();
         PersistSettingsFromUi();
+
+        // A join's mod filter must never reach a local server or a plain client boot.
+        if (!joinSession)
+            RestoreSessionMods(force: true);
 
         // Sync health gate (no auto-repair here — callers EnsurePlayContentAsync first when async).
         if (!TryInstallStatePlayGate(role, out var gateReason))
@@ -3376,7 +3612,11 @@ public partial class MainWindow : Window
             };
         }
 
-        var wantDx12 = role == LaunchRole.Client && _settings.UseDx12;
+        if (role == LaunchRole.Client)
+            EnsureClientPrerequisites(quiet);
+        args = WithGameBuildArgs(role, root, args);
+
+        var wantDx12 = role == LaunchRole.Client && (_settings.UseDx12 || GameBuilds.IsS30(root));
         if (wantDx12 && !ProcessSpawner.Dx12Available(root))
         {
             var dxMsg = Loc.Get("dx12_missing_exe");
@@ -3652,9 +3892,16 @@ public partial class MainWindow : Window
                 return;
             }
 
+            Log("Content install stopped: the launcher is closing.");
             _installRun?.Resume();
             _installCts?.Cancel();
             SevenZipLocator.KillOurUnpackers();
+        }
+        else if (_verifyBusy)
+        {
+            // Read-only, so no prompt; the cancel handler would never get to log it.
+            Log("Verify stopped: the launcher is closing.");
+            _installCts?.Cancel();
         }
 
         var root = TxtInstallRoot.Text.Trim();
@@ -3706,6 +3953,7 @@ public partial class MainWindow : Window
         RestoreSessionMods(force: true);
         DisposeModsServices();
         DisposeHandoff();
+        Log("Launcher closing.");
     }
 
     private void OnWindowClosed(object? sender, EventArgs e)
@@ -3945,7 +4193,7 @@ public partial class MainWindow : Window
             Log("Play Local: server " + (fault == HostedServerFault.Hung ? "hang" : "crash")
                 + ", warned, killed dedi " + n + ".");
             SetSimpleStatus(clientWasUp
-                ? Loc.Get("status_crash_client_running")
+                ? Loc.Get(CanReuseLocalClient(root) ? "status_crash_rehost" : "status_crash_client_running")
                 : Loc.Get(statusKey));
             _handlingServerCrash = false;
             _pendingCrashExcerpt = null;
@@ -4000,6 +4248,7 @@ public partial class MainWindow : Window
 
         BtnKillClient.Visibility = clientAlive ? Visibility.Visible : Visibility.Collapsed;
         BtnKillDedi.Visibility = dediAlive ? Visibility.Visible : Visibility.Collapsed;
+        RefreshProcRows(clientAlive, dediAlive);
 
         var cl = ProcessSpawner.GetTrackedPids(LaunchRole.Client);
         var sv = ProcessSpawner.GetTrackedPids(LaunchRole.Dedicated);
@@ -4008,6 +4257,7 @@ public partial class MainWindow : Window
         if (!clientAlive)
         {
             _lastClientPid = null;
+            _listenSession = false;
             if (!_restartClientBusy)
                 _launcherOwnsClient = false;
         }
@@ -4049,8 +4299,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (TxtStatus is not null)
-            TxtStatus.Text = text;
+        if (!_settings.SimpleMode)
+            SetSimpleStatus(text);
     }
 
     // ---- Simple mode shell ----
@@ -4108,63 +4358,16 @@ public partial class MainWindow : Window
     private void OnOpenKofi(object sender, RoutedEventArgs e) =>
         OpenExternal(ProductConstants.KofiUrl);
 
-    private void OnModeToggle(object sender, RoutedEventArgs e)
-    {
-        if (_settings.SimpleMode && TabBlockedBySetup())
-            return;
-        ApplyShellMode(simple: !_settings.SimpleMode, persist: true);
-    }
-
     private void ApplyShellMode(bool simple, bool persist)
     {
         _settings.SimpleMode = simple;
-
-        if (PanelSimple is not null)
-            PanelSimple.Visibility = simple ? Visibility.Visible : Visibility.Collapsed;
-        if (PanelAdvanced is not null)
-            PanelAdvanced.Visibility = simple ? Visibility.Collapsed : Visibility.Visible;
-        if (BarAdvancedStatus is not null)
-            BarAdvancedStatus.Visibility = simple ? Visibility.Collapsed : Visibility.Visible;
-        if (BtnQuickPlay is not null)
-            BtnQuickPlay.Visibility = simple ? Visibility.Collapsed : Visibility.Visible;
-        // Icon-only now: the state reads through the tooltip, not the label.
-        if (BtnModeToggle is not null)
-            BtnModeToggle.ToolTip = simple
-                ? Loc.Get("tip_mode_advanced")
-                : Loc.Get("tip_mode_simple");
-        if (BtnTabToolAdvanced is not null)
-            BtnTabToolAdvanced.ToolTip = Loc.Get("tip_mode_advanced");
-        if (BtnHeaderConsole is not null)
-            BtnHeaderConsole.Visibility = simple ? Visibility.Collapsed : Visibility.Visible;
-        // The simple shell shows these in its tab strip instead.
-        var headerTools = simple ? Visibility.Collapsed : Visibility.Visible;
-        if (BtnModeToggle is not null)
-            BtnModeToggle.Visibility = headerTools;
-        if (BtnTabSettings is not null)
-            BtnTabSettings.Visibility = headerTools;
-        if (BtnHeaderOpenFolder is not null)
-            BtnHeaderOpenFolder.Visibility = headerTools;
-        if (HdrRingSwitch is not null)
-            HdrRingSwitch.Visibility = headerTools;
-        RefreshHeaderSubtitle();
-
-        if (simple)
-            SyncSimpleLaunchOptions();
+        SyncSimpleLaunchOptions();
+        ApplySimpleTab(simple ? SimpleTab.Play : SimpleTab.Advanced);
 
         if (persist && IsLoaded)
         {
             try { SettingsStore.Save(_settings); }
             catch (Exception ex) { Log($"Settings save failed: {ex.Message}"); }
-        }
-
-        if (!simple)
-        {
-            if (IsLoaded)
-                _ = OpenServersAsync();
-        }
-        else
-        {
-            ApplySimpleTab(SimpleTab.Play);
         }
 
         RefreshSimplePlayButton();
@@ -4175,7 +4378,8 @@ public partial class MainWindow : Window
         if (ListModes is null)
             return;
 
-        var keepId = _selectedMode?.Id ?? _settings.LastModePlaylist;
+        // Every launcher start opens on the lobby; a reload keeps what is picked.
+        var keepId = _selectedMode?.Id;
         _modeCards.Clear();
         _selectedMode = null;
 
@@ -4200,7 +4404,7 @@ public partial class MainWindow : Window
                 ModeCardViewModel.LobbyPlaylistId,
                 ModeGroups.Apex,
                 ModeTitle(ModeCardViewModel.LobbyPlaylistId, "Lobby"),
-                ModeBlurb(ModeCardViewModel.LobbyPlaylistId, "S21 offline lobby."),
+                ModeBlurb(ModeCardViewModel.LobbyPlaylistId, "Pick a mode or join a server."),
                 new[] { lobbyMap },
                 lobbyMap,
                 mapIsPinned: true,
@@ -4211,8 +4415,11 @@ public partial class MainWindow : Window
 
         var grouped = new CollectionViewSource { Source = _modeCards };
         grouped.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ModeCardViewModel.GroupTitle)));
+        _modeView = grouped.View;
+        _modeView.Filter = ModeMatches;
         ListModes.ItemsSource = null;
-        ListModes.ItemsSource = grouped.View;
+        ListModes.ItemsSource = _modeView;
+        RefreshPlaylistSearchEmpty();
 
         if (_modeCards.Count == 0)
         {
@@ -4238,6 +4445,35 @@ public partial class MainWindow : Window
             string.Equals(TxtSimpleStatus.Text, Loc.Get("status_no_modes"), StringComparison.Ordinal))
             SetSimpleStatus(Loc.Get("ready_to_play"));
         RefreshSimplePlayButton();
+    }
+
+    private bool ModeMatches(object item) =>
+        item is ModeCardViewModel card && card.MatchesQuery(TxtPlaylistsSearch?.Text);
+
+    private void OnPlaylistsSearchChanged(object sender, TextChangedEventArgs e)
+    {
+        _modeView?.Refresh();
+        RefreshPlaylistSearchEmpty();
+        ScrollPlaylists?.ScrollToVerticalOffset(0);
+    }
+
+    private void OnPlaylistsSearchClear(object sender, RoutedEventArgs e)
+    {
+        if (TxtPlaylistsSearch is null)
+            return;
+        TxtPlaylistsSearch.Clear();
+        TxtPlaylistsSearch.Focus();
+    }
+
+    private void RefreshPlaylistSearchEmpty()
+    {
+        var filtering = !string.IsNullOrWhiteSpace(TxtPlaylistsSearch?.Text);
+        if (BtnPlaylistsSearchClear is not null)
+            BtnPlaylistsSearchClear.Visibility = filtering ? Visibility.Visible : Visibility.Collapsed;
+        if (TxtPlaylistsSearchEmpty is null)
+            return;
+        var none = filtering && _modeView is { IsEmpty: true };
+        TxtPlaylistsSearchEmpty.Visibility = none ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void SelectModeCard(ModeCardViewModel card, bool persist)
@@ -4320,6 +4556,7 @@ public partial class MainWindow : Window
                 break;
             case SimplePlayKind.Installing:
                 break;
+            case SimplePlayKind.Rehost:
             case SimplePlayKind.Play:
             default:
                 {
@@ -4399,6 +4636,7 @@ public partial class MainWindow : Window
     {
         _playCts?.Cancel();
         DisarmHostedMatch();
+        _listenSession = false;
         var root = TxtInstallRoot.Text.Trim();
         var n = await Task.Run(() => ProcessSpawner.KillAll(root)).ConfigureAwait(true);
         _lastClientPid = null;
@@ -4433,7 +4671,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (dediAlive && ChangeMapPending())
+        if ((dediAlive || _listenSession) && ChangeMapPending())
         {
             _simplePlayKind = SimplePlayKind.ChangeMap;
             PaintPlayButton(ChangeActionCaption(), enabled: !_changeMapBusy, stop: false);
@@ -4448,6 +4686,15 @@ public partial class MainWindow : Window
             PaintPlayButton(Loc.Get("disconnect_action"), enabled: !_steerBusy, stop: false);
             if (BtnPlay is not null)
                 BtnPlay.ToolTip = Loc.Format("tip_disconnect_from", _joinedServer.Name);
+            return;
+        }
+
+        if (!_listenSession && !dediAlive && CanReuseLocalClient(ReadInstallPathBox()))
+        {
+            _simplePlayKind = SimplePlayKind.Rehost;
+            PaintPlayButton(Loc.Get("play"), enabled: true, stop: false);
+            if (BtnPlay is not null)
+                BtnPlay.ToolTip = Loc.Get("tip_rehost");
             return;
         }
 
@@ -4466,6 +4713,7 @@ public partial class MainWindow : Window
         if (!SessionLive || BtnPlay is null)
             return;
         ApplyLiveSessionButton(LocalDediAlive());
+        ApplyPlayBarState();
         RefreshConsoleChrome();
         PaintQuickPlayButton();
     }
@@ -4625,6 +4873,7 @@ public partial class MainWindow : Window
             return;
         _playPainted = true;
         _lastPlayCaption = caption;
+        ApplyPlayBarState();
         _lastPlayEnabled = enabled;
         _lastPlayStop = stop;
         _lastPaintKind = _simplePlayKind;
@@ -4642,7 +4891,7 @@ public partial class MainWindow : Window
             };
             var styleKey = _simplePlayKind switch
             {
-                SimplePlayKind.ChangeMap => "PlayBarChangeSplit",
+                SimplePlayKind.ChangeMap or SimplePlayKind.Rehost => "PlayBarChangeSplit",
                 SimplePlayKind.RestartClient => "PlayBarRestart",
                 SimplePlayKind.Disconnect => "PlayBarDisconnect",
                 SimplePlayKind.Update => "PlayBarUpdate",
@@ -4650,7 +4899,7 @@ public partial class MainWindow : Window
             };
             if (BtnPlay.TryFindResource(styleKey) is Style style)
                 BtnPlay.Style = style;
-            if (_simplePlayKind == SimplePlayKind.ChangeMap)
+            if (_simplePlayKind is SimplePlayKind.ChangeMap or SimplePlayKind.Rehost)
                 BtnPlay.Content = ChangeWithStopContent(caption);
         }
 
@@ -4723,6 +4972,7 @@ public partial class MainWindow : Window
                 tip = Loc.Get("tip_update");
                 break;
             case SimplePlayKind.Play:
+            case SimplePlayKind.Rehost:
             case SimplePlayKind.Verify:
             case SimplePlayKind.Install:
             case SimplePlayKind.Repair:
@@ -4818,7 +5068,10 @@ public partial class MainWindow : Window
                 : Loc.Get(_simplePlayKind == SimplePlayKind.Repair ? "files_need_work" : "get_started");
         if (TxtSimpleSetupBlurb is not null)
             TxtSimpleSetupBlurb.Text = Loc.Get(
-                _simplePlayKind == SimplePlayKind.Repair ? "repair_blurb" : "setup_blurb");
+                _simplePlayKind == SimplePlayKind.Repair ? "repair_blurb"
+                : ActiveBuild == GameBuild.S30 ? "setup_blurb_s30" : "setup_blurb");
+        if (BarSetupSeasons is not null)
+            BarSetupSeasons.Visibility = _simplePlayKind == SimplePlayKind.Repair ? Visibility.Collapsed : Visibility.Visible;
         // The setup panel keeps one bottom-anchored stack: the folder form and the
         // progress card swap in place, they never stack.
         if (PanelSimpleSetupIdle is not null)
@@ -4870,10 +5123,6 @@ public partial class MainWindow : Window
             TxtShellUpdateLink.Visibility = show;
         if (RunShellUpdateLink is not null)
             RunShellUpdateLink.Text = text;
-        if (TxtShellUpdateLinkAdv is not null)
-            TxtShellUpdateLinkAdv.Visibility = show;
-        if (RunShellUpdateLinkAdv is not null)
-            RunShellUpdateLinkAdv.Text = text;
     }
 
     void OnShellUpdateLinkClick(object sender, RoutedEventArgs e)
@@ -4904,8 +5153,11 @@ public partial class MainWindow : Window
     {
         _localRcon?.Dispose();
         _localRcon = null;
-        _livePlaylist = null;
-        _liveMap = null;
+        if (!_listenSession)
+        {
+            _livePlaylist = null;
+            _liveMap = null;
+        }
         ClearPendingChangeMap();
         RefreshChangeMapButton();
     }
@@ -4950,6 +5202,8 @@ public partial class MainWindow : Window
 
     private bool ChangeMapPending()
     {
+        if (_listenSession)
+            return ListenChangePending();
         if (_localRcon is null || _changeMapBusy)
             return false;
         if (!LocalDediAlive())
@@ -5040,7 +5294,7 @@ public partial class MainWindow : Window
         if (live == ProcessSpawner.ClientRenderer.None)
             return false;
 
-        var want = _settings.UseDx12 && _dx12Available
+        var want = (_settings.UseDx12 && _dx12Available) || GameBuilds.IsS30(root)
             ? ProcessSpawner.ClientRenderer.Dx12
             : ProcessSpawner.ClientRenderer.Dx11;
         return live != want;
@@ -5169,6 +5423,11 @@ public partial class MainWindow : Window
 
     private async void OnChangeMap(object sender, RoutedEventArgs e)
     {
+        if (_listenSession)
+        {
+            OnListenChangeMap();
+            return;
+        }
         if (_localRcon is null || _changeMapBusy)
             return;
         if (!TrySelectedChangePair(out var playlist, out var map))
@@ -5328,9 +5587,11 @@ public partial class MainWindow : Window
     private void SortModeCardsByGroup()
     {
         // Catalog order is already group -> family order -> title, and LINQ sorts
-        // stably, so ranking the group alone keeps that and parks the synthetic
-        // Lobby card at the end of the Apex run where it was appended.
-        var ordered = _modeCards.OrderBy(c => c.GroupRank).ToList();
+        // stably, so ranking the group keeps that. Lobby leads the rail.
+        var ordered = _modeCards
+            .OrderBy(c => c.GroupRank)
+            .ThenBy(c => ModeCardViewModel.IsLobbyPlaylist(c.Id) || (c.MapIsPinned && IsLobbyStem(c.SelectedMapStem)) ? 0 : 1)
+            .ToList();
         _modeCards.Clear();
         foreach (var c in ordered)
             _modeCards.Add(c);
@@ -5454,6 +5715,7 @@ public partial class MainWindow : Window
         if (!string.Equals(_healthMemoRoot, path.Trim(), StringComparison.OrdinalIgnoreCase))
             InvalidateHealthMemo();
         KickHealthRefresh(path);
+        SyncGameBuild(path.Trim());
     }
 
     void ShowSimpleSetupLayout(bool setup)
@@ -5462,12 +5724,10 @@ public partial class MainWindow : Window
             PanelSimpleSetup.Visibility = setup ? Visibility.Visible : Visibility.Collapsed;
         if (PanelSimplePlay is not null)
             PanelSimplePlay.Visibility = setup ? Visibility.Collapsed : Visibility.Visible;
-        if (PanelSimplePlayOptions is not null)
-            PanelSimplePlayOptions.Visibility = setup ? Visibility.Collapsed : Visibility.Visible;
         if (BarSimplePlay is not null)
             BarSimplePlay.Visibility = setup ? Visibility.Collapsed : Visibility.Visible;
         if (BtnTabLocal is not null)
-            BtnTabLocal.Content = setup ? Loc.Get("tab_install") : Loc.Get("tab_play_local");
+            BtnTabLocal.Content = setup ? Loc.Get("tab_install") : Loc.Get("nav_play");
         if (BtnTabServers is not null)
         {
             BtnTabServers.IsEnabled = !setup;
@@ -5480,7 +5740,6 @@ public partial class MainWindow : Window
             ClearServerList();
         }
         ApplyInstallGates();
-        RefreshHeaderSubtitle();
     }
 
     /// <summary>
@@ -5518,18 +5777,15 @@ public partial class MainWindow : Window
         Gate(BtnTabConsole, null);
         Gate(BtnTabMods, null);
         Gate(BtnTabReplays, null);
-        Gate(BtnTabSettings, Loc.Get("tip_settings"));
         Gate(BtnTabToolSettings, Loc.Get("tip_settings"));
-        Gate(BtnHeaderConsole, Loc.Get("tab_console"));
-        Gate(BtnModeToggle, Loc.Get("tip_mode_advanced"));
-        Gate(BtnTabToolAdvanced, Loc.Get("tip_mode_advanced"));
+        Gate(BtnTabAdvanced, null);
 
         if (!locked)
             return;
 
         if (!_settings.SimpleMode)
             ApplyShellMode(simple: true, persist: false);
-        if (_simpleTab is SimpleTab.Console or SimpleTab.Mods or SimpleTab.Replays or SimpleTab.Settings or SimpleTab.Servers)
+        if (_simpleTab is SimpleTab.Console or SimpleTab.Mods or SimpleTab.Plugins or SimpleTab.Replays or SimpleTab.Settings or SimpleTab.Servers)
             ApplySimpleTab(SimpleTab.Play);
     }
 
@@ -5541,24 +5797,6 @@ public partial class MainWindow : Window
         ApplySimpleTab(SimpleTab.Play);
         SetSimpleStatus(Loc.Get("status_install_first"));
         return true;
-    }
-
-    /// <summary>The tab bar already names the open tab; the subtitle carries only what it cannot.</summary>
-    void RefreshHeaderSubtitle()
-    {
-        if (TxtHeaderSubtitle is null)
-            return;
-
-        var label = _settings.SimpleMode
-            ? _simpleTab == SimpleTab.Settings ? Loc.Get("header_settings") : null
-            : _simpleTab switch
-            {
-                SimpleTab.Console => Loc.Get("header_console"),
-                SimpleTab.Settings => Loc.Get("header_settings"),
-                _ => Loc.Get("header_advanced"),
-            };
-
-        TxtHeaderSubtitle.Text = label is null ? string.Empty : "  ·  " + label;
     }
 
     void RefreshSimpleInstallCopy()
@@ -5589,6 +5827,17 @@ public partial class MainWindow : Window
 
         if (_manifest is null)
         {
+            if (_buildChannelLoading)
+            {
+                _installDiskBlocked = true;
+            }
+            else if (ActiveBuild == GameBuild.S30)
+            {
+                _installDiskBlocked = true;
+                _installDiskMessage = Loc.Get("s30_not_available");
+                PaintSize(_installDiskMessage, danger: false);
+                return;
+            }
             PaintSize(Loc.Get("disk_unknown"), danger: false);
             return;
         }
@@ -5831,7 +6080,7 @@ public partial class MainWindow : Window
                     ? Loc.Get("status_update_available")
                     : quick.NeedsUpdate
                         ? Loc.Get("status_play_downloads_off")
-                        : Loc.Get("ready_to_play"));
+                        : ReadyStatus(quick));
                 Log("Folder check ok: " + quick.Summary);
                 return;
             }
@@ -5862,7 +6111,7 @@ public partial class MainWindow : Window
                     ? Loc.Get("status_update_available")
                     : health.NeedsUpdate
                         ? Loc.Get("status_play_downloads_off")
-                        : Loc.Get("ready_to_play"));
+                        : ReadyStatus(health));
                 Log("Folder check ok: " + health.Summary);
             }
             else if (health.NeedsVerify)
@@ -6377,6 +6626,7 @@ public partial class MainWindow : Window
         SetSimpleStatus(Loc.Get("status_removing"));
         SevenZipLocator.KillOurUnpackers();
 
+        var removedBuild = GameBuilds.Detect(root);
         RemoveReport report;
         try
         {
@@ -6398,6 +6648,12 @@ public partial class MainWindow : Window
 
         InvalidateHealthMemo();
         RefreshInstallStateLabels();
+
+        if (report.RootRemoved)
+        {
+            RemoveBuildShortcuts(removedBuild);
+            SyncShortcutCheckbox();
+        }
 
         if (report.RootRemoved && report.Failures.Count == 0)
         {

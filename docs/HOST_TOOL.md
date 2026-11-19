@@ -18,14 +18,19 @@ The install creates one instance called `main` on port 37015.
 ### Starting from the server zip
 
 The zip already holds the current server, so there is nothing to download.
-Extract it, then from that folder run:
+Extract it and open `R5Flowstate Server.cmd` (the tool lives in `ServerTool\`
+and opens this folder by itself), or from that folder run:
 
 ```
 r5f-host install --path .
 ```
 
-or open `R5FlowstateServer.exe`. From then on `r5f-host update` (or the
-Update button) fetches only the files that changed; you never need a new zip.
+From then on `r5f-host update` (or the Update button) fetches only the files
+that changed; you never need a new zip. The tool updates itself too: when a
+new version is ready it shows "Restart to update".
+
+The tool can also be installed on its own from
+https://cdn.r5flowstate.org/host/R5FlowstateServer-Setup.exe.
 
 ## Instances
 

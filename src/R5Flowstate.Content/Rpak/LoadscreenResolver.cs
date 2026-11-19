@@ -64,6 +64,8 @@ public static class LoadscreenResolver
             Add(Path.Combine(dir, stems[0] + "_loadscreen.rpak"));
             foreach (var modPak in ModLoadscreenPaks(installRoot, stems[0]))
                 Add(modPak);
+            foreach (var variant in VariantPaks(dir, stems[0]))
+                Add(variant);
         }
 
         var artPaks = ListArtPaks(installRoot);
@@ -107,6 +109,28 @@ public static class LoadscreenResolver
             if (SafePath.TryJoin(modsDir, mod.FolderName, out var folder) &&
                 SafePath.TryJoin(folder, Path.Combine("paks", "Win64", mapStem + "_loadscreen.rpak"), out var pak))
                 found.Add(pak);
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// Same-map variants ("&lt;stem&gt;_uh_loadscreen.rpak"), closest name first. Retail ships
+    /// some base-map loadscreens as image-less stubs (S30 Broken Moon) while a variant
+    /// of the same map carries the art.
+    /// </summary>
+    private static List<string> VariantPaks(string dir, string mapStem)
+    {
+        var found = new List<string>();
+        if (mapStem.Length == 0 || !mapStem.All(c => char.IsAsciiLetterOrDigit(c) || c == '_'))
+            return found;
+        try
+        {
+            found.AddRange(Directory.EnumerateFiles(dir, mapStem + "_*_loadscreen.rpak")
+                .OrderBy(p => p.Length)
+                .ThenBy(p => p, StringComparer.OrdinalIgnoreCase));
+        }
+        catch
+        {
         }
         return found;
     }
@@ -169,6 +193,48 @@ public static class LoadscreenResolver
         {
             s_artRoot = installRoot;
             s_artPaks = list;
+        }
+        return list;
+    }
+
+    private static readonly object s_lobbyGate = new();
+    private static string? s_lobbyRoot;
+    private static IReadOnlyList<string>? s_lobbyPaks;
+
+    /// <summary>
+    /// The lobby's pool: art paks plus every map's own loadscreen. S30 ships almost no
+    /// art paks, so art alone would leave the lobby on one or two images.
+    /// </summary>
+    public static IReadOnlyList<string> ListLobbyPaks(string installRoot)
+    {
+        if (string.IsNullOrWhiteSpace(installRoot))
+            return Array.Empty<string>();
+
+        lock (s_lobbyGate)
+        {
+            if (s_lobbyPaks is not null &&
+                string.Equals(s_lobbyRoot, installRoot, StringComparison.OrdinalIgnoreCase))
+                return s_lobbyPaks;
+        }
+
+        var list = new List<string>(ListArtPaks(installRoot));
+        var dir = Path.Combine(installRoot, "paks", "Win64");
+        try
+        {
+            if (Directory.Exists(dir))
+                list.AddRange(Directory.EnumerateFiles(dir, "mp_*_loadscreen.rpak")
+                    .Where(p => !Path.GetFileName(p).Contains("lobby", StringComparison.OrdinalIgnoreCase)
+                                && new FileInfo(p).Length >= 4096)
+                    .OrderBy(p => p, StringComparer.OrdinalIgnoreCase));
+        }
+        catch
+        {
+        }
+
+        lock (s_lobbyGate)
+        {
+            s_lobbyRoot = installRoot;
+            s_lobbyPaks = list;
         }
         return list;
     }
@@ -236,6 +302,15 @@ public static class LoadscreenResolver
         foreach (var modPak in ModLoadscreenPaks(installRoot, stems[0]))
         {
             if (File.Exists(modPak) && Take(modPak))
+            {
+                pixels = found;
+                return true;
+            }
+        }
+
+        foreach (var variant in VariantPaks(dir, stems[0]))
+        {
+            if (Take(variant))
             {
                 pixels = found;
                 return true;

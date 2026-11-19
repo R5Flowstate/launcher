@@ -43,9 +43,12 @@ public static class OverlayPaths
         "r5apex_ds.exe",
         "r5apexdata.bin",
         "client.dll",
+        "client_s30.dll",
+        "r5apex_listen_host.dll",
         "server.dll",
         "loader.dll",
         "r5f_sdk_version.txt",
+        "r5f-modtool.exe",
     };
 
     // The game rewrites these on every boot and the launcher on every mod toggle.

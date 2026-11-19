@@ -1,40 +1,24 @@
 using System.Windows;
-using System.Windows.Controls;
+using R5Flowstate.Spawn;
 
 namespace R5Flowstate.Shell;
 
+/// <summary>Client launch line. The server's line lives in Server Settings.</summary>
 public partial class LaunchArgsWindow : Window
 {
-    bool _ready;
-
-    public event Action<string, string>? ExtrasChanged;
+    /// <summary>(extra args, unticked keys)</summary>
+    public event Action<string, string>? ArgsChanged;
 
     public LaunchArgsWindow()
     {
         InitializeComponent();
+        ClientArgs.Changed += () => ArgsChanged?.Invoke(ClientArgs.Extra, ClientArgs.DisabledKeys);
     }
 
-    public void Load(string clientExtra, string dediExtra, string clientApplied, string dediApplied)
-    {
-        _ready = false;
-        TxtClientExtra.Text = clientExtra ?? string.Empty;
-        TxtDediExtra.Text = dediExtra ?? string.Empty;
-        SetApplied(clientApplied, dediApplied);
-        _ready = true;
-    }
+    public void Load(string extra, string disabledKeys, IReadOnlyList<string> generated, string applied) =>
+        ClientArgs.Load(extra, disabledKeys, generated, LaunchArgs.ClientCoreKeys, applied);
 
-    public void SetApplied(string clientApplied, string dediApplied)
-    {
-        TxtClientApplied.Text = clientApplied ?? string.Empty;
-        TxtDediApplied.Text = dediApplied ?? string.Empty;
-    }
-
-    void OnExtrasChanged(object sender, TextChangedEventArgs e)
-    {
-        if (!_ready)
-            return;
-        ExtrasChanged?.Invoke(TxtClientExtra.Text ?? string.Empty, TxtDediExtra.Text ?? string.Empty);
-    }
+    public void SetApplied(string applied) => ClientArgs.SetApplied(applied);
 
     void OnClose(object sender, RoutedEventArgs e)
     {

@@ -32,10 +32,19 @@ public partial class HostSettingsWindow : Window
 
     public event Action? SettingsChanged;
 
+    /// <summary>(extra args, unticked keys) of the dedicated server line.</summary>
+    public event Action<string, string>? DediArgsChanged;
+
     public HostSettingsWindow()
     {
         InitializeComponent();
+        DediArgs.Changed += () => DediArgsChanged?.Invoke(DediArgs.Extra, DediArgs.DisabledKeys);
     }
+
+    public void LoadDediArgs(string extra, string disabledKeys, IReadOnlyList<string> generated, string applied) =>
+        DediArgs.Load(extra, disabledKeys, generated, LaunchArgs.DediCoreKeys, applied);
+
+    public void SetDediApplied(string applied) => DediArgs.SetApplied(applied);
 
     public void Load(
         HostSettingsStore store,
@@ -53,6 +62,15 @@ public partial class HostSettingsWindow : Window
         _settingsFor = settingsFor;
         _formatArgs = formatArgs;
         TxtMode.Text = title;
+        var none = settings.Count == 0;
+        var hide = none ? Visibility.Collapsed : Visibility.Visible;
+        TxtNoSettings.Visibility = none ? Visibility.Visible : Visibility.Collapsed;
+        CardPresets.Visibility = hide;
+        CardSettings.Visibility = hide;
+        BtnReset.Visibility = hide;
+        LblHostArgs.Visibility = hide;
+        PanelHostArgs.Visibility = hide;
+        TxtStatus.Visibility = hide;
         BuildRows(_store.ValuesFor(playlist, settings));
         RefreshPresets(null);
         RefreshArgs();
@@ -110,8 +128,8 @@ public partial class HostSettingsWindow : Window
 
             var row = new Row { Setting = s, Editor = editor, Note = note };
             _rows.Add(row);
-            UpdateNote(row);
         }
+        RefreshNotes();
         _loading = false;
     }
 
@@ -187,21 +205,46 @@ public partial class HostSettingsWindow : Window
     {
         if (_loading)
             return;
-        foreach (var row in _rows)
-            UpdateNote(row);
-        _store.SetValues(_playlist, _settings, CurrentValues());
+        var values = CurrentValues();
+        RefreshNotes();
+        _store.SetValues(_playlist, _settings, values);
         RefreshArgs();
         SettingsChanged?.Invoke();
     }
 
+    void RefreshNotes()
+    {
+        var values = CurrentValues();
+        var conflict = HostCapacity.Conflict(_settings, values);
+        var perTeam = HostCapacity.PerTeam(_settings, values);
+        foreach (var row in _rows)
+        {
+            if (conflict is not null &&
+                (row.Setting.Var.Equals(HostCapacity.PlayersVar, StringComparison.OrdinalIgnoreCase) ||
+                 row.Setting.Var.Equals(HostCapacity.TeamsVar, StringComparison.OrdinalIgnoreCase)))
+            {
+                row.Note.Text = conflict;
+                row.Note.Foreground = (Brush)FindResource("DangerLine");
+                continue;
+            }
+            UpdateNote(row);
+            if (perTeam is not null && row.Setting.Var.Equals(HostCapacity.TeamsVar, StringComparison.OrdinalIgnoreCase))
+                row.Note.Text = row.Note.Text.Length == 0 ? perTeam : row.Note.Text + ", " + perTeam;
+        }
+    }
+
     void RefreshArgs()
     {
-        var overrides = PlaylistSetting.ToOverrides(_settings, CurrentValues());
+        var values = CurrentValues();
+        var overrides = PlaylistSetting.ToOverrides(_settings, values);
         TxtArgs.Text = _formatArgs(overrides);
+        var conflict = HostCapacity.Conflict(_settings, values);
         var invalid = _rows.Count(r => !r.Setting.Validate(ValueOf(r), out _));
-        TxtStatus.Text = invalid > 0
-            ? Loc.Format("host_settings_invalid", invalid)
-            : Loc.Format("host_settings_changed", overrides.Count);
+        TxtStatus.Text = conflict is not null
+            ? conflict
+            : invalid > 0
+                ? Loc.Format("host_settings_invalid", invalid)
+                : Loc.Format("host_settings_changed", overrides.Count);
     }
 
     void RefreshPresets(string? select)

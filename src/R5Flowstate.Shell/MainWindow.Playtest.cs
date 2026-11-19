@@ -16,8 +16,13 @@ public partial class MainWindow
         var env = Environment.GetEnvironmentVariable(ChannelSource.ChannelUrlEnvVar);
         if (!string.IsNullOrWhiteSpace(env))
             return env;
+        if (ActiveBuild == GameBuild.S30 &&
+            Environment.GetEnvironmentVariable(ChannelSource.S30ChannelUrlEnvVar) is { Length: > 0 } s30)
+            return s30;
         if (!string.IsNullOrWhiteSpace(_settings.ChannelUrl))
             return _settings.ChannelUrl;
+        if (ActiveBuild == GameBuild.S30)
+            return ProductConstants.S30ChannelUrl;
         return _settings.JoinPlaytests ? ProductConstants.PlaytestChannelUrl : ProductConstants.DefaultChannelUrl;
     }
 
@@ -25,33 +30,6 @@ public partial class MainWindow
     {
         var playtest = string.Equals(_manifest?.Channel, "playtest", StringComparison.OrdinalIgnoreCase);
         Title = playtest ? "R5Flowstate - " + Loc.Get("playtest_badge") : "R5Flowstate";
-        ApplyRingSwitch();
-    }
-
-    // The LIVE | PLAYTEST switch in both headers drives the same setting as the checkbox.
-    void ApplyRingSwitch()
-    {
-        var playtest = _settings.JoinPlaytests;
-        foreach (var (live, test) in new[] { (BtnRingLive, BtnRingPlaytest), (BtnHdrRingLive, BtnHdrRingPlaytest) })
-        {
-            if (live is null || test is null)
-                continue;
-            live.Background = playtest ? Brushes.Transparent : (Brush)FindResource("PrimaryFill");
-            live.Foreground = playtest ? (Brush)FindResource("TextMuted") : (Brush)FindResource("PrimaryText");
-            test.Background = playtest ? (Brush)FindResource("UpdateFill") : Brushes.Transparent;
-            test.Foreground = playtest ? (Brush)FindResource("UpdateText") : (Brush)FindResource("TextMuted");
-        }
-    }
-
-    void OnRingLive(object sender, RoutedEventArgs e) => RequestRing(false);
-
-    void OnRingPlaytest(object sender, RoutedEventArgs e) => RequestRing(true);
-
-    void RequestRing(bool playtest)
-    {
-        if (ChkJoinPlaytests is null || _settings.JoinPlaytests == playtest)
-            return;
-        ChkJoinPlaytests.IsChecked = playtest;
     }
 
     void OnJoinPlaytestsChanged(object sender, RoutedEventArgs e)
@@ -110,6 +88,5 @@ public partial class MainWindow
         _suppressArgsPersist = true;
         try { ChkJoinPlaytests.IsChecked = _settings.JoinPlaytests; }
         finally { _suppressArgsPersist = was; }
-        ApplyRingSwitch();
     }
 }

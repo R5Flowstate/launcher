@@ -25,6 +25,113 @@ public sealed class ReplaySummary
     public List<ReplayEvent> Events { get; set; } = new();
 }
 
+/// <summary>
+/// The S30 client's .s30dem: a 32-byte header ("R5S30DM1", footer offset at 16,
+/// created unix seconds at 24), records { u8 type, u32 ms, u32 length, payload },
+/// then a JSON footer. A file without a footer (the game was closed while
+/// recording) is read from its records; the client finalizes it at its next start.
+/// </summary>
+public static class S30ReplayReader
+{
+    public const string Extension = ".s30dem";
+    const int HeaderSize = 32;
+    const int RecordHeaderSize = 9;
+    const byte RecDatagram = 1;
+    const byte RecInfo = 7;
+    const int MaxRecord = 65536;
+    const int MaxFooter = 256 * 1024;
+    const int StampLength = 20; // "YYYY-MM-DD_HH-MM-SS_" of an automatic recording
+
+    public static ReplaySummary? Read(FileInfo file, Action<long>? onRead = null)
+    {
+        try
+        {
+            using var fs = new FileStream(file.FullName, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            var head = new byte[HeaderSize];
+            if (fs.Read(head, 0, head.Length) != head.Length || Encoding.ASCII.GetString(head, 0, 8) != "R5S30DM1")
+                return null;
+            var footerOffset = BitConverter.ToUInt64(head, 16);
+            var s = new ReplaySummary { StartMs = BitConverter.ToUInt64(head, 24) * 1000UL };
+
+            if (footerOffset >= HeaderSize && footerOffset < (ulong)fs.Length && fs.Length - (long)footerOffset <= MaxFooter)
+            {
+                fs.Seek((long)footerOffset, SeekOrigin.Begin);
+                var buf = new byte[fs.Length - (long)footerOffset];
+                if (fs.Read(buf, 0, buf.Length) != buf.Length)
+                    return null;
+                var footer = Encoding.UTF8.GetString(buf);
+                ApplyInfo(s, footer);
+                var ms = Regex.Match(footer, "\"durationMs\"\\s*:\\s*([0-9]+)");
+                if (ms.Success && long.TryParse(ms.Groups[1].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var duration))
+                    s.Seconds = (int)(duration / 1000);
+                if (!Regex.IsMatch(footer, "\"datagrams\"\\s*:\\s*[1-9]"))
+                    return null;
+            }
+            else
+            {
+                var rec = new byte[RecordHeaderSize];
+                var datagrams = 0;
+                uint lastMs = 0;
+                var first = true;
+                while (fs.Position + RecordHeaderSize <= fs.Length)
+                {
+                    if (fs.Read(rec, 0, rec.Length) != rec.Length)
+                        break;
+                    var type = rec[0];
+                    var t = BitConverter.ToUInt32(rec, 1);
+                    var len = BitConverter.ToUInt32(rec, 5);
+                    if (type is < 1 or > 7 || len > MaxRecord || fs.Position + len > fs.Length)
+                        break;
+                    onRead?.Invoke(fs.Position);
+                    if (first && type == RecInfo)
+                    {
+                        var payload = new byte[len];
+                        if (fs.Read(payload, 0, (int)len) != len)
+                            break;
+                        ApplyInfo(s, Encoding.UTF8.GetString(payload));
+                    }
+                    else
+                        fs.Seek(len, SeekOrigin.Current);
+                    first = false;
+                    if (type == RecDatagram)
+                        datagrams++;
+                    lastMs = t;
+                }
+                if (datagrams == 0)
+                    return null;
+                s.Seconds = (int)(lastMs / 1000);
+            }
+
+            if (s.Map.Length == 0)
+            {
+                var name = Path.GetFileNameWithoutExtension(file.Name);
+                if (name.Length > StampLength && name[4] == '-' && name[10] == '_' && name[19] == '_')
+                    s.Map = name.Substring(StampLength);
+            }
+            return s;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    static void ApplyInfo(ReplaySummary s, string json)
+    {
+        s.Map = ReplayReader.JsonText(json, "map");
+        s.Player = ReplayReader.JsonText(json, "recorder");
+        s.Mode = ReplayReader.JsonText(json, "mode");
+        var title = ReplayReader.JsonText(json, "modeTitle");
+        if (title.Length > 0)
+            s.ModeTitle = title;
+    }
+}
+
 public sealed class ReplayChapter
 {
     public double Start { get; init; }
@@ -58,6 +165,8 @@ public static class ReplayReader
 
     public static ReplaySummary? Read(FileInfo file, Action<long>? onRead = null)
     {
+        if (file.Extension.Equals(S30ReplayReader.Extension, StringComparison.OrdinalIgnoreCase))
+            return S30ReplayReader.Read(file, onRead);
         try
         {
             using var fs = new FileStream(file.FullName, FileMode.Open, FileAccess.Read,
@@ -153,6 +262,12 @@ public static class ReplayReader
         while (end < offset + max && buf[end] != 0)
             end++;
         return Encoding.ASCII.GetString(buf, offset, end - offset);
+    }
+
+    internal static string JsonText(string json, string key)
+    {
+        var m = Regex.Match(json, "\"" + Regex.Escape(key) + "\"\\s*:\\s*\"([^\"]{0,80})\"");
+        return m.Success ? m.Groups[1].Value : "";
     }
 
     /// <summary>Bookmark times from the replay's .marks file (one number per line).</summary>

@@ -9,6 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="R5Flowstate.ModTool.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\R5Flowstate.Contracts\R5Flowstate.Contracts.csproj" />
   </ItemGroup>
 

@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using R5Flowstate.Content;
@@ -42,15 +43,23 @@ public partial class MainWindow : Window
     PlaylistCatalog _catalog = new();
     IReadOnlyList<ModPackage> _packages = Array.Empty<ModPackage>();
     HostUpdateCheck? _lastCheck;
+    readonly ToolUpdate _tool = new();
     GuiPrefs _prefs = new();
     bool _busy;
     bool _loadingForm;
     bool _consoleDirty;
+    string? _formInstance;
+    readonly DispatcherTimer _saveTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
 
     public MainWindow()
     {
         InitializeComponent();
         _consoleTimer.Tick += (_, _) => FlushConsole();
+        _saveTimer.Tick += (_, _) =>
+        {
+            _saveTimer.Stop();
+            SaveForm();
+        };
         _updateTimer.Tick += async (_, _) => await OnUpdateTimerAsync();
     }
 
@@ -88,11 +97,15 @@ public partial class MainWindow : Window
     async void OnLoaded(object sender, RoutedEventArgs e)
     {
         LoadPrefs();
+        Title = "R5Flowstate Server " + _tool.CurrentVersion;
         _consoleTimer.Start();
-        if (!string.IsNullOrWhiteSpace(_prefs.LastPath))
+        _ = CheckToolAsync();
+        _ = LoadPackagesAsync();
+        var start = !string.IsNullOrWhiteSpace(_prefs.LastPath) ? _prefs.LastPath : ServerFolderAboveTool();
+        if (!string.IsNullOrWhiteSpace(start))
         {
-            TxtPath.Text = _prefs.LastPath;
-            await OpenPathAsync(_prefs.LastPath!);
+            TxtPath.Text = start;
+            await OpenPathAsync(start!);
         }
         else
         {
@@ -101,8 +114,21 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>The server zip carries the tool in ServerTool\ (portable: ServerTool\current\ at run time).</summary>
+    static string? ServerFolderAboveTool()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        for (var i = 0; i < 3 && dir is not null; i++, dir = dir.Parent)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, ProcessSpawner.DediExeName)))
+                return dir.FullName;
+        }
+        return null;
+    }
+
     void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        FlushSave();
         var live = _running.Values.Count(r => r.Supervisor.IsRunning);
         if (live == 0)
             return;
@@ -362,9 +388,44 @@ public partial class MainWindow : Window
 
     async Task OnUpdateTimerAsync()
     {
+        await CheckToolAsync();
         if (_busy || !IsInstalled)
             return;
         await CheckAsync(quiet: true);
+        await LoadPackagesAsync();
+    }
+
+    async Task CheckToolAsync()
+    {
+        if (!_tool.IsInstalled)
+            return;
+        try
+        {
+            var ver = await Task.Run(() => _tool.CheckAndDownloadAsync()).ConfigureAwait(true);
+            if (ver is null)
+                return;
+            TxtToolUpdate.Text = "Server tool " + ver + " is ready.";
+            PanelToolUpdate.Visibility = Visibility.Visible;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            SetStatus("Server tool update check failed: " + ex.Message);
+        }
+    }
+
+    async void OnToolUpdate(object sender, RoutedEventArgs e)
+    {
+        if (_tool.ReadyVersion is null || _busy)
+            return;
+        var live = _running.Values.Count(r => r.Supervisor.IsRunning);
+        if (live > 0)
+        {
+            if (MessageBox.Show(this, $"{live} server(s) are running. Stop them and restart the tool to update?", Title,
+                    MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                return;
+            await StopAllAsync();
+        }
+        _tool.ApplyAndRestart();
     }
 
     // -------------------------------------------------------------- catalog
@@ -374,7 +435,7 @@ public partial class MainWindow : Window
         try
         {
             var mods = ModsStore.Discover(_path)
-                .Where(m => m.Enabled && m.Maps.Count > 0)
+                .Where(m => m.Maps.Count > 0)
                 .Select(m => new ModPlaylistSource
                 {
                     Id = m.Id,
@@ -382,7 +443,7 @@ public partial class MainWindow : Window
                     Maps = m.Maps,
                 })
                 .ToList();
-            _catalog = PlaylistCatalogLoader.Load(_path, "english", includeUnlistedMaps: false, uiLoc: null, mods: mods);
+            _catalog = PlaylistCatalogLoader.Load(_path, "english", uiLoc: null, mods: mods);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
@@ -430,6 +491,7 @@ public partial class MainWindow : Window
 
     void OnInstanceSelected(object sender, SelectionChangedEventArgs e)
     {
+        FlushSave();
         LoadInstanceForm(SelectedInstanceName());
         ShowConsole();
         RefreshButtons();
@@ -437,7 +499,9 @@ public partial class MainWindow : Window
 
     void LoadInstanceForm(string? name)
     {
+        FlushSave();
         var inst = name is null ? null : _cfg.Find(name);
+        _formInstance = inst?.Name;
         PanelInstance.IsEnabled = inst is not null;
         if (inst is null)
             return;
@@ -457,6 +521,8 @@ public partial class MainWindow : Window
             };
             TxtExtra.Text = inst.ExtraArgs ?? string.Empty;
             ChkAutoRestart.IsChecked = inst.AutoRestart;
+            CmbTickRate.SelectedIndex = Math.Max(0, Array.IndexOf(TickRates.Offered,
+                TickRates.Normalize(inst.TickRate, TickRates.Stock)));
 
             var secrets = string.IsNullOrEmpty(_path) ? new InstanceCfg.Secrets() : InstanceCfg.Read(_path, inst);
             PwdJoin.Password = secrets.ServerPassword ?? string.Empty;
@@ -468,6 +534,7 @@ public partial class MainWindow : Window
                 CmbPlaylist.SelectedIndex = -1;
             FillMaps(inst.Map);
             BuildSettingsPanel(inst.PlaylistOverrides);
+            BuildModsPanel(inst.Mods);
         }
         finally
         {
@@ -482,36 +549,136 @@ public partial class MainWindow : Window
     {
         if (_loadingForm)
             return;
-        FillMaps(CmbMap.SelectedItem as string);
-        var inst = SelectedInstance();
-        BuildSettingsPanel(inst?.PlaylistOverrides);
+        var values = ReadSettingValues();
+        var picks = ReadModPicks();
+        _loadingForm = true;
+        try
+        {
+            FillMaps(CmbMap.SelectedItem as string);
+            BuildSettingsPanel(values);
+            BuildModsPanel(picks);
+        }
+        finally
+        {
+            _loadingForm = false;
+        }
+        ScheduleSave();
     }
 
-    void OnAllMapsChanged(object sender, RoutedEventArgs e) => FillMaps(CmbMap.SelectedItem as string);
+    void OnMapChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingForm)
+            return;
+        var picks = ReadModPicks();
+        _loadingForm = true;
+        try
+        {
+            BuildModsPanel(picks);
+        }
+        finally
+        {
+            _loadingForm = false;
+        }
+        ScheduleSave();
+    }
 
+    void OnFormChanged(object sender, RoutedEventArgs e) => ScheduleSave();
+
+    void ScheduleSave()
+    {
+        if (_loadingForm || _formInstance is null)
+            return;
+        _saveTimer.Stop();
+        _saveTimer.Start();
+    }
+
+    void FlushSave()
+    {
+        if (!_saveTimer.IsEnabled)
+            return;
+        _saveTimer.Stop();
+        SaveForm();
+    }
+
+    readonly List<(InstalledMod Mod, CheckBox On, CheckBox Required, bool Forced)> _modControls = new();
+
+    void BuildModsPanel(IReadOnlyList<InstanceMod> picks)
+    {
+        PanelInstanceMods.Children.Clear();
+        _modControls.Clear();
+        if (string.IsNullOrEmpty(_path) || !Directory.Exists(_path))
+            return;
+        var installed = ModsStore.Discover(_path);
+        var forced = InstanceMods.ForcedMods(_path, installed, SelectedPlaylistId(), CmbMap.SelectedItem as string);
+        TxtNoMods.Visibility = installed.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var mod in installed.OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            var pick = picks.FirstOrDefault(p => string.Equals(p.Id, mod.Id, StringComparison.OrdinalIgnoreCase));
+            var isForced = forced.TryGetValue(mod.Id, out var why);
+            var label = (string.IsNullOrWhiteSpace(mod.Name) ? mod.Id : mod.Name) + "  " + mod.Version;
+            var on = new CheckBox
+            {
+                Content = label,
+                IsChecked = isForced || pick is not null,
+                IsEnabled = !isForced,
+                VerticalAlignment = VerticalAlignment.Center,
+                ToolTip = isForced ? "Always on: this server's " + why + " comes from this mod." : mod.Id,
+            };
+            var req = new CheckBox
+            {
+                Content = "Required",
+                IsChecked = isForced || pick is null || pick.Required,
+                IsEnabled = !isForced && on.IsChecked == true,
+                VerticalAlignment = VerticalAlignment.Center,
+                ToolTip = "Players must have this mod to join. Unchecked: players may join without it.",
+            };
+            on.Checked += (_, _) => { req.IsEnabled = true; ScheduleSave(); };
+            on.Unchecked += (_, _) => { req.IsEnabled = false; ScheduleSave(); };
+            req.Checked += (_, _) => ScheduleSave();
+            req.Unchecked += (_, _) => ScheduleSave();
+            var row = new Grid { Margin = new Thickness(0, 0, 0, 6) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            Grid.SetColumn(req, 1);
+            row.Children.Add(on);
+            row.Children.Add(req);
+            PanelInstanceMods.Children.Add(row);
+            _modControls.Add((mod, on, req, isForced));
+        }
+    }
+
+    List<InstanceMod> ReadModPicks() => _modControls
+        .Where(c => !c.Forced && c.On.IsChecked == true)
+        .Select(c => new InstanceMod { Id = c.Mod.Id, Required = c.Required.IsChecked == true })
+        .ToList();
+
+    /// <summary>Only maps this playlist runs on; a playlist pinned to one map selects it.</summary>
     void FillMaps(string? prefer)
     {
-        var maps = ChkAllMaps.IsChecked == true ? _catalog.AllMaps : _catalog.MapsForPlaylist(SelectedPlaylistId());
+        var maps = _catalog.HostMapsFor(SelectedPlaylistId());
         CmbMap.ItemsSource = maps;
         var hit = maps.FirstOrDefault(m => string.Equals(m, prefer, StringComparison.OrdinalIgnoreCase));
         if (hit is not null)
             CmbMap.SelectedItem = hit;
-        else if (!string.IsNullOrWhiteSpace(prefer) && ChkAllMaps.IsChecked != true
-                 && _catalog.AllMaps.Any(m => string.Equals(m, prefer, StringComparison.OrdinalIgnoreCase)))
-        {
-            ChkAllMaps.IsChecked = true;
-        }
         else if (maps.Count > 0)
             CmbMap.SelectedIndex = 0;
+        CmbMap.IsEnabled = maps.Count > 1;
     }
 
     IReadOnlyList<PlaylistSetting> CurrentSettings() =>
-        _catalog.Find(SelectedPlaylistId())?.Settings ?? Array.Empty<PlaylistSetting>();
+        ForcedLegend.WithLegend(_catalog.Find(SelectedPlaylistId())?.Settings ?? Array.Empty<PlaylistSetting>(), _path);
 
     void BuildSettingsPanel(IReadOnlyDictionary<string, string>? values)
     {
         PanelSettings.Children.Clear();
         _settingControls.Clear();
+        _capacityHint = new TextBlock
+        {
+            Style = (Style)FindResource("MonoNote"),
+            Margin = new Thickness(0, 0, 0, 8),
+            TextWrapping = TextWrapping.Wrap,
+        };
+        PanelSettings.Children.Add(_capacityHint);
         var settings = CurrentSettings();
         TxtNoSettings.Visibility = settings.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         BtnResetSettings.Visibility = settings.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
@@ -553,11 +720,61 @@ public partial class MainWindow : Window
                 }
             }
             control.ToolTip ??= s.Var;
+            switch (control)
+            {
+                case CheckBox cb:
+                    cb.Checked += (_, _) => { RefreshLegendGate(); ScheduleSave(); };
+                    cb.Unchecked += (_, _) => { RefreshLegendGate(); ScheduleSave(); };
+                    break;
+                case ComboBox combo:
+                    combo.SelectionChanged += (_, _) => ScheduleSave();
+                    break;
+                case TextBox tb:
+                    tb.TextChanged += (_, _) => { UpdateCapacityHint(); ScheduleSave(); };
+                    break;
+            }
             _settingControls[s.Var] = (s, control);
+        }
+        RefreshLegendGate();
+        UpdateCapacityHint();
+    }
+
+    TextBlock? _capacityHint;
+
+    void UpdateCapacityHint()
+    {
+        if (_capacityHint is null)
+            return;
+        var settings = CurrentSettings();
+        var values = ReadSettingValues();
+        var conflict = HostCapacity.Conflict(settings, values);
+        if (conflict is not null)
+        {
+            _capacityHint.Text = conflict;
+            if (TryFindResource("DangerLine") is Brush danger)
+                _capacityHint.Foreground = danger;
+            return;
+        }
+        if (TryFindResource("TextMuted") is Brush muted)
+            _capacityHint.Foreground = muted;
+        var perTeam = HostCapacity.PerTeam(settings, values);
+        _capacityHint.Text = perTeam ?? string.Empty;
+    }
+
+    void RefreshLegendGate()
+    {
+        if (_settingControls.TryGetValue(ForcedLegend.RefVar, out var legend) &&
+            _settingControls.TryGetValue(ForcedLegend.ForceVar, out var force) && force.Item2 is CheckBox cb)
+        {
+            legend.Item2.IsEnabled = cb.IsChecked == true;
         }
     }
 
-    void OnResetSettings(object sender, RoutedEventArgs e) => BuildSettingsPanel(null);
+    void OnResetSettings(object sender, RoutedEventArgs e)
+    {
+        BuildSettingsPanel(null);
+        ScheduleSave();
+    }
 
     Dictionary<string, string> ReadSettingValues()
     {
@@ -575,9 +792,9 @@ public partial class MainWindow : Window
         return values;
     }
 
-    void OnSaveInstance(object sender, RoutedEventArgs e)
+    void SaveForm()
     {
-        var inst = SelectedInstance();
+        var inst = _formInstance is null ? null : _cfg.Find(_formInstance);
         if (inst is null || string.IsNullOrEmpty(_path))
             return;
 
@@ -602,6 +819,12 @@ public partial class MainWindow : Window
                 SetStatus($"{s.Label}: {reason}.");
                 return;
             }
+        }
+        var conflict = HostCapacity.Conflict(settings, values);
+        if (conflict is not null)
+        {
+            SetStatus(conflict + ".");
+            return;
         }
 
         var secrets = new InstanceCfg.Secrets
@@ -638,8 +861,12 @@ public partial class MainWindow : Window
             inst.Map = CmbMap.SelectedItem as string;
             inst.ExtraArgs = NullIfEmpty(TxtExtra.Text.Trim());
             inst.AutoRestart = ChkAutoRestart.IsChecked == true;
+            inst.TickRate = CmbTickRate.SelectedIndex >= 0 && CmbTickRate.SelectedIndex < TickRates.Offered.Length
+                ? TickRates.Offered[CmbTickRate.SelectedIndex]
+                : TickRates.Stock;
             inst.PlaylistOverrides = PlaylistSetting.ToOverrides(settings, values)
                 .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
+            inst.Mods = ReadModPicks();
 
             InstanceCfg.Write(_path, inst, secrets);
             SaveConfig();
@@ -649,8 +876,19 @@ public partial class MainWindow : Window
         {
             SetStatus(ex.Message);
         }
-        RefreshInstanceList(inst.Name);
+        RefreshInstanceLabels();
         RefreshArgs();
+    }
+
+    void RefreshInstanceLabels()
+    {
+        foreach (var item in LstInstances.Items.OfType<ListBoxItem>())
+        {
+            if (item.Tag is not string name || _cfg.Find(name) is not { } inst)
+                continue;
+            var state = _running.TryGetValue(inst.Name, out var r) && r.Supervisor.IsRunning ? r.State : "stopped";
+            item.Content = $"{inst.Name}   :{inst.Port}   {state}";
+        }
     }
 
     static string? NullIfEmpty(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
@@ -664,7 +902,7 @@ public partial class MainWindow : Window
             return;
         }
         using var s = new DediSupervisor(_path, _cfg, inst);
-        TxtArgs.Text = ProcessSpawner.DediExeName + " " + LaunchArgs.FormatArgumentsOnly(s.BuildArgs());
+        TxtArgs.Text = ProcessSpawner.DediExeName + " " + DediSupervisor.Describe(s.BuildArgs());
     }
 
     void OnAddInstance(object sender, RoutedEventArgs e)
@@ -768,6 +1006,7 @@ public partial class MainWindow : Window
 
     void StartInstance(string name)
     {
+        FlushSave();
         if (!IsInstalled)
         {
             SetStatus("Install the server first.");
@@ -954,15 +1193,37 @@ public partial class MainWindow : Window
         using var mods = new HostMods(_path);
         var locked = mods.ReadLock().Pins;
         var required = ModsStore.ReadRequiredMods(_path).Select(r => r.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var outdated = new List<string>();
         foreach (var m in mods.Installed())
         {
             var pin = locked.TryGetValue(m.ThunderstoreFullName, out var v) ? "lock " + v : "unlocked";
-            LstInstalledMods.Items.Add(new ListBoxItem
+            var latest = LatestVersion(m);
+            var item = new ListBoxItem
             {
-                Content = $"{m.FolderName,-34} {m.Version,-9} {(required.Contains(m.Id) ? "required" : "optional"),-9} {pin}",
+                Content = $"{m.FolderName,-34} {m.Version,-9} {(required.Contains(m.Id) ? "required" : "optional"),-9} {pin}"
+                    + (latest is null ? "" : "   update -> " + latest),
                 Tag = m,
-            });
+            };
+            if (latest is not null)
+            {
+                item.Foreground = (System.Windows.Media.Brush)FindResource("UpdateFill");
+                outdated.Add(m.FolderName + " " + latest);
+            }
+            LstInstalledMods.Items.Add(item);
         }
+        TabMods.Content = outdated.Count == 0 ? "Mods" : $"Mods ({outdated.Count})";
+        TxtModUpdates.Text = outdated.Count == 0 ? string.Empty
+            : $"{outdated.Count} mod update(s) available: {string.Join(", ", outdated)}. Press Update all.";
+        TxtModUpdates.Visibility = outdated.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    string? LatestVersion(InstalledMod m)
+    {
+        if (string.IsNullOrEmpty(m.ThunderstoreFullName))
+            return null;
+        var pkg = _packages.FirstOrDefault(p => string.Equals(p.FullName, m.ThunderstoreFullName, StringComparison.OrdinalIgnoreCase));
+        var latest = pkg?.Versions.FirstOrDefault()?.VersionNumber;
+        return latest is not null && ModVersion.Compare(latest, m.ThunderstoreVersion) > 0 ? latest : null;
     }
 
     async Task LoadPackagesAsync()
@@ -978,6 +1239,7 @@ public partial class MainWindow : Window
             }).ConfigureAwait(true);
             TxtModDetail.Text = _packages.Count + " packages.";
             FilterCatalog();
+            RefreshMods();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -1031,18 +1293,31 @@ public partial class MainWindow : Window
         return !_busy;
     }
 
-    async Task RunModOp(string label, Func<HostMods, Task<string>> op)
+    async Task RunModOp(string label, Func<HostMods, IProgress<ContentInstallProgress>, Task<string>> op)
     {
         if (!CanChangeMods())
             return;
         try
         {
             SetBusy(true, label);
+            TxtModProgress.Text = label;
+            TxtModProgressPct.Text = string.Empty;
+            BarModProgress.IsIndeterminate = true;
+            PanelModProgress.Visibility = Visibility.Visible;
+            var last = DateTime.MinValue;
+            var progress = new Progress<ContentInstallProgress>(p =>
+            {
+                var milestone = p.Phase is "check" or "commit";
+                if (!milestone && DateTime.UtcNow - last < TimeSpan.FromMilliseconds(100))
+                    return;
+                last = DateTime.UtcNow;
+                ShowModProgress(p);
+            });
             var path = _path;
             var result = await Task.Run(async () =>
             {
                 using var mods = new HostMods(path);
-                return await op(mods).ConfigureAwait(false);
+                return await op(mods, progress).ConfigureAwait(false);
             }).ConfigureAwait(true);
             TxtModDetail.Text = result;
             ReloadCatalog();
@@ -1054,19 +1329,62 @@ public partial class MainWindow : Window
         }
         finally
         {
+            PanelModProgress.Visibility = Visibility.Collapsed;
             SetBusy(false);
             RefreshMods();
         }
     }
 
+    void ShowModProgress(ContentInstallProgress p)
+    {
+        // Download is the long phase; extract/check/commit share the tail of each step.
+        var frac = p.Phase switch
+        {
+            "download" when p.Total > 0 => 0.8 * p.Current / p.Total,
+            "extract" when p.Total > 0 => 0.8 + 0.15 * p.Current / p.Total,
+            "extract" => 0.8,
+            "check" => 0.95,
+            "commit" => 0.98,
+            _ => 0.0,
+        };
+        var steps = Math.Max(1, p.StepCount);
+        var pct = Math.Clamp(100.0 * (p.StepIndex + Math.Clamp(frac, 0, 1)) / steps, 0, 100);
+        var indeterminate = p.Phase == "download" && p.Total <= 0;
+        BarModProgress.IsIndeterminate = indeterminate;
+        BarModProgress.Value = pct;
+        BarProgress.Value = pct;
+        TxtModProgressPct.Text = indeterminate ? string.Empty : pct.ToString("0") + "%";
+
+        var verb = p.Phase switch
+        {
+            "download" => "Downloading",
+            "extract" => "Extracting",
+            "check" => "Checking",
+            "commit" => "Installing",
+            _ => p.Phase,
+        };
+        var text = verb + " " + p.Track;
+        if (p.StepCount > 1)
+            text += $"  ({p.StepIndex + 1}/{p.StepCount})";
+        if (p.Unit == ProgressUnit.Bytes && p.Total > 0)
+            text += $"  {FormatBytes(p.Current)} / {FormatBytes(p.Total)}";
+        TxtModProgress.Text = text;
+        SetStatus(text);
+    }
+
+    static string FormatBytes(long n) =>
+        n >= 1L << 30 ? $"{n / (double)(1L << 30):0.00} GB"
+        : n >= 1L << 20 ? $"{n / (double)(1L << 20):0.0} MB"
+        : $"{n / 1024.0:0} KB";
+
     async void OnModInstall(object sender, RoutedEventArgs e)
     {
         if ((LstCatalog.SelectedItem as ListBoxItem)?.Tag is not ModPackage p)
             return;
-        var required = ChkModOptional.IsChecked != true;
-        await RunModOp("Installing " + p.FullName, async mods =>
+        const bool required = true;
+        await RunModOp("Installing " + p.FullName, async (mods, progress) =>
         {
-            var plan = await mods.AddAsync(new[] { p.FullName }, required, null, CancellationToken.None).ConfigureAwait(false);
+            var plan = await mods.AddAsync(new[] { p.FullName }, required, null, CancellationToken.None, progress).ConfigureAwait(false);
             return "Installed " + string.Join(", ", plan.Select(s => s.Pin));
         });
     }
@@ -1076,9 +1394,9 @@ public partial class MainWindow : Window
         var code = TxtProfileCode.Text.Trim();
         if (code.Length == 0)
             return;
-        await RunModOp("Importing profile", async mods =>
+        await RunModOp("Importing profile", async (mods, progress) =>
         {
-            var plan = await mods.ImportProfileAsync(code, null, CancellationToken.None).ConfigureAwait(false);
+            var plan = await mods.ImportProfileAsync(code, null, CancellationToken.None, progress).ConfigureAwait(false);
             return "Installed " + plan.Count + " mod(s).";
         });
     }
@@ -1088,44 +1406,24 @@ public partial class MainWindow : Window
         if ((LstInstalledMods.SelectedItem as ListBoxItem)?.Tag is not InstalledMod m)
             return;
         var key = string.IsNullOrEmpty(m.ThunderstoreFullName) ? m.FolderName : m.ThunderstoreFullName;
-        await RunModOp("Removing " + key, mods =>
+        await RunModOp("Removing " + key, (mods, _) =>
         {
             mods.Remove(key);
             return Task.FromResult("Removed " + key);
         });
     }
 
-    async void OnModTogglePolicy(object sender, RoutedEventArgs e)
-    {
-        if ((LstInstalledMods.SelectedItem as ListBoxItem)?.Tag is not InstalledMod m || !CanChangeMods())
-            return;
-        await RunModOp("Updating mod policy", _ =>
-        {
-            var req = ModsStore.ReadRequiredMods(_path).ToList();
-            var allowed = ModsStore.ReadAllowedMods(_path).ToList();
-            var isReq = req.Any(r => string.Equals(r.Id, m.Id, StringComparison.OrdinalIgnoreCase));
-            req.RemoveAll(r => string.Equals(r.Id, m.Id, StringComparison.OrdinalIgnoreCase));
-            if (!isReq)
-                req.Add((m.Id, true));
-            if (!allowed.Any(r => string.Equals(r.Id, m.Id, StringComparison.OrdinalIgnoreCase)))
-                allowed.Add((m.Id, true));
-            ModsStore.WriteRequiredMods(_path, req);
-            ModsStore.WriteAllowedMods(_path, allowed);
-            return Task.FromResult(m.Id + (isReq ? " is optional for players." : " is required for players."));
-        });
-    }
-
     async void OnModUpdateAll(object sender, RoutedEventArgs e) =>
-        await RunModOp("Updating mods", async mods =>
+        await RunModOp("Updating mods", async (mods, progress) =>
         {
-            var moved = await mods.UpdateAllAsync(null, CancellationToken.None).ConfigureAwait(false);
+            var moved = await mods.UpdateAllAsync(null, CancellationToken.None, progress).ConfigureAwait(false);
             return moved.Count == 0 ? "All mods are at their newest version." : "Updated " + string.Join(", ", moved);
         });
 
     async void OnModSync(object sender, RoutedEventArgs e) =>
-        await RunModOp("Syncing mods", async mods =>
+        await RunModOp("Syncing mods", async (mods, progress) =>
         {
-            await mods.SyncAsync(null, CancellationToken.None).ConfigureAwait(false);
+            await mods.SyncAsync(null, CancellationToken.None, progress).ConfigureAwait(false);
             return "Mods match mods.lock.json.";
         });
 

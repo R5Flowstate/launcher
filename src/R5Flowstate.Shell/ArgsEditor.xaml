@@ -1,0 +1,28 @@
+<UserControl x:Class="R5Flowstate.Shell.ArgsEditor"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:R5Flowstate.Shell">
+  <StackPanel>
+    <TextBlock Text="{loc:T args_always_sent}" Style="{StaticResource FieldLabel}"/>
+    <TextBlock x:Name="TxtCore" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap"
+               Foreground="{DynamicResource TextMuted}" Margin="0,0,0,14"/>
+
+    <TextBlock Text="{loc:T args_launcher}" Style="{StaticResource FieldLabel}"/>
+    <TextBlock Text="{loc:T args_launcher_hint}" FontSize="11.5" TextWrapping="Wrap"
+               Foreground="{DynamicResource TextMuted}" Margin="0,0,0,8"/>
+    <WrapPanel x:Name="PanelArgs" Margin="0,0,0,14"/>
+
+    <TextBlock Text="{loc:T label_extra_args}" Style="{StaticResource FieldLabel}"/>
+    <TextBox x:Name="TxtExtra" FontFamily="Consolas" FontSize="12"
+             Margin="0,0,0,12" MinHeight="32"
+             TextChanged="OnExtraChanged"/>
+
+    <TextBlock Text="{loc:T launch_args_applied}" Style="{StaticResource FieldLabel}"/>
+    <TextBox x:Name="TxtApplied" IsReadOnly="True" TextWrapping="Wrap"
+             Style="{StaticResource PlainTextBox}"
+             FontFamily="Consolas" FontSize="12"
+             Foreground="{DynamicResource TextCode}"
+             MinHeight="48" MaxHeight="140"
+             VerticalScrollBarVisibility="Auto"/>
+  </StackPanel>
+</UserControl>

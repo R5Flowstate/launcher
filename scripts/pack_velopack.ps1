@@ -80,6 +80,21 @@ if (-not (Test-Path $oodleDest)) {
 }
 Write-Host "staged $oodleName from $($oodleCandidates[0])"
 
+# Fresh Windows lacks XInput 1.3 / D3DCompiler_43 (DirectX June 2010) and the
+# VC++ runtime. Setup and the shell's Play preflight install them from here.
+$redistSrc = Join-Path $RepoRoot "tools\redist"
+& py -3 (Join-Path $RepoRoot "tools\fetch_redist.py")
+if ($LASTEXITCODE -ne 0) { Write-Error "fetch_redist.py failed (exit $LASTEXITCODE)" }
+$redistDest = Join-Path $publish "redist"
+if (Test-Path $redistDest) { Remove-Item -Recurse -Force $redistDest }
+Copy-Item -Recurse -Force $redistSrc $redistDest
+foreach ($f in @("vc_redist.x64.exe", "dx\DXSETUP.exe", "dx\APR2007_xinput_x64.cab", "dx\Jun2010_D3DCompiler_43_x64.cab")) {
+    if (-not (Test-Path (Join-Path $redistDest $f))) {
+        Write-Error "redist file missing after staging: $f"
+    }
+}
+Write-Host "staged redist -> $redistDest"
+
 # Python also ships a `vpk` (Valve Pak). Velopack's tool lives in the dotnet tools dir.
 $vpkExe = Join-Path $env:USERPROFILE ".dotnet\tools\vpk.exe"
 if (-not (Test-Path $vpkExe)) {

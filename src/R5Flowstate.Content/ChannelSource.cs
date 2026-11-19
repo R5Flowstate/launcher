@@ -9,6 +9,9 @@ namespace R5Flowstate.Content;
 public static class ChannelSource
 {
     public const string ChannelUrlEnvVar = "R5F_CHANNEL_URL";
+
+    /// <summary>Overrides the S30.1 channel only, so a staged S30.1 channel never reaches another season's folder.</summary>
+    public const string S30ChannelUrlEnvVar = "R5F_S30_CHANNEL_URL";
     public const string NotesUrlEnvVar = "R5F_NOTES_URL";
 
     public static async Task<ChannelManifest> LoadAsync(

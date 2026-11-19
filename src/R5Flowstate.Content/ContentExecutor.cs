@@ -236,7 +236,7 @@ public static class ContentExecutor
         if (failures.TryDequeue(out var first))
         {
             result.Reason = Classify(first.Ex);
-            result.Error = first.Ex.Message;
+            result.Error = ContentDiagnostics.Describe(first.Ex);
             result.OffendingPath = first.Path;
             return result;
         }

@@ -16,9 +16,30 @@ public partial class MainWindow
         {
             _handoff = LauncherHandoffListener.Start();
             _handoff.RequestReceived += req => Dispatcher.BeginInvoke(() => _ = HandleModJoinHandoffAsync(req));
+            _handoff.LocalOptionsReceived += options => Dispatcher.BeginInvoke(() => ApplyLobbyOptions(options));
         }
 
         return _handoff.ToEnvironment();
+    }
+
+    /// <summary>The lobby and the launcher show one tick rate and one cheats pick; the last change wins.</summary>
+    void ApplyLobbyOptions(LocalOptions options)
+    {
+        if (_settings.TickRate != options.TickRate)
+        {
+            _settings.TickRate = options.TickRate;
+            try { SettingsStore.Save(_settings); }
+            catch (Exception ex) { Log($"Settings save failed: {ex.Message}"); }
+            ApplyTickRateSegments();
+            RefreshArgPreviews();
+            Log($"Lobby picked {options.TickRate} Hz for local matches.");
+        }
+
+        if (ChkSimpleCheats is not null && (ChkSimpleCheats.IsChecked == true) != options.Cheats)
+        {
+            ChkSimpleCheats.IsChecked = options.Cheats;
+            Log("Lobby turned cheats " + (options.Cheats ? "on." : "off."));
+        }
     }
 
     void DisposeHandoff()

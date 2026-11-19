@@ -3,6 +3,30 @@
   "kind": "notes",
   "entries": [
     {
+      "date": "19 Nov 2026",
+      "title": "Launcher 0.1.64",
+      "items": [
+        "Add R5F 2.0 install and play",
+        "Download HD textures for R5F 2.0",
+        "Turn off mod versions that were revoked",
+        "Follow tick rate and cheats picked in the game lobby",
+        "Fix local matches on mixed-case playlists"
+      ]
+    },
+    {
+      "date": "20 Oct 2026",
+      "title": "Launcher 0.1.63",
+      "items": [
+        "Fix the game getting stuck on repair after an unfinished HD texture download",
+        "Let you play while HD textures are still downloading",
+        "Only install mod versions reviewed by R5Flowstate",
+        "Show a verified badge on reviewed mods",
+        "Add a search box to the playlist list",
+        "Set player and team count when hosting",
+        "Translate Mod Manager into every language"
+      ]
+    },
+    {
       "date": "9 Oct 2026",
       "title": "Launcher 0.1.62",
       "items": [

@@ -11,7 +11,7 @@ public partial class MainWindow
     private readonly List<ServerRowViewModel> _serverRows = new();
     private DispatcherTimer? _browserTimer;
     private CancellationTokenSource? _browserCts;
-    private enum SimpleTab { Play, Servers, Leaderboards, Console, Mods, Replays, Blog, Notes, Credits, Settings }
+    private enum SimpleTab { Play, Servers, Leaderboards, Console, Mods, Plugins, Replays, Blog, Notes, Settings, Advanced }
 
     private SimpleTab _simpleTab;
     private bool _joinBusy;
@@ -29,41 +29,17 @@ public partial class MainWindow
             if (IsBrowserVisible())
                 await RefreshServerListAsync(quiet: true).ConfigureAwait(true);
         };
-        ApplySimpleTab(SimpleTab.Play);
-        ApplyAdvServersCollapsed();
-        if (!_settings.SimpleMode)
-            _ = OpenServersAsync();
+        ApplySimpleTab(_settings.SimpleMode ? SimpleTab.Play : SimpleTab.Advanced);
         RefreshDediModPolicyUi();
-    }
-
-    private void OnToggleAdvServers(object sender, RoutedEventArgs e)
-    {
-        _settings.AdvancedServersCollapsed = !_settings.AdvancedServersCollapsed;
-        try { SettingsStore.Save(_settings); }
-        catch (Exception ex) { Log($"Settings save failed: {ex.Message}"); }
-        ApplyAdvServersCollapsed();
-    }
-
-    private void ApplyAdvServersCollapsed()
-    {
-        if (PanelAdvServersBody is null || BtnAdvServersToggle is null)
-            return;
-        var collapsed = _settings.AdvancedServersCollapsed;
-        PanelAdvServersBody.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
-        BtnAdvServersToggle.Content = collapsed ? "\u25B8" : "\u25BE";
     }
 
     private bool IsBrowserVisible()
     {
         if (!IsLoaded)
             return false;
-        if (_settings.SimpleMode)
-        {
-            return _simpleTab == SimpleTab.Servers &&
-                   !NeedsSetup(ReadInstallPathBox()) &&
-                   ServersUnlocked();
-        }
-        return true;
+        return _simpleTab == SimpleTab.Servers &&
+               !NeedsSetup(ReadInstallPathBox()) &&
+               ServersUnlocked();
     }
 
     private void OnSimpleTabLocal(object sender, RoutedEventArgs e) =>
@@ -81,11 +57,17 @@ public partial class MainWindow
         _ = RefreshModsPanelAsync();
     }
 
+    private void OnSimpleTabPlugins(object sender, RoutedEventArgs e)
+    {
+        if (TabBlockedBySetup())
+            return;
+
+        ApplySimpleTab(SimpleTab.Plugins);
+        _ = RefreshPluginsAsync();
+    }
+
     private void OnSimpleTabNotes(object sender, RoutedEventArgs e) =>
         ApplySimpleTab(SimpleTab.Notes);
-
-    private void OnSimpleTabCredits(object sender, RoutedEventArgs e) =>
-        ApplySimpleTab(SimpleTab.Credits);
 
     private const double TabScrollStep = 140;
 
@@ -119,12 +101,6 @@ public partial class MainWindow
     {
         if (TabBlockedBySetup())
             return;
-
-        if (!_settings.SimpleMode && _simpleTab == SimpleTab.Settings)
-        {
-            ApplySimpleTab(SimpleTab.Play);
-            return;
-        }
 
         ApplySimpleTab(SimpleTab.Settings);
     }
@@ -162,7 +138,21 @@ public partial class MainWindow
 
     private void ApplySimpleTab(SimpleTab tab)
     {
+        if (tab != _simpleTab)
+            AnimateTabChange();
+        var modeChanged = _settings.SimpleMode == (tab == SimpleTab.Advanced);
+        var leavingAdvanced = !_settings.SimpleMode && tab != SimpleTab.Advanced;
         _simpleTab = tab;
+        _settings.SimpleMode = tab != SimpleTab.Advanced;
+        if (leavingAdvanced)
+            SyncSimpleLaunchOptions();
+        if (modeChanged && IsLoaded)
+        {
+            try { SettingsStore.Save(_settings); }
+            catch (Exception ex) { Log($"Settings save failed: {ex.Message}"); }
+        }
+        if (PanelAdvanced is not null)
+            PanelAdvanced.Visibility = tab == SimpleTab.Advanced ? Visibility.Visible : Visibility.Collapsed;
         if (PanelSimpleLocal is not null)
             PanelSimpleLocal.Visibility = tab == SimpleTab.Play ? Visibility.Visible : Visibility.Collapsed;
         if (PanelSimpleServers is not null)
@@ -172,6 +162,8 @@ public partial class MainWindow
             PanelSimpleConsole.Visibility = tab == SimpleTab.Console ? Visibility.Visible : Visibility.Collapsed;
         if (PanelSimpleMods is not null)
             PanelSimpleMods.Visibility = tab == SimpleTab.Mods ? Visibility.Visible : Visibility.Collapsed;
+        if (PanelSimplePlugins is not null)
+            PanelSimplePlugins.Visibility = tab == SimpleTab.Plugins ? Visibility.Visible : Visibility.Collapsed;
         if (PanelSimpleReplays is not null)
             PanelSimpleReplays.Visibility = tab == SimpleTab.Replays ? Visibility.Visible : Visibility.Collapsed;
         SyncBlogTab(tab);
@@ -179,8 +171,6 @@ public partial class MainWindow
             PanelSimpleNotes.Visibility = tab == SimpleTab.Notes ? Visibility.Visible : Visibility.Collapsed;
         if (tab == SimpleTab.Notes && ScrollNotes is not null)
             Dispatcher.BeginInvoke(ScrollNotes.ScrollToTop, DispatcherPriority.Background);
-        if (PanelSimpleCredits is not null)
-            PanelSimpleCredits.Visibility = tab == SimpleTab.Credits ? Visibility.Visible : Visibility.Collapsed;
         if (PanelSimpleSettings is not null)
             PanelSimpleSettings.Visibility = tab == SimpleTab.Settings ? Visibility.Visible : Visibility.Collapsed;
         if (TxtBrowserStatus is not null)
@@ -209,41 +199,18 @@ public partial class MainWindow
         StyleTab(BtnTabLocal, tab == SimpleTab.Play);
         StyleTab(BtnTabServers, tab == SimpleTab.Servers);
         StyleTab(BtnTabConsole, tab == SimpleTab.Console);
-        StyleTab(BtnTabMods, tab == SimpleTab.Mods);
+        StyleTab(BtnTabMods, tab is SimpleTab.Mods or SimpleTab.Plugins);
         StyleTab(BtnTabReplays, tab == SimpleTab.Replays);
-        StyleTab(BtnTabNotes, tab == SimpleTab.Notes);
-        StyleTab(BtnTabCredits, tab == SimpleTab.Credits);
+        StyleTab(BtnTabNews, tab is SimpleTab.Blog or SimpleTab.Notes);
+        StyleTab(BtnTabAdvanced, tab == SimpleTab.Advanced);
+        MoveNavIndicator(animate: true);
         SyncNotesUnreadDot(markSeen: tab == SimpleTab.Notes);
-        StyleHeaderTool(BtnHeaderConsole, tab == SimpleTab.Console);
-        StyleHeaderTool(BtnTabSettings, tab == SimpleTab.Settings);
         StyleHeaderTool(BtnTabToolSettings, tab == SimpleTab.Settings);
 
-        if (!_settings.SimpleMode)
-        {
-            var overlay = tab is SimpleTab.Console or SimpleTab.Settings;
-            if (PanelAdvanced is not null)
-                PanelAdvanced.Visibility = overlay ? Visibility.Collapsed : Visibility.Visible;
-            if (PanelSimple is not null)
-                PanelSimple.Visibility = overlay ? Visibility.Visible : Visibility.Collapsed;
-            if (BarSimpleTabs is not null)
-                BarSimpleTabs.Visibility = overlay ? Visibility.Collapsed : Visibility.Visible;
-            if (BarSimpleFooter is not null)
-                BarSimpleFooter.Visibility = overlay ? Visibility.Collapsed : Visibility.Visible;
-        }
-        else
-        {
-            if (BarSimpleTabs is not null)
-                BarSimpleTabs.Visibility = Visibility.Visible;
-            if (BarSimpleFooter is not null)
-                BarSimpleFooter.Visibility = Visibility.Visible;
-        }
-
-        if (tab == SimpleTab.Credits)
-            BindCreditsShuffled();
         if (tab == SimpleTab.Console)
             PinFollowedConsoles();
-
-        RefreshHeaderSubtitle();
+        if (tab == SimpleTab.Advanced)
+            RefreshArgPreviews();
 
         if (tab == SimpleTab.Servers && ServersUnlocked() && !NeedsSetup(ReadInstallPathBox()))
         {
@@ -418,9 +385,10 @@ public partial class MainWindow
         if (!quiet)
             SetBrowserStatus(Loc.Get("lb_refreshing"));
 
-        var wire = VersionIdentity.ResolveExpectedWireVersion(
-            TxtInstallRoot?.Text?.Trim() ?? string.Empty,
-            _manifest?.EffectiveGateName);
+        var root = TxtInstallRoot?.Text?.Trim() ?? string.Empty;
+        var wire = VersionIdentity.WireForBuild(
+            VersionIdentity.ResolveExpectedWireVersion(root, _manifest?.EffectiveGateName ?? _liveGate),
+            BuildOf(root));
         var url = CurrentMasterServerUrl();
 
         ServerListResult result;
@@ -480,11 +448,6 @@ public partial class MainWindow
             ListServersSimple.ItemsSource = null;
             ListServersSimple.ItemsSource = _serverRows;
         }
-        if (ListServersAdvanced is not null)
-        {
-            ListServersAdvanced.ItemsSource = null;
-            ListServersAdvanced.ItemsSource = _serverRows;
-        }
         PaintBrowserCount();
     }
 
@@ -518,11 +481,6 @@ public partial class MainWindow
         {
             ListServersSimple.ItemsSource = null;
             ListServersSimple.ItemsSource = _serverRows;
-        }
-        if (ListServersAdvanced is not null)
-        {
-            ListServersAdvanced.ItemsSource = null;
-            ListServersAdvanced.ItemsSource = _serverRows;
         }
     }
 
@@ -563,8 +521,6 @@ public partial class MainWindow
     {
         if (TxtBrowserStatus is not null)
             TxtBrowserStatus.Text = text;
-        if (TxtAdvBrowserStatus is not null)
-            TxtAdvBrowserStatus.Text = text;
         if (_settings.SimpleMode && _simpleTab == SimpleTab.Servers)
             SetSimpleStatus(text);
     }
@@ -870,9 +826,14 @@ public partial class MainWindow
                 return;
             }
 
-            var modsRelaunch = _sessionModsForceRelaunch;
-            _sessionModsForceRelaunch = false;
+            if (!await EnsureJoinPluginsAsync(listing).ConfigureAwait(true))
+            {
+                Log("Join cancelled: plugin requirements were not met.");
+                SetBrowserStatus(Loc.Get("plugins_join_cancelled"));
+                return;
+            }
 
+            var relaunch = _sessionModsForceRelaunch || _sessionPluginsForceRelaunch;
             if (!LaunchArgs.IsSafeConnectHost(listing.Ip))
             {
                 Log($"Join: refusing malformed host '{listing.Ip}'");
@@ -881,16 +842,21 @@ public partial class MainWindow
                 return;
             }
 
+            if (_sessionPluginsForceRelaunch)
+                Log("Join: relaunching so plugins load");
+            _sessionModsForceRelaunch = false;
+            _sessionPluginsForceRelaunch = false;
+
             var target = LaunchArgs.FormatConnectTarget(listing.Ip, listing.Port);
             // Listing `key` is unused: S21 client packet encryption is forced off.
 
             // A client we still hold a command channel to can hop servers where
             // it stands; relaunching would cost the whole load again. An
             // offline-auth client cannot pass server auth, so it relaunches.
-            // Session mod filters and newly installed mods only take effect on
-            // a fresh boot (the engine reads mods.vdf once).
+            // Session mod filters, newly installed mods, and plugins installed
+            // or enabled for this join are read only at boot.
             var dropDev = IsJoinWithoutDevOn();
-            if (!forceRelaunch && !modsRelaunch && !_lastClientOfflineAuth &&
+            if (!forceRelaunch && !relaunch && !_lastClientOfflineAuth &&
                 !(dropDev && _lastClientDevLaunch) &&
                 TryHopToServer(listing, root, target, listing.HasPassword ? joinPw : null))
                 return;
@@ -919,7 +885,8 @@ public partial class MainWindow
                 connectPort: listing.Port,
                 connectPassword: listing.HasPassword ? joinPw : string.Empty,
                 forceOnline: true);
-            var clientResult = SpawnRoleResult(LaunchRole.Client, clientArgs, quiet: _settings.SimpleMode);
+            var clientResult = SpawnRoleResult(LaunchRole.Client, clientArgs, quiet: _settings.SimpleMode,
+                joinSession: true);
             if (!clientResult.Ok)
             {
                 RestoreSessionMods(force: true);

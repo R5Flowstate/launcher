@@ -24,6 +24,12 @@ public sealed class ServerListing
     public IReadOnlyList<string> RequiredMods { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> AllowedMods { get; init; } = Array.Empty<string>();
 
+    /// <summary><c>id</c> or <c>id@version</c> from the server. Install only matches the curated list.</summary>
+    public IReadOnlyList<string> RequiredPlugins { get; init; } = Array.Empty<string>();
+
+    /// <summary>Server tick rate in Hz; 0 when the host did not report it.</summary>
+    public int TickRate { get; init; }
+
     /// <summary>
     /// Frozen update-required notice: port 0, ip ::1, empty key/map, checksum 0.
     /// </summary>
@@ -183,6 +189,10 @@ public static class ServerListingParser
         if (el.TryGetProperty("modsProfile", out var modsEl) && modsEl.ValueKind == JsonValueKind.String)
             modsProfile = modsEl.GetString() ?? string.Empty;
 
+        var tickRate = 0;
+        if (TryGetInt(el, "tickRate", out var hz) && hz is > 0 and <= 1000)
+            tickRate = hz;
+
         IReadOnlyList<string> requiredMods = Array.Empty<string>();
         if (el.TryGetProperty("requiredMods", out var reqEl) && reqEl.ValueKind == JsonValueKind.Array)
         {
@@ -215,6 +225,30 @@ public static class ServerListingParser
             allowedMods = mods;
         }
 
+        IReadOnlyList<string> requiredPlugins = Array.Empty<string>();
+        if (el.TryGetProperty("requiredPlugins", out var pluginEl) && pluginEl.ValueKind == JsonValueKind.Array)
+        {
+            var plugins = new List<string>();
+            var seen = 0;
+            foreach (var m in pluginEl.EnumerateArray())
+            {
+                if (++seen > 256)
+                    break;
+                if (plugins.Count >= 64)
+                    break;
+                if (m.ValueKind != JsonValueKind.String)
+                    continue;
+                var s = m.GetString();
+                if (s is null || s.Length is < 3 or > 80)
+                    continue;
+                if (!PluginPin(s))
+                    continue;
+                plugins.Add(s);
+            }
+
+            requiredPlugins = plugins;
+        }
+
         listing = new ServerListing
         {
             Name = name,
@@ -232,6 +266,8 @@ public static class ServerListingParser
             ModsProfile = modsProfile,
             RequiredMods = requiredMods,
             AllowedMods = allowedMods,
+            RequiredPlugins = requiredPlugins,
+            TickRate = tickRate,
         };
         return true;
     }
@@ -248,6 +284,21 @@ public static class ServerListingParser
             """);
         if (!ok.Success || ok.Servers.Count != 1 || ok.Servers[0].NumPlayers != 3)
             return "keep real listing";
+        if (ok.Servers[0].TickRate != 0)
+            return "missing tickRate is unknown";
+
+        var tick = Parse("""
+            {"success":true,"servers":[
+              {"name":"Fast","description":"x","hidden":false,"map":"mp_rr_arena_composite",
+               "playlist":"fs_1v1","ip":"203.0.113.9","port":37015,"key":"WDNWLmJYQ2ZlM0VoTid3Yg==",
+               "checksum":1,"numPlayers":3,"maxPlayers":12,"tickRate":120},
+              {"name":"Bad","description":"x","hidden":false,"map":"mp_rr_arena_composite",
+               "playlist":"fs_1v1","ip":"203.0.113.9","port":37016,"key":"WDNWLmJYQ2ZlM0VoTid3Yg==",
+               "checksum":1,"numPlayers":2,"maxPlayers":12,"tickRate":"120"}
+            ]}
+            """);
+        if (!tick.Success || tick.Servers.Count != 2 || tick.Servers[0].TickRate != 120 || tick.Servers[1].TickRate != 0)
+            return "tickRate is optional and typed";
 
         var locked = Parse("""
             {"success":true,"servers":[
@@ -288,6 +339,44 @@ public static class ServerListingParser
             return "success false";
 
         return null;
+    }
+
+    static bool PluginPin(string s)
+    {
+        var at = s.IndexOf('@');
+        var id = at < 0 ? s : s[..at];
+        if (id.Length is < 3 or > 32)
+            return false;
+        foreach (var c in id)
+        {
+            if (c is not ((>= 'a' and <= 'z') or (>= '0' and <= '9') or '_'))
+                return false;
+        }
+
+        if (at < 0)
+            return true;
+        var version = s[(at + 1)..];
+        var dots = 0;
+        var run = 0;
+        if (version.Length is < 5 or > 20)
+            return false;
+        foreach (var c in version)
+        {
+            if (c == '.')
+            {
+                if (run is < 1 or > 6)
+                    return false;
+                dots++;
+                run = 0;
+                continue;
+            }
+
+            if (c is < '0' or > '9')
+                return false;
+            run++;
+        }
+
+        return dots == 2 && run is >= 1 and <= 6;
     }
 
     private static bool TryGetString(JsonElement el, string name, out string value)

@@ -380,6 +380,41 @@ public static class ModsStore
         });
     }
 
+    /// <summary>
+    /// Undoes a session filter: rows still as the filter wrote them go back to <paramref name="backupText"/>;
+    /// rows changed since then (toggles, installs) keep their current state.
+    /// </summary>
+    public static void RestoreFilteredModList(string installPath, string backupText, string filteredText)
+    {
+        var before = FirstById(ModVdf.ReadModList(backupText));
+        var filtered = FirstById(ModVdf.ReadModList(filteredText));
+        MutateModList(installPath, current => MergeFilteredModList(before, filtered, current));
+    }
+
+    public static List<(string Id, bool Enabled)> MergeFilteredModList(
+        IReadOnlyDictionary<string, bool> before,
+        IReadOnlyDictionary<string, bool> filtered,
+        IReadOnlyList<(string Id, bool Enabled)> current)
+    {
+        var next = new List<(string Id, bool Enabled)>(current.Count);
+        foreach (var row in current)
+        {
+            var untouched = filtered.TryGetValue(row.Id, out var wrote) && wrote == row.Enabled;
+            // The engine loads unlisted mods.
+            next.Add(untouched ? (row.Id, !before.TryGetValue(row.Id, out var was) || was) : row);
+        }
+
+        return next;
+    }
+
+    static Dictionary<string, bool> FirstById(List<(string Id, bool Enabled)> rows)
+    {
+        var map = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in rows)
+            map.TryAdd(row.Id, row.Enabled);
+        return map;
+    }
+
     public static void Reorder(string installPath, IReadOnlyList<string> idsInOrder)
     {
         ArgumentNullException.ThrowIfNull(idsInOrder);
@@ -698,5 +733,8 @@ public static class ModsStore
 
         [JsonPropertyName("dependencies")]
         public List<string>? Dependencies { get; set; }
+
+        [JsonPropertyName("description")]
+        public string? Description { get; set; }
     }
 }

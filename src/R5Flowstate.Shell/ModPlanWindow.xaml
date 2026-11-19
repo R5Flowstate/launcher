@@ -3,10 +3,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:R5Flowstate.Shell"
         Title="{loc:T mods_title}"
-        Icon="Assets/app.ico"
+        Icon="{DynamicResource AppIcon}"
         SizeToContent="Height" Width="600" MaxHeight="760"
         ResizeMode="NoResize"
-        Background="{StaticResource SurfaceBg}" Foreground="{StaticResource TextPrimary}"
+        Background="{DynamicResource SurfaceBg}" Foreground="{DynamicResource TextPrimary}"
         FontFamily="Segoe UI"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
@@ -15,12 +15,12 @@
   </Window.Resources>
   <DockPanel Margin="26,22,26,20">
     <StackPanel DockPanel.Dock="Top">
-      <TextBlock x:Name="TxtKicker" FontSize="11.5" Foreground="{StaticResource TextMuted}"
+      <TextBlock x:Name="TxtKicker" FontSize="11.5" Foreground="{DynamicResource TextMuted}"
                  Visibility="Collapsed"/>
       <TextBlock x:Name="TxtHeadline" FontSize="19" FontWeight="SemiBold" Margin="0,3,0,0"
-                 Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap"/>
+                 Foreground="{DynamicResource TextPrimary}" TextWrapping="Wrap"/>
       <TextBlock x:Name="TxtBody" Margin="0,8,0,0" FontSize="13"
-                 Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+                 Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap"/>
     </StackPanel>
 
     <DockPanel DockPanel.Dock="Bottom" Margin="0,18,0,0" LastChildFill="False">
@@ -31,7 +31,7 @@
     </DockPanel>
 
     <TextBlock x:Name="TxtWarning" DockPanel.Dock="Bottom" Margin="0,12,0,0" FontSize="12.5"
-               Foreground="{StaticResource DangerFg}" TextWrapping="Wrap" Visibility="Collapsed"/>
+               Foreground="{DynamicResource DangerFg}" TextWrapping="Wrap" Visibility="Collapsed"/>
 
     <Grid x:Name="PanelTotals" DockPanel.Dock="Bottom" Margin="0,16,0,0" Visibility="Collapsed">
       <Grid.ColumnDefinitions>
@@ -40,15 +40,15 @@
         <ColumnDefinition Width="*"/>
       </Grid.ColumnDefinitions>
       <StackPanel Grid.Column="0">
-        <TextBlock Text="{loc:T mods_plan_download}" FontSize="11.5" Foreground="{StaticResource TextMuted}"/>
+        <TextBlock Text="{loc:T mods_plan_download}" FontSize="11.5" Foreground="{DynamicResource TextMuted}"/>
         <TextBlock x:Name="TxtTotalDownload" FontSize="16" Margin="0,2,0,0"/>
       </StackPanel>
       <StackPanel Grid.Column="1">
-        <TextBlock Text="{loc:T mods_plan_space}" FontSize="11.5" Foreground="{StaticResource TextMuted}"/>
+        <TextBlock Text="{loc:T mods_plan_space}" FontSize="11.5" Foreground="{DynamicResource TextMuted}"/>
         <TextBlock x:Name="TxtTotalSpace" FontSize="16" Margin="0,2,0,0"/>
       </StackPanel>
       <StackPanel Grid.Column="2">
-        <TextBlock Text="{loc:T mods_plan_free}" FontSize="11.5" Foreground="{StaticResource TextMuted}"/>
+        <TextBlock Text="{loc:T mods_plan_free}" FontSize="11.5" Foreground="{DynamicResource TextMuted}"/>
         <TextBlock x:Name="TxtTotalFree" FontSize="16" Margin="0,2,0,0"/>
       </StackPanel>
     </Grid>
@@ -58,38 +58,38 @@
       <ItemsControl x:Name="ListRows">
         <ItemsControl.ItemTemplate>
           <DataTemplate>
-            <Border BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,0,0,1" Padding="0,10">
+            <Border BorderBrush="{DynamicResource BorderSoft}" BorderThickness="0,0,0,1" Padding="0,10">
               <DockPanel>
                 <TextBlock DockPanel.Dock="Right" Text="{Binding SizeText}" Width="84" TextAlignment="Right"
-                           FontSize="13" VerticalAlignment="Center" Foreground="{StaticResource TextPrimary}"/>
+                           FontSize="13" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimary}"/>
                 <TextBlock DockPanel.Dock="Right" Text="{Binding Tag}" FontSize="11" FontWeight="SemiBold"
                            Padding="7,1" Margin="12,0,0,0" VerticalAlignment="Center">
                   <TextBlock.Style>
                     <Style TargetType="TextBlock">
-                      <Setter Property="Background" Value="{StaticResource SurfaceRaised}"/>
-                      <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+                      <Setter Property="Background" Value="{DynamicResource SurfaceRaised}"/>
+                      <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
                       <Style.Triggers>
                         <DataTrigger Binding="{Binding TagKind}" Value="new">
-                          <Setter Property="Background" Value="{StaticResource AccentDim}"/>
-                          <Setter Property="Foreground" Value="{StaticResource AccentBright}"/>
+                          <Setter Property="Background" Value="{DynamicResource AccentDim}"/>
+                          <Setter Property="Foreground" Value="{DynamicResource AccentBright}"/>
                         </DataTrigger>
                         <DataTrigger Binding="{Binding TagKind}" Value="update">
-                          <Setter Property="Background" Value="{StaticResource UpdateFill}"/>
-                          <Setter Property="Foreground" Value="{StaticResource UpdateText}"/>
+                          <Setter Property="Background" Value="{DynamicResource UpdateFill}"/>
+                          <Setter Property="Foreground" Value="{DynamicResource UpdateText}"/>
                         </DataTrigger>
                         <DataTrigger Binding="{Binding TagKind}" Value="remove">
-                          <Setter Property="Background" Value="{StaticResource DangerBg}"/>
-                          <Setter Property="Foreground" Value="{StaticResource DangerFg}"/>
+                          <Setter Property="Background" Value="{DynamicResource DangerBg}"/>
+                          <Setter Property="Foreground" Value="{DynamicResource DangerFg}"/>
                         </DataTrigger>
                       </Style.Triggers>
                     </Style>
                   </TextBlock.Style>
                 </TextBlock>
                 <Grid DockPanel.Dock="Left" Width="36" Height="36" Margin="0,0,12,0"
-                      Background="{StaticResource SurfaceRaised}">
+                      Background="{DynamicResource SurfaceRaised}">
                   <TextBlock Text="{Binding Initials}" FontWeight="Bold" FontSize="12"
                              HorizontalAlignment="Center" VerticalAlignment="Center"
-                             Foreground="{StaticResource TextSecondary}"/>
+                             Foreground="{DynamicResource TextSecondary}"/>
                   <Image Source="{Binding IconSource}" Stretch="UniformToFill"
                          Visibility="{Binding HasIcon, Converter={StaticResource BoolVis}}"/>
                 </Grid>
@@ -97,7 +97,7 @@
                   <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold"
                              TextTrimming="CharacterEllipsis"/>
                   <TextBlock Text="{Binding Detail}" FontSize="12" Margin="0,2,0,0"
-                             Foreground="{StaticResource TextSecondary}" TextTrimming="CharacterEllipsis"/>
+                             Foreground="{DynamicResource TextSecondary}" TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
               </DockPanel>
             </Border>

@@ -147,7 +147,7 @@ public sealed class ModRowViewModel : ModViewModelBase
     private ModPackage? _package;
     private string _latestVersion = string.Empty;
 
-    public ModRowViewModel(InstalledMod mod)
+    public ModRowViewModel(InstalledMod mod, bool verified = false, bool revoked = false)
     {
         Mod = mod;
         FolderName = mod.FolderName;
@@ -159,8 +159,16 @@ public sealed class ModRowViewModel : ModViewModelBase
         IconSource = ModArt.LoadLocal(mod.IconPath, 96);
         Initials = ModArt.Initials(Name);
         IsCatalog = !string.IsNullOrEmpty(mod.ThunderstoreFullName);
+        IsVerified = verified && !revoked;
+        IsRevoked = revoked;
 
         var badges = new List<ModBadge>();
+        if (revoked)
+            badges.Add(new ModBadge(Loc.Get("mods_removed_by_review"), true));
+        else if (verified)
+            badges.Add(new ModBadge(Loc.Get("mods_badge_verified"), false));
+        else
+            badges.Add(new ModBadge(Loc.Get("mods_not_verified"), true));
         if (mod.Maps.Count > 0)
             badges.Add(new ModBadge(Loc.Get("mods_badge_map"), false));
         if (IsServerOnly(mod))
@@ -186,6 +194,8 @@ public sealed class ModRowViewModel : ModViewModelBase
     public bool HasIcon => IconSource is not null;
     public string Initials { get; }
     public bool IsCatalog { get; }
+    public bool IsVerified { get; }
+    public bool IsRevoked { get; }
     public IReadOnlyList<ModBadge> Badges { get; }
 
     /// <summary>The manifest version Thunderstore compares against, else the mod.vdf one.</summary>
@@ -278,9 +288,10 @@ public sealed class BrowseModRowViewModel : ModViewModelBase
     private string? _installedVersion;
     private string _queueState = string.Empty;
 
-    public BrowseModRowViewModel(ModPackage package)
+    public BrowseModRowViewModel(ModPackage package, bool official = false)
     {
         Package = package;
+        IsOfficial = official;
         FullName = package.FullName;
         Name = string.IsNullOrWhiteSpace(package.Name) ? package.FullName : package.Name.Replace('_', ' ');
         Owner = string.IsNullOrWhiteSpace(package.Owner) ? Loc.Get("n_a") : package.Owner;
@@ -302,6 +313,7 @@ public sealed class BrowseModRowViewModel : ModViewModelBase
     }
 
     public ModPackage Package { get; }
+    public bool IsOfficial { get; }
     public string FullName { get; }
     public string Name { get; }
     public string Owner { get; }
@@ -444,6 +456,9 @@ public sealed class ModQueueItem : ModViewModelBase
 
     public ModInstallStep Step { get; }
     public string Root { get; init; } = string.Empty;
+
+    /// <summary>The reviewed version as the list for <see cref="Root"/> pinned it when this was queued.</summary>
+    public CuratedVersion? Pinned { get; init; }
     public string Pin { get; }
     public string FullName { get; }
     public string Name { get; }

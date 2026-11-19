@@ -6,6 +6,9 @@ namespace R5Flowstate.Spawn;
 /// <summary>A running client asks the launcher to install a server's mods and rejoin it.</summary>
 public sealed record HandoffRequest(string Host, int Port);
 
+/// <summary>The local match options the player picked in the game's own lobby.</summary>
+public sealed record LocalOptions(int TickRate, bool Cheats);
+
 /// <summary>
 /// Per-launcher pipe the client writes one-line requests to. The name travels
 /// to the client in its environment; the pipe accepts the current user only.
@@ -19,6 +22,7 @@ public sealed class LauncherHandoffListener : IDisposable
     private readonly CancellationTokenSource _cts = new();
 
     public event Action<HandoffRequest>? RequestReceived;
+    public event Action<LocalOptions>? LocalOptionsReceived;
 
     public string PipePath => @"\\.\pipe\" + _leaf;
 
@@ -49,8 +53,12 @@ public sealed class LauncherHandoffListener : IDisposable
                 await server.WaitForConnectionAsync(cancel).ConfigureAwait(false);
 
                 var line = await ReadLineCappedAsync(server, cancel).ConfigureAwait(false);
-                if (line is not null && TryParse(line, out var request))
+                if (line is null)
+                    continue;
+                if (TryParse(line, out var request))
                     RequestReceived?.Invoke(request);
+                else if (TryParseLocalOptions(line, out var options))
+                    LocalOptionsReceived?.Invoke(options);
             }
             catch (OperationCanceledException) when (cancel.IsCancellationRequested)
             {
@@ -130,6 +138,22 @@ public sealed class LauncherHandoffListener : IDisposable
             return false;
 
         request = new HandoffRequest(host, port);
+        return true;
+    }
+
+    /// <summary><c>local_options &lt;20|60|120&gt; &lt;0|1&gt;</c></summary>
+    public static bool TryParseLocalOptions(string line, out LocalOptions options)
+    {
+        options = new LocalOptions(TickRates.Stock, false);
+        var parts = line.Split(' ');
+        if (parts.Length != 3 || parts[0] != "local_options"
+            || !int.TryParse(parts[1], System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var hz)
+            || Array.IndexOf(TickRates.Offered, hz) < 0
+            || parts[2] is not ("0" or "1"))
+            return false;
+
+        options = new LocalOptions(hz, parts[2] == "1");
         return true;
     }
 

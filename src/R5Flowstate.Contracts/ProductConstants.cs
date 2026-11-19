@@ -46,8 +46,16 @@ public static class ProductConstants
     public const string PlaytestChannelUrl =
         "https://cdn.r5flowstate.org/channel/playtest/CHANNEL_MANIFEST.json";
 
+    /// <summary>S30.1 content has its own channel; it serves no playtest ring.</summary>
+    public const string S30ChannelUrl =
+        "https://cdn.r5flowstate.org/channel/s30/CHANNEL_MANIFEST.json";
+
     public const string DefaultLauncherFeedUrl =
         "https://cdn.r5flowstate.org/launcher-feed/";
+
+    /// <summary>Velopack feed for the server tool (R5FlowstateServer.exe + r5f-host).</summary>
+    public const string HostToolFeedUrl =
+        "https://cdn.r5flowstate.org/host-feed/";
 
     public const string SkipSelfUpdateEnvVar = "R5F_SKIP_SELF_UPDATE";
 

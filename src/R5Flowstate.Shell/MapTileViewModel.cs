@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Windows.Data;
 using System.Windows.Media;
 
 namespace R5Flowstate.Shell;
@@ -50,4 +52,16 @@ public sealed class MapTileViewModel : INotifyPropertyChanged
 
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
+public sealed class MapLabelConverter : IValueConverter
+{
+    public static readonly MapLabelConverter Instance = new();
+    public static IReadOnlyDictionary<string, string>? Names { get; set; }
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        MapOption.Label(value as string ?? string.Empty, Names);
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
 }

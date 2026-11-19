@@ -88,6 +88,18 @@ russian.LaunchApp=Запустить R5Flowstate
 spanish.LaunchApp=Iniciar R5Flowstate
 schinese.LaunchApp=启动 R5Flowstate
 tchinese.LaunchApp=啟動 R5Flowstate
+english.InstallingRuntimes=Installing required Windows components (DirectX, Visual C++)…
+french.InstallingRuntimes=Installation des composants Windows requis (DirectX, Visual C++)…
+german.InstallingRuntimes=Erforderliche Windows-Komponenten werden installiert (DirectX, Visual C++)…
+italian.InstallingRuntimes=Installazione dei componenti Windows necessari (DirectX, Visual C++)…
+japanese.InstallingRuntimes=必要な Windows コンポーネントをインストールしています（DirectX、Visual C++）…
+korean.InstallingRuntimes=필요한 Windows 구성 요소를 설치하는 중(DirectX, Visual C++)…
+polish.InstallingRuntimes=Instalowanie wymaganych składników systemu Windows (DirectX, Visual C++)…
+portuguese.InstallingRuntimes=A instalar os componentes do Windows necessários (DirectX, Visual C++)…
+russian.InstallingRuntimes=Установка необходимых компонентов Windows (DirectX, Visual C++)…
+spanish.InstallingRuntimes=Instalando los componentes de Windows necesarios (DirectX, Visual C++)…
+schinese.InstallingRuntimes=正在安装所需的 Windows 组件（DirectX、Visual C++）…
+tchinese.InstallingRuntimes=正在安裝所需的 Windows 元件（DirectX、Visual C++）…
 english.ReservedFolder=That folder is reserved for the one-click updater layout. Pick a different path (the default Programs folder is fine).
 french.ReservedFolder=Ce dossier est réservé à la disposition du mise à jour en un clic. Choisissez un autre chemin (le dossier Programmes par défaut convient).
 german.ReservedFolder=Dieser Ordner ist für das Ein-Klick-Update-Layout reserviert. Wählen Sie einen anderen Pfad (der Standard-Programme-Ordner ist in Ordnung).
@@ -116,9 +128,42 @@ Source: "{#VeloSetup}"; DestDir: "{tmp}"; DestName: "R5Flowstate-win-Setup.exe";
 
 [Run]
 Filename: "{tmp}\R5Flowstate-win-Setup.exe"; Parameters: "--silent --installto ""{app}"""; StatusMsg: "{cm:InstallingApp}"; Flags: waituntilterminated
+; Fresh Windows lacks XInput 1.3 / D3DCompiler_43 (DirectX June 2010) and the
+; VC++ runtime; both installers ship inside the Velopack package.
+Filename: "{app}\current\redist\dx\DXSETUP.exe"; Parameters: "/silent"; StatusMsg: "{cm:InstallingRuntimes}"; Flags: waituntilterminated; Check: NeedsDirectX
+Filename: "{app}\current\redist\vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "{cm:InstallingRuntimes}"; Flags: waituntilterminated; Check: NeedsVcRuntime
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchApp}"; Flags: nowait postinstall skipifsilent
 
 [Code]
+function NeedsDirectX: Boolean;
+begin
+  Result := not FileExists(ExpandConstant('{sys}\xinput1_3.dll'))
+    or not FileExists(ExpandConstant('{sys}\d3dcompiler_43.dll'));
+  if Result and not FileExists(ExpandConstant('{app}\current\redist\dx\DXSETUP.exe')) then
+  begin
+    Log('DirectX runtime missing but redist\dx\DXSETUP.exe is not in the package');
+    Result := False;
+  end;
+end;
+
+// Keep in step with Prerequisites.VcMinMinor in the shell.
+function NeedsVcRuntime: Boolean;
+var
+  Installed, Minor: Cardinal;
+begin
+  Result := True;
+  if RegQueryDWordValue(HKLM64, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64', 'Installed', Installed)
+    and (Installed = 1)
+    and RegQueryDWordValue(HKLM64, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64', 'Minor', Minor)
+    and (Minor >= 40) then
+    Result := False;
+  if Result and not FileExists(ExpandConstant('{app}\current\redist\vc_redist.x64.exe')) then
+  begin
+    Log('VC++ runtime missing but redist\vc_redist.x64.exe is not in the package');
+    Result := False;
+  end;
+end;
+
 function InstallInDefaultRoot: Boolean;
 begin
   Result := Pos(

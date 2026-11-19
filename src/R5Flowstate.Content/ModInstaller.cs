@@ -8,6 +8,8 @@ namespace R5Flowstate.Content;
 /// every entry goes through SafePath.TryJoin; the whole archive is refused on zip-slip,
 /// forbidden extension, entry cap, size cap, or compression-ratio ceiling.
 /// </summary>
+public sealed record StagedMod(string Id, string Folder, string Version);
+
 public sealed class ModInstaller
 {
     public const int MaxZipEntries = 5000;
@@ -26,6 +28,35 @@ public sealed class ModInstaller
         ".ttf", ".otf",
     };
 
+    // Plugin source travels with its mod for review. Nothing on a player's PC compiles or loads it.
+    static readonly HashSet<string> PluginSourceExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".c", ".cpp", ".h", ".hpp", ".inc",
+    };
+
+    /// <summary>Whether a mod archive may carry <paramref name="relative"/>. C/C++ source only under <c>plugins/&lt;id&gt;/src/</c>.</summary>
+    public static bool IsShippableEntry(string relative)
+    {
+        var ext = Path.GetExtension(relative);
+        if (AllowedExtensions.Contains(ext))
+            return true;
+        return PluginSourceExtensions.Contains(ext) && IsPluginSourcePath(relative);
+    }
+
+    // The mod root or one wrapper folder above it.
+    static bool IsPluginSourcePath(string relative)
+    {
+        var parts = relative.Split('/');
+        for (var i = 0; i <= 1 && i + 3 < parts.Length; i++)
+        {
+            if (string.Equals(parts[i], "plugins", StringComparison.Ordinal) &&
+                PluginStatement.IsId(parts[i + 1]) &&
+                string.Equals(parts[i + 2], "src", StringComparison.Ordinal))
+                return true;
+        }
+        return false;
+    }
+
     readonly ThunderstoreClient _thunderstore;
 
     public ModInstaller(ThunderstoreClient thunderstore)
@@ -42,7 +73,9 @@ public sealed class ModInstaller
         ModPackage package,
         string? versionNumber = null,
         IProgress<ContentInstallProgress>? progress = null,
-        CancellationToken cancel = default)
+        CancellationToken cancel = default,
+        string? expectedSha256 = null,
+        long expectedSize = -1)
     {
         ArgumentNullException.ThrowIfNull(package);
         var version = PickVersion(package, versionNumber);
@@ -61,7 +94,8 @@ public sealed class ModInstaller
 
         var folder = package.Owner + "-" + package.Name;
         var binding = new CatalogBinding(expectedId, package.Name, version.VersionNumber);
-        return InstallFromUrlCoreAsync(installPath, version.DownloadUrl, folder, binding, progress, cancel);
+        return InstallFromUrlCoreAsync(installPath, version.DownloadUrl, folder, binding, progress, cancel,
+            expectedSha256, expectedSize);
     }
 
     public Task<InstalledMod> InstallFromUrlAsync(
@@ -78,7 +112,9 @@ public sealed class ModInstaller
         string? folderName,
         CatalogBinding? binding,
         IProgress<ContentInstallProgress>? progress,
-        CancellationToken cancel)
+        CancellationToken cancel,
+        string? expectedSha256 = null,
+        long expectedSize = -1)
     {
         var modsDir = ModsStore.ModsDirectory(installPath);
         Directory.CreateDirectory(modsDir);
@@ -93,7 +129,8 @@ public sealed class ModInstaller
                 Phase = "download",
                 Message = "Downloading mod package",
             });
-            await _thunderstore.DownloadAsync(url, zipPath, progress, cancel).ConfigureAwait(false);
+            await _thunderstore.DownloadAsync(url, zipPath, progress, cancel, expectedSha256, expectedSize)
+                .ConfigureAwait(false);
             return await InstallFromZipCoreAsync(installPath, zipPath, folderName, binding, progress, cancel)
                 .ConfigureAwait(false);
         }
@@ -119,13 +156,6 @@ public sealed class ModInstaller
         IProgress<ContentInstallProgress>? progress,
         CancellationToken cancel)
     {
-        if (string.IsNullOrWhiteSpace(zipPath))
-            throw new ArgumentException("Zip path is required.", nameof(zipPath));
-        if (zipPath.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
-            zipPath = ChannelSource.LocalPath(zipPath);
-        if (!File.Exists(zipPath))
-            throw new FileNotFoundException("Mod zip not found.", zipPath);
-
         var modsDir = ModsStore.ModsDirectory(installPath);
         Directory.CreateDirectory(modsDir);
         var stamp = NewStamp();
@@ -134,54 +164,10 @@ public sealed class ModInstaller
 
         try
         {
-            cancel.ThrowIfCancellationRequested();
-            progress?.Report(new ContentInstallProgress
-            {
-                Phase = "extract",
-                Message = "Extracting mod package",
-            });
-
-            var nestedName = ExtractValidated(zipPath, staging, progress, cancel);
-            PromoteIfNested(staging);
-            cancel.ThrowIfCancellationRequested();
-            progress?.Report(new ContentInstallProgress
-            {
-                Phase = "check",
-                Message = "Checking mod package",
-            });
-            if (!SafePath.TryJoin(staging, ModsStore.ModSettingsFileName, out var vdfPath) ||
-                !File.Exists(vdfPath))
-            {
-                throw new InvalidOperationException(
-                    "Archive has no " + ModsStore.ModSettingsFileName + " after extract.");
-            }
-
-            var vdfText = ModsStore.ReadModSettingsText(vdfPath) ?? throw new InvalidOperationException(
-                "Archive " + ModsStore.ModSettingsFileName + " is larger than the game accepts.");
-            var doc = ModVdf.Parse(vdfText);
-            var id = doc.Get("id");
-            if (string.IsNullOrEmpty(id) || !ModId.IsValid(id))
-            {
-                var shown = id is { Length: > 40 } ? id[..40] + "..." : id ?? "";
-                throw new InvalidOperationException(
-                    "Archive " + ModsStore.ModSettingsFileName +
-                    " is missing a valid id (got '" + shown + "').");
-            }
-
-            if (binding is not null)
-                VerifyCatalogBinding(staging, id, binding);
-
-            VerifyOwnedFiles(installPath, staging, id, doc);
-
-            var destName = ChooseFolderName(folderName, nestedName, Path.GetFileName(zipPath));
-            if (!SafePath.IsSafeRelative(destName, out var reason))
-                throw new InvalidOperationException("Refusing dest folder name (" + reason + "): " + destName);
-            if (!SafePath.TryJoin(modsDir, destName, out var dest))
-                throw new InvalidOperationException("Refusing dest path outside mods/: " + destName);
-
-            var destParent = Path.GetDirectoryName(dest);
-            if (!string.Equals(destParent, Path.GetFullPath(modsDir), StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Mod folder must be a direct child of mods/.");
+            var prepared = Prepare(installPath, zipPath, folderName, binding, staging, progress, cancel);
+            var id = prepared.Id;
+            var destName = prepared.DestName;
+            var dest = prepared.Dest;
 
             cancel.ThrowIfCancellationRequested();
             progress?.Report(new ContentInstallProgress
@@ -189,36 +175,6 @@ public sealed class ModInstaller
                 Phase = "commit",
                 Message = "Installing " + id,
             });
-
-            // The engine keys mods by id with '.' folded to '_'; two folders sharing that key
-            // disable each other, and replacing another author's folder would be a takeover.
-            var normalizedId = ModId.Normalize(id);
-            foreach (var existing in ModsStore.Discover(installPath))
-            {
-                if (!string.Equals(ModId.Normalize(existing.Id), normalizedId, StringComparison.OrdinalIgnoreCase))
-                    continue;
-                if (string.Equals(existing.FolderName, destName, StringComparison.OrdinalIgnoreCase))
-                    continue;
-                throw new InvalidOperationException(
-                    "Mod id '" + id + "' is already used by the installed mod in '" + existing.FolderName +
-                    "'. Uninstall it first.");
-            }
-
-            if (Directory.Exists(dest))
-            {
-                // Replacing a folder is an update of the same mod, never a swap to another id.
-                if (SafePath.TryJoin(dest, ModsStore.ModSettingsFileName, out var oldVdf) && File.Exists(oldVdf))
-                {
-                    var oldText = ModsStore.ReadModSettingsText(oldVdf);
-                    var oldId = oldText is null ? null : ModVdf.Parse(oldText).Get("id");
-                    if (!string.Equals(oldId, id, StringComparison.OrdinalIgnoreCase))
-                    {
-                        throw new InvalidOperationException(
-                            "Folder '" + destName + "' holds mod '" + oldId + "', not '" + id + "'. Uninstall it first.");
-                    }
-                }
-
-            }
 
             // Swap by rename so a failure leaves either the old copy or the new one, never a
             // half-deleted folder: a file the game holds open fails the first move, not a delete.
@@ -269,8 +225,246 @@ public sealed class ModInstaller
         }
     }
 
+    public const string StagedRelative = ".r5f/staged";
+    public const string StagedTempPrefix = ".tmp_";
+
+    /// <summary>
+    /// Downloads a catalog package and leaves it fully checked in <c>.r5f/staged/Owner-Name</c>.
+    /// mods/ is never touched; the game moves the folder in once nothing holds the old copy.
+    /// </summary>
+    public async Task<StagedMod> StageAsync(
+        string installPath,
+        ModPackage package,
+        string? versionNumber = null,
+        IProgress<ContentInstallProgress>? progress = null,
+        CancellationToken cancel = default,
+        string? expectedSha256 = null,
+        long expectedSize = -1)
+    {
+        ArgumentNullException.ThrowIfNull(package);
+        var version = PickVersion(package, versionNumber);
+        if (string.IsNullOrWhiteSpace(version.DownloadUrl))
+            throw new InvalidOperationException("Package version has no download URL.");
+        if (string.IsNullOrWhiteSpace(package.Owner) || string.IsNullOrWhiteSpace(package.Name))
+            throw new InvalidOperationException("Package has no owner or name.");
+
+        var expectedId = ExpectedCatalogId(package);
+        if (!ModId.IsValid(expectedId))
+        {
+            throw new InvalidOperationException(
+                "Package " + package.Owner + "-" + package.Name + " cannot be installed: its mod id '" +
+                expectedId + "' must be 4-32 letters, digits, '.' or '_'.");
+        }
+
+        var folder = package.Owner + "-" + package.Name;
+        var binding = new CatalogBinding(expectedId, package.Name, version.VersionNumber);
+        var stagedRoot = EnsureStagedDirectory(installPath);
+        var stamp = NewStamp();
+        if (!SafePath.TryJoin(stagedRoot, StagedTempPrefix + stamp + ".zip", out var zipPath) ||
+            !SafePath.TryJoin(stagedRoot, StagedTempPrefix + stamp, out var temp) ||
+            !SafePath.TryJoin(stagedRoot, folder, out var final))
+        {
+            throw new InvalidOperationException("Refusing staged path.");
+        }
+
+        try
+        {
+            progress?.Report(new ContentInstallProgress
+            {
+                Phase = "download",
+                Message = "Downloading mod package",
+            });
+            await _thunderstore.DownloadAsync(version.DownloadUrl, zipPath, progress, cancel, expectedSha256, expectedSize)
+                .ConfigureAwait(false);
+            var prepared = Prepare(installPath, zipPath, folder, binding, temp, progress, cancel);
+            if (!string.Equals(prepared.DestName, folder, StringComparison.Ordinal))
+                throw new InvalidOperationException("Staged folder name drifted from the package name.");
+
+            cancel.ThrowIfCancellationRequested();
+            if (Directory.Exists(final))
+                ModsStore.DeleteDirectoryNoReparse(final);
+            Directory.Move(temp, final);
+            return new StagedMod(prepared.Id, folder, version.VersionNumber);
+        }
+        finally
+        {
+            TryDeleteFile(zipPath);
+            TryDeleteTree(temp);
+        }
+    }
+
+    /// <summary>Drops interrupted downloads and extracts; finished staged folders stay for the game.</summary>
+    public static void SweepStagedTemp(string installPath)
+    {
+        if (!SafePath.TryJoin(installPath, StagedRelative, out var stagedRoot) || !Directory.Exists(stagedRoot))
+            return;
+        if (ModsStore.IsReparsePoint(stagedRoot))
+            return;
+        foreach (var entry in Directory.EnumerateFileSystemEntries(stagedRoot))
+        {
+            var name = Path.GetFileName(entry);
+            if (!name.StartsWith(StagedTempPrefix, StringComparison.Ordinal))
+                continue;
+            if (File.Exists(entry))
+                TryDeleteFile(entry);
+            else
+                TryDeleteTree(entry);
+        }
+    }
+
+    static string EnsureStagedDirectory(string installPath)
+    {
+        if (!SafePath.TryJoin(installPath, ".r5f", out var r5f) ||
+            !SafePath.TryJoin(installPath, StagedRelative, out var stagedRoot))
+        {
+            throw new InvalidOperationException("Refusing staged directory path.");
+        }
+
+        foreach (var dir in new[] { r5f, stagedRoot })
+        {
+            if (Directory.Exists(dir) && ModsStore.IsReparsePoint(dir))
+                throw new InvalidOperationException("Refusing a reparse point in the staged path.");
+            Directory.CreateDirectory(dir);
+        }
+
+        return stagedRoot;
+    }
+
+    sealed record Prepared(string Id, string DestName, string Dest);
+
+    Prepared Prepare(
+        string installPath,
+        string zipPath,
+        string? folderName,
+        CatalogBinding? binding,
+        string staging,
+        IProgress<ContentInstallProgress>? progress,
+        CancellationToken cancel)
+    {
+        if (string.IsNullOrWhiteSpace(zipPath))
+            throw new ArgumentException("Zip path is required.", nameof(zipPath));
+        if (zipPath.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+            zipPath = ChannelSource.LocalPath(zipPath);
+        if (!File.Exists(zipPath))
+            throw new FileNotFoundException("Mod zip not found.", zipPath);
+
+        var modsDir = ModsStore.ModsDirectory(installPath);
+        Directory.CreateDirectory(modsDir);
+
+        cancel.ThrowIfCancellationRequested();
+        progress?.Report(new ContentInstallProgress
+        {
+            Phase = "extract",
+            Message = "Extracting mod package",
+        });
+
+        var nestedName = ExtractValidated(zipPath, staging, progress, cancel);
+        PromoteIfNested(staging);
+        cancel.ThrowIfCancellationRequested();
+        progress?.Report(new ContentInstallProgress
+        {
+            Phase = "check",
+            Message = "Checking mod package",
+        });
+        if (!SafePath.TryJoin(staging, ModsStore.ModSettingsFileName, out var vdfPath) ||
+            !File.Exists(vdfPath))
+        {
+            throw new InvalidOperationException(
+                "Archive has no " + ModsStore.ModSettingsFileName + " after extract.");
+        }
+
+        var vdfText = ModsStore.ReadModSettingsText(vdfPath) ?? throw new InvalidOperationException(
+            "Archive " + ModsStore.ModSettingsFileName + " is larger than the game accepts.");
+        var doc = ModVdf.Parse(vdfText);
+        var id = doc.Get("id");
+        if (string.IsNullOrEmpty(id) || !ModId.IsValid(id))
+        {
+            var shown = id is { Length: > 40 } ? id[..40] + "..." : id ?? "";
+            throw new InvalidOperationException(
+                "Archive " + ModsStore.ModSettingsFileName +
+                " is missing a valid id (got '" + shown + "').");
+        }
+
+        if (binding is not null)
+            VerifyCatalogBinding(staging, id, binding);
+
+        VerifyOwnedFiles(installPath, staging, id, doc);
+
+        var destName = ChooseFolderName(folderName, nestedName, Path.GetFileName(zipPath));
+        if (!SafePath.IsSafeRelative(destName, out var reason))
+            throw new InvalidOperationException("Refusing dest folder name (" + reason + "): " + destName);
+        if (!SafePath.TryJoin(modsDir, destName, out var dest))
+            throw new InvalidOperationException("Refusing dest path outside mods/: " + destName);
+
+        var destParent = Path.GetDirectoryName(dest);
+        if (!string.Equals(destParent, Path.GetFullPath(modsDir), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Mod folder must be a direct child of mods/.");
+
+        // The engine keys mods by id with '.' folded to '_'; two folders sharing that key
+        // disable each other, and replacing another author's folder would be a takeover.
+        var normalizedId = ModId.Normalize(id);
+        foreach (var existing in ModsStore.Discover(installPath))
+        {
+            if (!string.Equals(ModId.Normalize(existing.Id), normalizedId, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (string.Equals(existing.FolderName, destName, StringComparison.OrdinalIgnoreCase))
+                continue;
+            throw new InvalidOperationException(
+                "Mod id '" + id + "' is already used by the installed mod in '" + existing.FolderName +
+                "'. Uninstall it first.");
+        }
+
+        // Replacing a folder is an update of the same mod, never a swap to another id.
+        if (Directory.Exists(dest) &&
+            SafePath.TryJoin(dest, ModsStore.ModSettingsFileName, out var oldVdf) && File.Exists(oldVdf))
+        {
+            var oldText = ModsStore.ReadModSettingsText(oldVdf);
+            var oldId = oldText is null ? null : ModVdf.Parse(oldText).Get("id");
+            if (!string.Equals(oldId, id, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Folder '" + destName + "' holds mod '" + oldId + "', not '" + id + "'. Uninstall it first.");
+            }
+        }
+
+        return new Prepared(id, destName, dest);
+    }
+
+    /// <summary>
+    /// The install-time checks against a bare staging dir, for the review service. No install root:
+    /// the "base already ships this map" check runs on the player's machine at install instead.
+    /// <paramref name="stage"/> names the check about to run so a failure can be attributed.
+    /// </summary>
+    internal static (string Id, ModVdfDocument Doc, string VdfText) CheckForReview(
+        string zipPath, string staging, string owner, string name, string version, Action<string> stage)
+    {
+        stage("archive");
+        ExtractValidated(zipPath, staging, progress: null, CancellationToken.None);
+        PromoteIfNested(staging);
+
+        stage("mod_vdf");
+        if (!SafePath.TryJoin(staging, ModsStore.ModSettingsFileName, out var vdfPath) || !File.Exists(vdfPath))
+            throw new InvalidOperationException("Archive has no " + ModsStore.ModSettingsFileName + ".");
+        var vdfText = ModsStore.ReadModSettingsText(vdfPath) ?? throw new InvalidOperationException(
+            ModsStore.ModSettingsFileName + " is larger than the game accepts.");
+        var doc = ModVdf.Parse(vdfText);
+        var id = doc.Get("id");
+        if (string.IsNullOrEmpty(id) || !ModId.IsValid(id))
+            throw new InvalidOperationException(ModsStore.ModSettingsFileName + " has no valid id.");
+
+        stage("id_binding");
+        var expectedId = owner + "." + name;
+        if (!ModId.IsValid(expectedId))
+            throw new InvalidOperationException("Package name gives mod id '" + expectedId + "', which the game refuses.");
+        VerifyCatalogBinding(staging, id, new CatalogBinding(expectedId, name, version));
+
+        stage("ownership");
+        VerifyOwnedFiles(null, staging, id, doc);
+        return (id, doc, vdfText);
+    }
+
     // Same rule the engine applies at load; refusing here reports it at install time.
-    static void VerifyOwnedFiles(string installPath, string staging, string id, ModVdfDocument doc)
+    static void VerifyOwnedFiles(string? installPath, string staging, string id, ModVdfDocument doc)
     {
         var nameSpace = ModOwnership.Namespace(id);
         if (!ModOwnership.IsUsableNamespace(nameSpace))
@@ -280,12 +474,14 @@ public sealed class ModInstaller
                    ?? throw new InvalidOperationException("Archive " + ModsStore.ModSettingsFileName + ": " + mapError + ".");
         foreach (var map in maps)
         {
-            if (BaseShipsMap(installPath, map))
+            if (installPath is not null && BaseShipsMap(installPath, map))
                 throw new InvalidOperationException("Package declares map '" + map + "', which the game already ships.");
         }
 
         var tables = ModOwnership.ReadDatatableOverrides(doc, out var tableError)
                      ?? throw new InvalidOperationException("Archive " + ModsStore.ModSettingsFileName + ": " + tableError + ".");
+        var appends = ModOwnership.ReadDatatableAppends(doc, out var appendError)
+                      ?? throw new InvalidOperationException("Archive " + ModsStore.ModSettingsFileName + ": " + appendError + ".");
         if (ModOwnership.ReadLocalizationOverrides(doc, out var locError) is null)
             throw new InvalidOperationException("Archive " + ModsStore.ModSettingsFileName + ": " + locError + ".");
 
@@ -294,7 +490,7 @@ public sealed class ModInstaller
             var rel = Path.GetRelativePath(staging, file).Replace('\\', '/');
             if (rel.Count(c => c == '/') > MaxFolderDepth)
                 throw new InvalidOperationException("Package nests folders deeper than " + MaxFolderDepth + ": " + rel);
-            if (!ModOwnership.OwnsPath(nameSpace, maps, tables, rel, installPath))
+            if (!ModOwnership.OwnsPath(nameSpace, maps, tables, rel, installPath, appends))
             {
                 throw new InvalidOperationException(
                     "Package ships '" + rel + "', outside its namespace '" + nameSpace +
@@ -361,7 +557,7 @@ public sealed class ModInstaller
     }
 
     /// <summary>Entry count from the (Zip64) end-of-central-directory record; -1 when absent.</summary>
-    static long DeclaredZipEntryCount(string zipPath)
+    internal static long DeclaredZipEntryCount(string zipPath)
     {
         using var fs = File.OpenRead(zipPath);
         var tailLength = (int)Math.Min(fs.Length, 22 + 0xFFFF + 20);
@@ -400,7 +596,7 @@ public sealed class ModInstaller
         return -1;
     }
 
-    static string ExtractValidated(
+    internal static string ExtractValidated(
         string zipPath,
         string staging,
         IProgress<ContentInstallProgress>? progress,
@@ -439,11 +635,10 @@ public sealed class ModInstaller
                     "Archive entry escapes staging (zip-slip): " + entry.FullName);
             }
 
-            var ext = Path.GetExtension(relative);
-            if (!AllowedExtensions.Contains(ext))
+            if (!IsShippableEntry(relative))
             {
                 throw new InvalidOperationException(
-                    "Archive contains a file type mods may not ship (" + ext + "): " + relative);
+                    "Archive contains a file type mods may not ship (" + Path.GetExtension(relative) + "): " + relative);
             }
 
             var uncompressed = entry.Length;
@@ -563,7 +758,7 @@ public sealed class ModInstaller
             Message = relative.Length > 120 ? relative[..120] + "..." : relative,
         };
 
-    static void PromoteIfNested(string staging)
+    internal static void PromoteIfNested(string staging)
     {
         string[] dirs;
         string[] files;

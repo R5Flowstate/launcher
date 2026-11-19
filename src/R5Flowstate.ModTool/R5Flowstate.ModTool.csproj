@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Run by the game, which refuses it unless its SHA-256 matches the one built into
+       client.dll. One self-contained file: nothing beside it is loaded or extracted. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>R5Flowstate.ModTool</RootNamespace>
+    <AssemblyName>r5f-modtool</AssemblyName>
+    <Version>1.1.0</Version>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
+    <IncludeAllContentForSelfExtract>false</IncludeAllContentForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>embedded</DebugType>
+    <Deterministic>true</Deterministic>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <!-- DOTNET_STARTUP_HOOKS would load an arbitrary assembly into the pinned process. -->
+    <StartupHookSupport>false</StartupHookSupport>
+    <EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="R5Flowstate.ModTool.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\R5Flowstate.Content\R5Flowstate.Content.csproj" />
+  </ItemGroup>
+
+</Project>

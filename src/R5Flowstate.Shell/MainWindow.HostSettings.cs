@@ -39,10 +39,10 @@ public partial class MainWindow
     string HostSettingsPlaylistId() =>
         _settings.SimpleMode ? _selectedMode?.PlaylistId ?? string.Empty : SelectedPlaylistId();
 
+    // Always offered: the dedicated server's launch line lives there even for modes without settings.
     void RefreshHostSettingsButtons()
     {
-        var has = HostSettingsFor(HostSettingsPlaylistId()).Count > 0;
-        var vis = has ? Visibility.Visible : Visibility.Collapsed;
+        var vis = Visibility.Visible;
         if (BtnSimpleHostSettings is not null)
             BtnSimpleHostSettings.Visibility = vis;
         if (SepSimpleHostSettings is not null)
@@ -53,15 +53,28 @@ public partial class MainWindow
 
     void OnHostSettingsClick(object sender, RoutedEventArgs e)
     {
+        PersistSettingsFromUi();
         var playlist = HostSettingsPlaylistId();
         var settings = HostSettingsFor(playlist);
-        if (settings.Count == 0)
-            return;
 
         var entry = _catalog.Find(playlist);
         var title = entry is null || string.IsNullOrWhiteSpace(entry.Title) ? playlist : entry.Title;
         var dlg = new HostSettingsWindow { Owner = this };
-        dlg.SettingsChanged += RefreshArgPreviews;
+        void LoadDediLine() => dlg.LoadDediArgs(
+            TxtDediArgs?.Text ?? _settings.DediLaunchArguments ?? string.Empty,
+            _settings.DediDisabledArgs,
+            BuildDediArgs(null, NullIfBlank(playlist), raw: true),
+            DediAppliedLine(playlist));
+        dlg.SettingsChanged += () =>
+        {
+            RefreshArgPreviews();
+            LoadDediLine();
+        };
+        dlg.DediArgsChanged += (extra, disabled) =>
+        {
+            OnDediArgsChanged(extra, disabled);
+            dlg.SetDediApplied(DediAppliedLine(playlist));
+        };
         dlg.Load(
             HostSettings,
             playlist,
@@ -70,6 +83,7 @@ public partial class MainWindow
             id => _catalog.Find(id)?.Settings,
             overrides => FormatHostArgs(playlist, overrides),
             TxtInstallRoot.Text.Trim());
+        LoadDediLine();
         dlg.ShowDialog();
         RefreshArgPreviews();
     }

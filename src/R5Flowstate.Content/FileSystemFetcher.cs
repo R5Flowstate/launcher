@@ -292,11 +292,18 @@ public sealed class FileSystemFetcher : IHttpFetcher, IDisposable
             {
                 return await attemptOnce().ConfigureAwait(false);
             }
-            catch (Exception ex) when (IsRetryable(ex, cancel))
+            catch (Exception ex) when (IsRetryable(ex, cancel) && !IsFinalNotFound(ex))
             {
                 last = ex;
-                if (DateTime.UtcNow - started > RetryBudget)
+                var elapsed = DateTime.UtcNow - started;
+                if (elapsed > RetryBudget)
+                {
+                    ContentDiagnostics.Write(
+                        $"Download gave up on {uri.Host} after {elapsed.TotalSeconds:0}s and " +
+                        $"{attempt + 1} attempts: {ContentDiagnostics.Describe(ex)}");
                     break;
+                }
+                ContentDiagnostics.Retry(uri, attempt + 1, elapsed, ex);
 
                 // Jitter keeps a fleet of parallel workers from resynchronising
                 // onto the same retry instant.
@@ -358,6 +365,8 @@ public sealed class FileSystemFetcher : IHttpFetcher, IDisposable
             if (string.Equals(actual, want, StringComparison.Ordinal))
                 return bytes;
 
+            ContentDiagnostics.Write(
+                $"Object {want[..12]} from {uri.Host} failed its hash ({bytes.Length} bytes, pass {pass + 1}).");
             if (LooksLikeHtml(bytes))
             {
                 throw new InvalidOperationException(
@@ -460,6 +469,12 @@ public sealed class FileSystemFetcher : IHttpFetcher, IDisposable
     /// A cancelled read is only fatal when the caller asked for it. Anything
     /// else -- a stall abort, a dropped socket, a 5xx -- is worth another go.
     /// </summary>
+    /// <summary>For a manifest that may not be published yet: its 404 is an answer, not a network fault.</summary>
+    public bool NotFoundIsFinal { get; init; }
+
+    bool IsFinalNotFound(Exception ex) =>
+        NotFoundIsFinal && ex is HttpRequestException { StatusCode: System.Net.HttpStatusCode.NotFound };
+
     static bool IsRetryable(Exception ex, CancellationToken cancel)
     {
         if (cancel.IsCancellationRequested)

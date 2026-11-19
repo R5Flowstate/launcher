@@ -18,6 +18,10 @@ public sealed class HostState
     [JsonPropertyName("updated_utc")]
     public DateTimeOffset? UpdatedUtc { get; set; }
 
+    /// <summary>Host mod defaults were applied once; later toggles belong to the host.</summary>
+    [JsonPropertyName("mod_defaults_applied")]
+    public bool ModDefaultsApplied { get; set; }
+
     public static string StatePath(string installPath) =>
         Path.Combine(HostConfig.HostDir(installPath), "state.json");
 

@@ -1,4 +1,6 @@
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -19,6 +21,9 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
+        EventManager.RegisterClassHandler(typeof(Control), UIElement.PreviewGotKeyboardFocusEvent,
+            new KeyboardFocusChangedEventHandler(UseSoftFocus));
+
         CliInstallRoot = ParseInstallRoot(e.Args);
         var settings = SettingsStore.Load();
         // Hardware rendering by default; ForceSoftwareRender in settings.json is
@@ -30,9 +35,20 @@ public partial class App : Application
         SingleInstance.Watch(() => Dispatcher.BeginInvoke(() =>
         {
             BringToFront();
-            (Current?.MainWindow as MainWindow)?.ConsumePendingJoin();
+            var main = Current?.MainWindow as MainWindow;
+            main?.ConsumePendingBuild();
+            main?.ConsumePendingJoin();
         }));
         base.OnStartup(e);
+    }
+
+    // System theme styles pin the dashed rectangle, so it cannot be replaced from a resource.
+    static void UseSoftFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (ReferenceEquals(sender, e.NewFocus)
+            && sender is Control { FocusVisualStyle: not null } control
+            && Current.TryFindResource("SoftFocus") is Style soft)
+            control.FocusVisualStyle = soft;
     }
 
     protected override void OnExit(ExitEventArgs e)

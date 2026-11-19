@@ -18,6 +18,8 @@ public static class UninstallHook
     {
         try
         {
+            DesktopShortcuts.RemoveAll();
+
             var settings = SettingsStore.Load();
             Loc.Initialize(NoticeLanguages.ResolveUi(settings.UiLanguage, settings.EulaLanguage));
 

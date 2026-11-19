@@ -12,7 +12,7 @@
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <StartupObject>R5Flowstate.Shell.Program</StartupObject>
     <!-- Pack script and the UI both read this. Bump here, then vpk packVersion. -->
-    <Version>0.1.62</Version>
+    <Version>0.1.64</Version>
     <InformationalVersion>$(Version)</InformationalVersion>
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
@@ -27,7 +27,10 @@
   <ItemGroup>
     <Resource Include="Assets\logo.png" />
     <Resource Include="Assets\install-bg.jpg" />
+    <Resource Include="Assets\season_s21.jpg" />
+    <Resource Include="Assets\season_s30.jpg" />
     <Resource Include="Assets\app.ico" />
+    <Resource Include="Assets\app_s30.ico" />
   </ItemGroup>
 
   <ItemGroup>
@@ -46,6 +49,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Assets\client.ico" Link="client.ico"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\client_s30.ico" Link="client_s30.ico"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\app_s30.ico" Link="app_s30.ico"
+          CopyToOutputDirectory="PreserveNewest" />
     <None Include="Notes\NOTES.json" Link="NOTES.json"
           CopyToOutputDirectory="PreserveNewest" />
     <None Include="Notes\LAUNCHER_NOTES.json" Link="LAUNCHER_NOTES.json"
@@ -91,6 +100,9 @@
       <R5FStageFiles Include="$(TargetDir)Microsoft.Toolkit.HighPerformance.dll" />
       <R5FStageFiles Include="$(TargetDir)oo2core_8_win64.dll"
                      Condition="Exists('$(TargetDir)oo2core_8_win64.dll')" />
+      <R5FStageFiles Include="$(TargetDir)client.ico" />
+      <R5FStageFiles Include="$(TargetDir)client_s30.ico" />
+      <R5FStageFiles Include="$(TargetDir)app_s30.ico" />
       <R5FStageFiles Include="$(TargetDir)NOTES.json"
                      Condition="Exists('$(TargetDir)NOTES.json')" />
       <R5FStageFiles Include="$(TargetDir)LAUNCHER_NOTES.json"

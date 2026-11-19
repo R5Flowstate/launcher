@@ -141,7 +141,9 @@ tools/local_channel/INSTALL_STATE.local.json
 
 # Scratch
 tools/_preview_icon.png
+tools/_preview_client_icon.png
 tools/innosetup/
+tools/redist/
 
 # Operator / design notes stay local. Shipped docs are listed explicitly.
 *.md
@@ -150,3 +152,6 @@ tools/innosetup/
 !/SECURITY.md
 !/CONTRIBUTING.md
 !/docs/HOST_TOOL.md
+
+# RSX export cache
+rsx_cache_db.bin

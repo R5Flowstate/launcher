@@ -23,7 +23,6 @@ public partial class MainWindow
         var on = tab == SimpleTab.Blog;
         if (PanelSimpleBlog is not null)
             PanelSimpleBlog.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
-        StyleTab(BtnTabBlog, on);
         if (on && ScrollBlogList is not null && PanelBlogList?.Visibility == Visibility.Visible)
             Dispatcher.BeginInvoke(ScrollBlogList.ScrollToTop, DispatcherPriority.Background);
         SyncBlogUnreadDot(markSeen: on);

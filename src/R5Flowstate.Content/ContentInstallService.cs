@@ -150,8 +150,12 @@ public static class ContentInstallService
             report.Reasons.Clear();
             report.Reasons.Add(
                 $"files broken (mismatch={fetchCount} leftover={shadowCount})");
-            foreach (var s in samples.Take(4))
+            const int shown = InstallHealthReport.MaxSummaryReasons - 2;
+            foreach (var s in samples.Take(shown))
                 report.Reasons.Add(s);
+            var hidden = fetchCount + shadowCount - Math.Min(shown, samples.Count);
+            if (hidden > 0)
+                report.Reasons.Add($"+{hidden} more files");
         }
 
         return report;
@@ -447,6 +451,21 @@ public static class ContentInstallService
         var completedServer = false;
         var completedPlatform = false;
         string? failError = null;
+        string? currentPreset = null;
+
+        // HD is optional: losing it must leave a finished base install playable.
+        bool OnlyHdUnfinished()
+        {
+            if (currentPreset is null || !IsHd(currentPreset))
+                return false;
+            if (plan.Tracks.Any(t => IsClient(t.Preset)) && !completedClient)
+                return false;
+            if (plan.Tracks.Any(t => IsServer(t.Preset)) && !completedServer)
+                return false;
+            if (plan.Tracks.Any(t => IsPlatform(t.Preset)) && !completedPlatform)
+                return false;
+            return true;
+        }
 
         try
         {
@@ -456,6 +475,7 @@ public static class ContentInstallService
                     await runControl.WaitIfPausedAsync(cancel).ConfigureAwait(false);
                 cancel.ThrowIfCancellationRequested();
                 var track = plan.Tracks[i];
+                currentPreset = track.Preset;
                 var tip = GetTip(channel, track.Preset);
                 if (tip is null)
                 {
@@ -832,6 +852,11 @@ public static class ContentInstallService
                     }
                 }
             }
+            else if (OnlyHdUnfinished())
+            {
+                state.Incomplete = false;
+                state.LastError = null;
+            }
             else
             {
                 state.Incomplete = true;
@@ -850,20 +875,23 @@ public static class ContentInstallService
             InstallStateIO.Save(statePath, state);
             progress?.Report(new ContentInstallProgress
             {
-                Phase = state.Incomplete ? "failed" : "complete",
+                Phase = state.Incomplete || failError is not null ? "failed" : "complete",
                 Current = plan.Tracks.Count,
                 Total = plan.Tracks.Count,
                 Message = state.Incomplete
                     ? (state.LastError ?? "incomplete")
-                    : "install complete",
+                    : failError is not null
+                        ? "HD textures: " + failError
+                        : "install complete",
             });
 
             return state;
         }
         catch (OperationCanceledException)
         {
-            state.Incomplete = true;
-            state.LastError = "cancelled";
+            var keepBase = OnlyHdUnfinished();
+            state.Incomplete = !keepBase;
+            state.LastError = keepBase ? null : "cancelled";
             InstallStateIO.Save(statePath, state);
             throw;
         }

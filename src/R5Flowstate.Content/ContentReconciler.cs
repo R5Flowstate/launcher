@@ -295,7 +295,12 @@ public static class ContentReconciler
             }
         }
 
-        var actual = HashFile(full, cancel, reporter.Tick);
+        List<int>? missingChunks = null;
+        string actual;
+        if (entry.IsChunked)
+            (actual, missingChunks) = HashFileAndChunks(entry, full, cancel, reporter.Tick);
+        else
+            actual = HashFile(full, cancel, reporter.Tick);
         plan.Hashed++;
         plan.HashedBytes += info.Length;
 
@@ -312,7 +317,7 @@ public static class ContentReconciler
         }
 
         return Differs(
-            entry, full, index, overlay, plan, reporter, cancel, restoreMapPayloads);
+            entry, full, index, overlay, plan, reporter, cancel, restoreMapPayloads, missingChunks);
     }
 
     static bool KeepRecordedEdit(InstallFileState known, string path, OverlayExtractPolicy overlay)
@@ -376,7 +381,8 @@ public static class ContentReconciler
         ReconcilePlan plan,
         ScanReporter reporter,
         CancellationToken cancel,
-        bool restoreMapPayloads)
+        bool restoreMapPayloads,
+        List<int>? knownMissingChunks = null)
     {
         if (ShouldKeepDiff(entry, full, index, overlay))
             return new FileAction(entry.Path, entry, FileActionKind.KeepPlayerEdit);
@@ -391,7 +397,8 @@ public static class ContentReconciler
                 var info = new FileInfo(full);
                 if (info.Exists && info.Length == entry.Size)
                 {
-                    var missing = MissingChunks(entry, full, plan, reporter, cancel);
+                    var missing = knownMissingChunks
+                                  ?? MissingChunks(entry, full, plan, reporter, cancel);
                     if (missing.Count == 0)
                         return new FileAction(entry.Path, entry, FileActionKind.Keep);
                     if (missing.Count < entry.Chunks!.Count)
@@ -738,6 +745,63 @@ public static class ContentReconciler
         if (index is null)
             return null;
         return index.Files.TryGetValue(OverlayPaths.Norm(rel), out var v) ? v : null;
+    }
+
+    /// <summary>
+    /// Whole-file SHA-256 plus the chunks that do not match, from a single read. A
+    /// separate chunk pass after a whole-file miss reads multi-GB files twice.
+    /// </summary>
+    public static (string Sha256, List<int> MissingChunks) HashFileAndChunks(
+        ContentFile entry, string path, CancellationToken cancel = default, Action<long>? read = null)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        if (!entry.IsChunked)
+            throw new ArgumentException("Entry is not chunked.", nameof(entry));
+
+        using var fs = new FileStream(
+            path, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024,
+            FileOptions.SequentialScan);
+        using var whole = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        using var part = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var missing = new List<int>();
+        var chunkCount = entry.Chunks!.Count;
+        var chunk = 0;
+        var chunkLeft = chunkCount > 0 ? entry.ChunkLength(0) : 0;
+
+        void CloseChunk()
+        {
+            var got = Convert.ToHexString(part.GetHashAndReset()).ToLowerInvariant();
+            if (!string.Equals(got, entry.Chunks[chunk], StringComparison.OrdinalIgnoreCase))
+                missing.Add(chunk);
+            chunk++;
+            chunkLeft = chunk < chunkCount ? entry.ChunkLength(chunk) : 0;
+        }
+
+        var buffer = new byte[1024 * 1024];
+        int n;
+        while ((n = fs.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            cancel.ThrowIfCancellationRequested();
+            whole.AppendData(buffer, 0, n);
+            read?.Invoke(n);
+
+            var at = 0;
+            while (at < n && chunk < chunkCount)
+            {
+                var take = (int)Math.Min(chunkLeft, n - at);
+                part.AppendData(buffer, at, take);
+                at += take;
+                chunkLeft -= take;
+                if (chunkLeft == 0)
+                    CloseChunk();
+            }
+        }
+
+        // A short file leaves its tail chunks unread; those are missing too.
+        for (; chunk < chunkCount; chunk++)
+            missing.Add(chunk);
+
+        return (Convert.ToHexString(whole.GetCurrentHash()).ToLowerInvariant(), missing);
     }
 
     public static string HashFile(

@@ -3,11 +3,11 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:R5Flowstate.Shell"
         Title="{loc:T host_settings_title}"
-        Icon="Assets/app.ico"
+        Icon="{DynamicResource AppIcon}"
         Width="640" SizeToContent="Height"
         MinWidth="520" MaxHeight="820"
         ResizeMode="CanResizeWithGrip"
-        Background="{StaticResource WindowBg}" Foreground="{StaticResource TextPrimary}"
+        Background="{DynamicResource WindowBg}" Foreground="{DynamicResource TextPrimary}"
         FontFamily="Segoe UI"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
@@ -16,17 +16,19 @@
       <Button DockPanel.Dock="Right" Content="{loc:T close}"
               MinWidth="120" Height="36" IsDefault="True" IsCancel="True"
               Style="{StaticResource AccentButton}" Click="OnClose"/>
-      <Button DockPanel.Dock="Left" Content="{loc:T host_settings_reset}"
+      <Button x:Name="BtnReset" DockPanel.Dock="Left" Content="{loc:T host_settings_reset}"
               MinWidth="120" Height="36"
               Style="{StaticResource GhostButton}" Click="OnReset"/>
     </DockPanel>
 
     <StackPanel DockPanel.Dock="Top">
       <TextBlock x:Name="TxtMode" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,4"/>
-      <TextBlock FontSize="13" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"
+      <TextBlock FontSize="13" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap"
                  Text="{loc:T host_settings_hint}" Margin="0,0,0,14"/>
 
-      <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+      <TextBlock x:Name="TxtNoSettings" FontSize="13" Foreground="{DynamicResource TextMuted}"
+                 Text="{loc:T host_settings_none}" Margin="0,0,0,12" Visibility="Collapsed"/>
+      <Border x:Name="CardPresets" Style="{StaticResource Card}" Margin="0,0,0,12">
         <StackPanel>
           <TextBlock Text="{loc:T host_presets}" Style="{StaticResource SectionLabel}"/>
           <Grid>
@@ -55,32 +57,40 @@
     </StackPanel>
 
     <StackPanel DockPanel.Dock="Bottom">
-      <TextBlock Text="{loc:T host_settings_args}" Style="{StaticResource FieldLabel}" Margin="0,12,0,4"/>
-      <DockPanel>
+      <TextBlock x:Name="LblHostArgs" Text="{loc:T host_settings_args}" Style="{StaticResource FieldLabel}" Margin="0,12,0,4"/>
+      <DockPanel x:Name="PanelHostArgs">
         <Button DockPanel.Dock="Right" Content="{loc:T copy}" Height="30" Padding="12,0" Margin="8,0,0,0"
                 VerticalAlignment="Top"
                 Style="{StaticResource GhostButton}" Click="OnCopyArgs"/>
         <TextBox x:Name="TxtArgs" IsReadOnly="True" TextWrapping="Wrap"
                  Style="{StaticResource PlainTextBox}"
                  FontFamily="Consolas" FontSize="12"
-                 Foreground="{StaticResource TextCode}"
+                 Foreground="{DynamicResource TextCode}"
                  MinHeight="40" MaxHeight="120"
                  VerticalScrollBarVisibility="Auto"/>
       </DockPanel>
       <TextBlock x:Name="TxtStatus" Margin="0,8,0,0" FontSize="12" TextWrapping="Wrap"
-                 Foreground="{StaticResource TextSecondary}"/>
+                 Foreground="{DynamicResource TextSecondary}"/>
     </StackPanel>
 
-    <Border Style="{StaticResource Card}">
-      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <Grid x:Name="GridSettings">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="160"/>
-            <ColumnDefinition Width="Auto"/>
-          </Grid.ColumnDefinitions>
-        </Grid>
-      </ScrollViewer>
-    </Border>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel>
+        <Border x:Name="CardSettings" Style="{StaticResource Card}">
+          <Grid x:Name="GridSettings">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="160"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+          </Grid>
+        </Border>
+        <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+          <StackPanel>
+            <TextBlock Text="{loc:T args_server_section}" Style="{StaticResource SectionLabel}"/>
+            <loc:ArgsEditor x:Name="DediArgs"/>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
   </DockPanel>
 </Window>

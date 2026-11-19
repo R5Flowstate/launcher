@@ -92,7 +92,6 @@ public static class SettingsStore
             DediPassword = string.Empty,
             DediPasswordEnabled = false,
             FilterMapsByPlaylist = false,
-            ShowUnlistedMaps = false,
             JoinWithoutDev = true,
             SimpleMode = true,
             LastModePlaylist = string.Empty,
@@ -124,6 +123,14 @@ public static class SettingsStore
                     s.PreviousInstallPath = prev;
             }
 
+            foreach (var (name, set) in new (string, Action<string>)[]
+                     { ("S21InstallPath", v => s.S21InstallPath = v), ("S30InstallPath", v => s.S30InstallPath = v) })
+            {
+                if (key.GetValue(name) is string root && !string.IsNullOrWhiteSpace(root) &&
+                    !InstallPathPolicy.IsForbidden(root, AppContext.BaseDirectory))
+                    set(root);
+            }
+
             if (key.GetValue("ClientLaunchArguments") is string clArgs)
                 s.ClientLaunchArguments = clArgs;
             if (key.GetValue("DediLaunchArguments") is string svArgs)
@@ -148,10 +155,9 @@ public static class SettingsStore
             s.DediDevProfile = ReadBool(key, "DediDevProfile", s.DevProfile);
             s.Cheats = ReadBool(key, "Cheats", defaultValue: true);
             s.FilterMapsByPlaylist = ReadBool(key, "FilterMapsByPlaylist", defaultValue: false);
-            s.ShowUnlistedMaps = ReadBool(key, "ShowUnlistedMaps", defaultValue: false);
             s.JoinWithoutDev = ReadBool(key, "JoinWithoutDev", defaultValue: true);
             s.SimpleMode = ReadBool(key, "SimpleMode", defaultValue: true);
-            s.AdvancedServersCollapsed = ReadBool(key, "AdvancedServersCollapsed", defaultValue: false);
+            s.SetupBuild = ReadBool(key, "SetupBuildS30", defaultValue: false) ? GameBuild.S30 : GameBuild.S21;
 
             if (key.GetValue("DediPlaylist") is string pl && !string.IsNullOrWhiteSpace(pl))
                 s.DediPlaylist = pl;
@@ -186,9 +192,18 @@ public static class SettingsStore
             s.ShowClientConsoleWindow = ReadBool(key, "ShowClientConsoleWindow", defaultValue: false);
             s.OpenConsoleOnLaunch = ReadBool(key, "OpenConsoleOnLaunch", defaultValue: false);
             s.UseDx12 = ReadBool(key, "UseDx12", defaultValue: true);
+            s.TickRate = TickRates.Normalize(ReadInt(key, "TickRate", defaultValue: LauncherSettings.DefaultTickRate),
+                LauncherSettings.DefaultTickRate);
+            if (key.GetValue("ClientDisabledArgs") is string clientOff)
+                s.ClientDisabledArgs = clientOff;
+            if (key.GetValue("DediDisabledArgs") is string dediOff)
+                s.DediDisabledArgs = dediOff;
             s.DownloadLimitMbps = ReadInt(key, "DownloadLimitMbps", defaultValue: 0);
             s.DownloadConcurrency = ReadInt(key, "DownloadConcurrency", defaultValue: 0);
             s.HdTexturesAnnounced = ReadBool(key, "HdTexturesAnnounced", defaultValue: false);
+            s.DesktopShortcutOffered = ReadBool(key, "DesktopShortcutOffered", defaultValue: false);
+            s.S30ShortcutOffered = ReadBool(key, "S30ShortcutOffered", defaultValue: false);
+            s.S30HdTextures = ReadBool(key, "S30HdTextures", defaultValue: true);
             if (key.GetValue("NotesSeenStamp") is string notesSeen)
                 s.NotesSeenStamp = notesSeen ?? string.Empty;
             if (key.GetValue("BlogSeenStamp") is string blogSeen)
@@ -240,6 +255,8 @@ public static class SettingsStore
 
         key.SetValue("InstallPath", settings.InstallPath ?? DefaultInstallPath);
         key.SetValue("PreviousInstallPath", settings.PreviousInstallPath ?? string.Empty);
+        key.SetValue("S21InstallPath", settings.S21InstallPath ?? string.Empty);
+        key.SetValue("S30InstallPath", settings.S30InstallPath ?? string.Empty);
         key.SetValue("ClientLaunchArguments", settings.ClientLaunchArguments ?? string.Empty);
         key.SetValue("DediLaunchArguments", settings.DediLaunchArguments ?? string.Empty);
         key.SetValue("OfflineNoAuth", settings.OfflineNoAuth ? 1 : 0, RegistryValueKind.DWord);
@@ -250,10 +267,9 @@ public static class SettingsStore
         key.SetValue("DediDevProfile", settings.DediDevProfile ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("Cheats", settings.Cheats ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("FilterMapsByPlaylist", settings.FilterMapsByPlaylist ? 1 : 0, RegistryValueKind.DWord);
-        key.SetValue("ShowUnlistedMaps", settings.ShowUnlistedMaps ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("JoinWithoutDev", settings.JoinWithoutDev ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("SimpleMode", settings.SimpleMode ? 1 : 0, RegistryValueKind.DWord);
-        key.SetValue("AdvancedServersCollapsed", settings.AdvancedServersCollapsed ? 1 : 0, RegistryValueKind.DWord);
+        key.SetValue("SetupBuildS30", settings.SetupBuild == GameBuild.S30 ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("DediPlaylist", settings.DediPlaylist ?? string.Empty);
         key.SetValue("DediMap", settings.DediMap ?? string.Empty);
         key.SetValue("DediPort", settings.DediPort > 0 ? settings.DediPort : 37015, RegistryValueKind.DWord);
@@ -274,9 +290,15 @@ public static class SettingsStore
         key.SetValue("ShowClientConsoleWindow", settings.ShowClientConsoleWindow ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("OpenConsoleOnLaunch", settings.OpenConsoleOnLaunch ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("UseDx12", settings.UseDx12 ? 1 : 0, RegistryValueKind.DWord);
+        key.SetValue("TickRate", settings.TickRate, RegistryValueKind.DWord);
+        key.SetValue("ClientDisabledArgs", settings.ClientDisabledArgs ?? string.Empty, RegistryValueKind.String);
+        key.SetValue("DediDisabledArgs", settings.DediDisabledArgs ?? string.Empty, RegistryValueKind.String);
         key.SetValue("DownloadLimitMbps", Math.Max(0, settings.DownloadLimitMbps), RegistryValueKind.DWord);
         key.SetValue("DownloadConcurrency", Math.Max(0, settings.DownloadConcurrency), RegistryValueKind.DWord);
         key.SetValue("HdTexturesAnnounced", settings.HdTexturesAnnounced ? 1 : 0, RegistryValueKind.DWord);
+        key.SetValue("DesktopShortcutOffered", settings.DesktopShortcutOffered ? 1 : 0, RegistryValueKind.DWord);
+        key.SetValue("S30ShortcutOffered", settings.S30ShortcutOffered ? 1 : 0, RegistryValueKind.DWord);
+        key.SetValue("S30HdTextures", settings.S30HdTextures ? 1 : 0, RegistryValueKind.DWord);
         key.SetValue("NotesSeenStamp", settings.NotesSeenStamp ?? string.Empty);
         key.SetValue("BlogSeenStamp", settings.BlogSeenStamp ?? string.Empty);
         key.SetValue("ConsoleHistoryServer", settings.ConsoleHistoryServer.ToArray(), RegistryValueKind.MultiString);
@@ -388,6 +410,13 @@ public sealed class LauncherSettings
     /// Startup falls back to it when the current path has no game, so a mistaken
     /// Browse or Reset cannot strand the launcher on an empty folder.</summary>
     public string PreviousInstallPath { get; set; } = string.Empty;
+
+    /// <summary>Last folder used for each game build; the build switch moves between them.</summary>
+    public string S21InstallPath { get; set; } = string.Empty;
+    public string S30InstallPath { get; set; } = string.Empty;
+
+    /// <summary>The build a folder with no game in it will install.</summary>
+    public GameBuild SetupBuild { get; set; } = GameBuild.S21;
     public string ClientLaunchArguments { get; set; } = string.Empty;
     public string DediLaunchArguments { get; set; } = string.Empty;
     public bool OfflineNoAuth { get; set; }
@@ -413,7 +442,6 @@ public sealed class LauncherSettings
     /// r5f_map_names.txt. Off by default; the ship allowlist stays the player list.
     /// platform/r5f_wip_maps.txt still adds named extras with this off.
     /// </summary>
-    public bool ShowUnlistedMaps { get; set; }
 
     /// <summary>
     /// Public Join drops -dev / -developer / -devsdk even if Developer is on.
@@ -423,9 +451,6 @@ public sealed class LauncherSettings
 
     /// <summary>True = Simple player shell (default for new installs).</summary>
     public bool SimpleMode { get; set; } = true;
-
-    /// <summary>Advanced layout: the SERVERS card body starts collapsed.</summary>
-    public bool AdvancedServersCollapsed { get; set; }
 
     /// <summary>Last selected mode card playlist id.</summary>
     public string LastModePlaylist { get; set; } = string.Empty;
@@ -459,8 +484,28 @@ public sealed class LauncherSettings
     /// <summary>The one-time "HD textures are available" notice has been shown.</summary>
     public bool HdTexturesAnnounced { get; set; }
 
+    /// <summary>The one-time game shortcut question was answered (or a shortcut already existed).</summary>
+    public bool DesktopShortcutOffered { get; set; }
+
+    /// <summary>The same question for the S30.1 shortcuts.</summary>
+    public bool S30ShortcutOffered { get; set; }
+
+    /// <summary>S30.1 only: off launches the client with -hd_textures 0.</summary>
+    public bool S30HdTextures { get; set; } = true;
+
     /// <summary>Run r5apex_dx12.exe. On by default for fresh installs.</summary>
     public bool UseDx12 { get; set; } = true;
+
+    public const int DefaultTickRate = TickRates.Stock;
+
+    /// <summary>Server tick rate for launcher-started servers and in-game local matches: 20, 60 or 120.</summary>
+    public int TickRate { get; set; } = DefaultTickRate;
+
+    /// <summary>Space-separated argument keys left out of the client line.</summary>
+    public string ClientDisabledArgs { get; set; } = string.Empty;
+
+    /// <summary>Space-separated argument keys left out of the dedicated server line.</summary>
+    public string DediDisabledArgs { get; set; } = string.Empty;
 
     /// <summary>Game download cap in MB/s (decimal, same as the progress rate). 0 = unlimited.</summary>
     public int DownloadLimitMbps { get; set; }

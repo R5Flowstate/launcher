@@ -42,6 +42,8 @@ public static class SettingOptions
             return "None";
         if (weaponNames.TryGetValue(value, out var name))
             return name;
+        if (value.StartsWith(ForcedLegend.RefPrefix, StringComparison.OrdinalIgnoreCase))
+            value = value[ForcedLegend.RefPrefix.Length..];
         return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(value.Replace('_', ' '));
     }
 }

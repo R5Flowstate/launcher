@@ -32,7 +32,7 @@ public static class InstanceCfg
         Add(lines, "hostname", instance.Hostname);
         Add(lines, "hostdesc", instance.Description, 256);
         Add(lines, "sv_password", secrets.ServerPassword);
-        Add(lines, "rcon_password", secrets.RconPassword);
+        Add(lines, "sv_rcon_password", secrets.RconPassword);
         Add(lines, "fs_stats_host_key", secrets.StatsHostKey);
 
         var path = PathFor(installPath, instance);
@@ -62,6 +62,7 @@ public static class InstanceCfg
             switch (name)
             {
                 case "sv_password": s.ServerPassword = value; break;
+                case "sv_rcon_password":
                 case "rcon_password": s.RconPassword = value; break;
                 case "fs_stats_host_key": s.StatsHostKey = value; break;
             }

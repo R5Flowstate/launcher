@@ -1,3 +1,4 @@
+using R5Flowstate.Contracts;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Net;
@@ -254,10 +255,14 @@ public static class ProcessSpawner
             };
         }
 
+        // S30.1 ships only the DX12 image and its own client worker.
+        var s30Client = role == LaunchRole.Client && GameBuilds.IsS30(absRoot);
         var exeName = role == LaunchRole.Client
-            ? (useDx12 ? ClientDx12ExeName : ClientExeName)
+            ? (useDx12 || s30Client ? ClientDx12ExeName : ClientExeName)
             : DediExeName;
-        var workerName = role == LaunchRole.Client ? ClientWorkerDll : ServerWorkerDll;
+        var workerName = role == LaunchRole.Client
+            ? (s30Client ? GameBuilds.S30ClientWorkerDll : ClientWorkerDll)
+            : ServerWorkerDll;
 
         var exe = Path.Combine(absRoot, exeName);
         var worker = ResolveUnderRoot(absRoot, workerName);

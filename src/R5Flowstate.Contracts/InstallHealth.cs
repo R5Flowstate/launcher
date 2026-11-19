@@ -89,13 +89,18 @@ public sealed class InstallHealthReport
 
     public bool IsReady => Overall == InstallHealthStatus.Ready;
 
+    public const int MaxSummaryReasons = 6;
+
     public string Summary
     {
         get
         {
             if (Reasons.Count == 0)
                 return Overall.ToString();
-            return Overall + ": " + string.Join("; ", Reasons.Take(4));
+            var line = Overall + ": " + string.Join("; ", Reasons.Take(MaxSummaryReasons));
+            if (Reasons.Count > MaxSummaryReasons)
+                line += $"; +{Reasons.Count - MaxSummaryReasons} more";
+            return line;
         }
     }
 }

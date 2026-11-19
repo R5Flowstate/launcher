@@ -74,11 +74,13 @@ public static class ModeGroups
 {
     public const string Apex = "apex";
     public const string Flowstate = "flowstate";
+    /// <summary>Practice courses: one card per course, so many can share one map.</summary>
+    public const string Training = "training";
     public const string Custom = "custom";
 
     /// <summary>Rail order. Apex is the bulk of the list, so it reads first; what
     /// mods add goes last.</summary>
-    public static readonly IReadOnlyList<string> Order = new[] { Apex, Flowstate, Custom };
+    public static readonly IReadOnlyList<string> Order = new[] { Apex, Flowstate, Training, Custom };
 
     public static string Normalize(string? raw)
     {
@@ -87,6 +89,8 @@ public static class ModeGroups
             return Apex;
         if (string.Equals(v, Custom, StringComparison.OrdinalIgnoreCase))
             return Custom;
+        if (string.Equals(v, Training, StringComparison.OrdinalIgnoreCase))
+            return Training;
         return Flowstate;
     }
 
@@ -182,9 +186,8 @@ public sealed class PlaylistCatalog
     /// in addition to the ship allowlist when the files are on disk.</summary>
     public IReadOnlyList<string> WipOrder { get; init; } = Array.Empty<string>();
 
-    /// <summary>When set, Curate also keeps on-disk stems that missed the ship
-    /// allowlist. Default off so the player picker stays the curated list.</summary>
-    public bool IncludeUnlistedMaps { get; init; }
+    /// <summary>Every map this install can launch, in picker order.</summary>
+    public IReadOnlyList<string> InstalledMaps => Curate(AllMaps);
 
     /// <summary>Marked modes, in r5f_mode_order then display order.</summary>
     public IReadOnlyList<PlaylistEntry> Modes { get; init; } = Array.Empty<PlaylistEntry>();
@@ -226,76 +229,55 @@ public sealed class PlaylistCatalog
             string.Equals(e.Id, id.Trim(), StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// Maps a dedicated server can run this playlist on: its pinned map, else the
+    /// maps it declares, else (a mode with no map list) every map on disk.
+    /// </summary>
+    public IReadOnlyList<string> HostMapsFor(string? playlistId)
+    {
+        var entry = Find(playlistId);
+        if (entry is null)
+            return Array.Empty<string>();
+        if (!string.IsNullOrWhiteSpace(entry.PinnedMap))
+            return new[] { entry.PinnedMap };
+        if (entry.Maps.Count > 0)
+            return Curate(entry.Maps);
+        return Curate(AllMaps);
+    }
+
     public IReadOnlyList<string> MapsForPlaylist(string? playlist)
     {
-        if (string.IsNullOrWhiteSpace(playlist))
-            return AllMaps;
-        if (MapsByPlaylist.TryGetValue(playlist.Trim(), out var maps) && maps.Count > 0)
-            return maps;
-        return AllMaps;
+        if (!string.IsNullOrWhiteSpace(playlist) &&
+            MapsByPlaylist.TryGetValue(playlist.Trim(), out var maps))
+        {
+            var kept = Curate(maps);
+            if (kept.Count > 0)
+                return kept;
+        }
+        return InstalledMaps;
     }
 
     /// <summary>
-    /// Reduce a declared map list to what a player should actually be offered:
-    /// the curated allowlist when the install ships one, then what is on disk.
-    /// Allowlist order wins, so the file also decides how the picker reads.
-    /// Either filter emptying the list means the filter is wrong for this
-    /// install, so the declared list stands rather than an empty picker.
-    /// WIP stems (r5f_wip_maps.txt) and, when IncludeUnlistedMaps is set,
-    /// other on-disk stems are appended after that list -- they never rewrite it.
+    /// Reduce a declared map list to what this install has, never offering a map
+    /// that is not on disk. r5f_map_names.txt then r5f_wip_maps.txt set the order;
+    /// anything else on the list follows.
     /// </summary>
     private IReadOnlyList<string> Curate(IReadOnlyList<string> stems)
     {
-        var declared = stems;
-        var kept = stems;
+        var declared = new HashSet<string>(stems, StringComparer.OrdinalIgnoreCase);
+        var disk = MapsOnDisk.Count > 0
+            ? new HashSet<string>(MapsOnDisk, StringComparer.OrdinalIgnoreCase)
+            : null;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var kept = new List<string>();
 
-        if (MapOrder.Count > 0)
+        foreach (var m in MapOrder.Concat(WipOrder).Concat(stems))
         {
-            var byAllow = MapOrder.Where(m => kept.Contains(m, StringComparer.OrdinalIgnoreCase)).ToList();
-            if (byAllow.Count > 0)
-                kept = byAllow;
+            if (declared.Contains(m) && (disk is null || disk.Contains(m)) && seen.Add(m))
+                kept.Add(m);
         }
 
-        HashSet<string>? disk = null;
-        if (MapsOnDisk.Count > 0)
-        {
-            disk = new HashSet<string>(MapsOnDisk, StringComparer.OrdinalIgnoreCase);
-            var onDisk = kept.Where(disk.Contains).ToList();
-            if (onDisk.Count > 0)
-                kept = onDisk;
-        }
-
-        var have = new HashSet<string>(kept, StringComparer.OrdinalIgnoreCase);
-        var declaredSet = new HashSet<string>(declared, StringComparer.OrdinalIgnoreCase);
-        var extras = new List<string>();
-
-        bool Eligible(string m)
-        {
-            if (!declaredSet.Contains(m))
-                return false;
-            if (disk is not null && !disk.Contains(m))
-                return false;
-            return have.Add(m);
-        }
-
-        foreach (var m in WipOrder)
-        {
-            if (Eligible(m))
-                extras.Add(m);
-        }
-
-        if (IncludeUnlistedMaps)
-        {
-            foreach (var m in disk is not null ? MapsOnDisk : declared)
-            {
-                if (Eligible(m))
-                    extras.Add(m);
-            }
-        }
-
-        if (extras.Count == 0)
-            return kept;
-        return kept.Concat(extras).ToList();
+        return kept;
     }
 
     /// <summary>Maps to offer for a mode card: its own maps{} when it declares a
@@ -304,13 +286,16 @@ public sealed class PlaylistCatalog
     /// card) is dropped -- those modes are not a Free Roam setting.</summary>
     public IReadOnlyList<string> MapChoicesForMode(string playlistId)
     {
+        bool Installed(string stem) =>
+            MapsOnDisk.Count == 0 || MapsOnDisk.Contains(stem, StringComparer.OrdinalIgnoreCase);
+
         if (string.IsNullOrWhiteSpace(playlistId))
             return ExcludeOwnButtonMaps(Curate(AllMaps), playlistId);
         var entry = Find(playlistId);
         if (entry is null)
             return ExcludeOwnButtonMaps(Curate(AllMaps), playlistId);
         if (!string.IsNullOrWhiteSpace(entry.PinnedMap))
-            return new[] { entry.PinnedMap };
+            return Installed(entry.PinnedMap) ? new[] { entry.PinnedMap } : Array.Empty<string>();
         if (entry.Maps.Count >= 2)
             return ExcludeOwnButtonMaps(Curate(entry.Maps), playlistId);
         return ExcludeOwnButtonMaps(Curate(AllMaps), playlistId);
@@ -411,7 +396,6 @@ public static class PlaylistCatalogLoader
     public static PlaylistCatalog Load(
         string installRoot,
         string? language = null,
-        bool includeUnlistedMaps = false,
         Func<string, string?>? uiLoc = null,
         IReadOnlyList<ModPlaylistSource>? mods = null)
     {
@@ -421,12 +405,16 @@ public static class PlaylistCatalogLoader
             ?? FindLocalizationFile(installRoot, "english");
         var entries = new Dictionary<string, PlaylistEntryBuilder>(StringComparer.OrdinalIgnoreCase);
         var allMaps = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var curation = LoadMapCuration(installRoot);
+        var wip = LoadWipCuration(installRoot);
+        var curatedExtra = CuratedNonStandardStems(installRoot, curation.Order.Concat(wip.Order));
 
         if (path is not null)
         {
             try
             {
-                ParsePlaylistsSection(File.ReadAllText(path), entries, allMaps);
+                ParsePlaylistsSection(File.ReadAllText(path), entries, allMaps,
+                    s => IsMapStem(s) || curatedExtra.Contains(s));
             }
             catch
             {
@@ -437,8 +425,10 @@ public static class PlaylistCatalogLoader
         var modMapNames = MergeModPlaylists(mods, entries);
 
         var onDisk = DiscoverMapsOnDisk(installRoot).ToList();
-        var curation = LoadMapCuration(installRoot);
-        var wip = LoadWipCuration(installRoot);
+        onDisk.AddRange(curatedExtra.Where(m => !onDisk.Contains(m, StringComparer.OrdinalIgnoreCase)));
+        if (mods is not null)
+            onDisk.AddRange(mods.SelectMany(m => m.Maps).Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(m => !onDisk.Contains(m, StringComparer.OrdinalIgnoreCase)).ToList());
         foreach (var m in onDisk)
             allMaps.Add(m);
 
@@ -457,6 +447,16 @@ public static class PlaylistCatalogLoader
             .OrderBy(e => e.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(e => e.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        // A mode may pin a map whose stem disk discovery does not recognise (custom maps
+        // shipped in the base install); its own files vouch for it.
+        foreach (var e in list)
+        {
+            var pin = e.PinnedMap;
+            if (!string.IsNullOrWhiteSpace(pin) && !onDisk.Contains(pin, StringComparer.OrdinalIgnoreCase) &&
+                MapFilesExist(installRoot, pin))
+                onDisk.Add(pin);
+        }
 
         var byPl = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var e in list)
@@ -487,7 +487,6 @@ public static class PlaylistCatalogLoader
             MapNames = WithModMapNames(
                 LocalizeMapNames(MergeMapNames(curation.Names, wip.Names), loc, uiLoc), modMapNames),
             WipOrder = wip.Order,
-            IncludeUnlistedMaps = includeUnlistedMaps,
             MapsByPlaylist = byPl,
             Modes = modes,
             HostPlaylists = host,
@@ -508,6 +507,9 @@ public static class PlaylistCatalogLoader
     /// a mod adds is its own mode in the custom group; one map means the mode is
     /// that map. Returns stem -> display name from each playlist's map_name.
     /// </summary>
+    // The engine keeps playlist names in 32-byte buffers and skips longer mod entries.
+    public const int MaxModPlaylistIdLength = 31;
+
     private static Dictionary<string, string> MergeModPlaylists(
         IReadOnlyList<ModPlaylistSource>? mods,
         Dictionary<string, PlaylistEntryBuilder> entries)
@@ -547,7 +549,7 @@ public static class PlaylistCatalogLoader
             {
                 if (!string.Equals(ForMod(b), mod.Id, StringComparison.Ordinal))
                     continue;
-                if (entries.ContainsKey(b.Id) || b.Maps.Count == 0)
+                if (entries.ContainsKey(b.Id) || b.Maps.Count == 0 || b.Id.Length > MaxModPlaylistIdLength)
                     continue;
 
                 b.IsMode = true;
@@ -616,10 +618,12 @@ public static class PlaylistCatalogLoader
         return merged;
     }
 
-    /// <summary>Pinned maps belonging to a mode that is alone in its family.</summary>
+    /// <summary>Pinned maps belonging to a mode that is alone in its family.
+    /// Training courses are excluded: they pin a shared map that stays a normal choice.</summary>
     private static HashSet<string> SoloPinnedMapsOf(IReadOnlyList<PlaylistEntry> modes)
     {
         var perFamily = modes
+            .Where(e => e.Group != ModeGroups.Training)
             .GroupBy(FamilyKey, StringComparer.OrdinalIgnoreCase)
             .Where(g => g.Count() == 1)
             .SelectMany(g => g)
@@ -864,6 +868,50 @@ public static class PlaylistCatalogLoader
         return (order, dict);
     }
 
+    /// <summary>
+    /// Stems listed in r5f_map_names.txt / r5f_wip_maps.txt that do not follow the
+    /// mp_rr_ convention (e.g. mp_quicklighting_test). The name files vouch for
+    /// them, so they count as maps once their client pak or server VPK is on disk.
+    /// </summary>
+    static HashSet<string> CuratedNonStandardStems(string installRoot, IEnumerable<string> stems)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string root;
+        try { root = Path.GetFullPath(installRoot); }
+        catch { return set; }
+
+        foreach (var s in stems)
+        {
+            if (IsMapStem(s) || !s_curatedToken.IsMatch(s))
+                continue;
+            if (MapFilesExist(root, s))
+                set.Add(s);
+        }
+        return set;
+    }
+
+    /// <summary>The map's client pak or server VPK is in the install.</summary>
+    static bool MapFilesExist(string installRoot, string stem)
+    {
+        if (!s_curatedToken.IsMatch(stem))
+            return false;
+        try
+        {
+            var root = Path.GetFullPath(installRoot);
+            return File.Exists(Path.Combine(root, "paks", "Win64", stem + ".rpak")) ||
+                   File.Exists(Path.Combine(root, "vpk", "englishserver_" + stem + ".bsp.pak000_dir.vpk")) ||
+                   File.Exists(Path.Combine(root, "vpk", "englishclient_" + stem + ".bsp.pak000_dir.vpk"));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static readonly Regex s_curatedToken = new(
+        @"^mp_[a-zA-Z0-9_]+$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     public static IEnumerable<string> DiscoverMapsOnDisk(string installRoot)
     {
         if (string.IsNullOrWhiteSpace(installRoot) || !Directory.Exists(installRoot))
@@ -890,7 +938,10 @@ public static class PlaylistCatalogLoader
         foreach (var dir in packed)
         {
             foreach (var stem in StemsInDir(dir, SearchOption.TopDirectoryOnly, seen))
-                yield return stem;
+            {
+                if (PackedMapIsComplete(root, stem))
+                    yield return stem;
+            }
         }
 
         foreach (var dir in loose)
@@ -898,6 +949,26 @@ public static class PlaylistCatalogLoader
             foreach (var stem in StemsInDir(dir, SearchOption.AllDirectories, seen))
                 yield return stem;
         }
+    }
+
+    /// <summary>
+    /// A level needs its client and server halves. A pak on only one side is a
+    /// leftover or a sub-asset (a landscape pak has no level). An install with no
+    /// directory for a side, such as a dedicated-only folder, does not need that side.
+    /// </summary>
+    static bool PackedMapIsComplete(string root, string stem)
+    {
+        var clientPaks = Path.Combine(root, "paks", "Win64");
+        var serverPaks = Path.Combine(root, "paks", "Win64_server");
+        var vpk = Path.Combine(root, "vpk");
+
+        bool Vpk(string side) => File.Exists(Path.Combine(vpk, side + "_" + stem + ".bsp.pak000_dir.vpk"));
+
+        var client = !Directory.Exists(clientPaks) ||
+                     File.Exists(Path.Combine(clientPaks, stem + ".rpak")) || Vpk("englishclient");
+        var server = !Directory.Exists(serverPaks) ||
+                     File.Exists(Path.Combine(serverPaks, stem + ".rpak")) || Vpk("englishserver");
+        return client && server;
     }
 
     static IEnumerable<string> StemsInDir(
@@ -1146,7 +1217,7 @@ public static class PlaylistCatalogLoader
                     result.Add(setting);
             }
         }
-        return result;
+        return HostCapacity.Pin(result, Lookup(HostCapacity.PlayersVar), Lookup(HostCapacity.TeamsVar));
     }
 
     /// <summary>Walk inherit chain for first usable field value (name / map_name).</summary>

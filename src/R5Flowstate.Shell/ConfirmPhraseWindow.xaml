@@ -3,34 +3,34 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:R5Flowstate.Shell"
         Title="{loc:T title_remove}"
-        Icon="Assets/app.ico"
+        Icon="{DynamicResource AppIcon}"
         SizeToContent="Height" Width="520"
         ResizeMode="NoResize"
-        Background="{StaticResource WindowBg}" Foreground="{StaticResource TextPrimary}"
+        Background="{DynamicResource WindowBg}" Foreground="{DynamicResource TextPrimary}"
         FontFamily="Segoe UI"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
   <StackPanel Margin="24,22,24,20">
     <TextBlock x:Name="TxtHeadline" FontSize="19" FontWeight="SemiBold"
-               Foreground="{StaticResource DangerFg}" TextWrapping="Wrap"/>
+               Foreground="{DynamicResource DangerFg}" TextWrapping="Wrap"/>
     <TextBlock x:Name="TxtDetail" Margin="0,10,0,0" FontSize="13"
-               Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+               Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap"/>
     <Border Margin="0,14,0,0" CornerRadius="8" Padding="14,11"
-            Background="{StaticResource SurfaceSunken}">
+            Background="{DynamicResource SurfaceSunken}">
       <TextBlock x:Name="TxtTarget" FontFamily="Consolas" FontSize="12"
-                 Foreground="{StaticResource TextCode}" TextWrapping="Wrap"/>
+                 Foreground="{DynamicResource TextCode}" TextWrapping="Wrap"/>
     </Border>
     <TextBlock x:Name="TxtPrompt" Margin="0,18,0,6" FontSize="13"
-               Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+               Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap"/>
     <Border CornerRadius="6" Padding="12,8" Margin="0,0,0,10"
-            Background="{StaticResource SurfaceSunken}">
+            Background="{DynamicResource SurfaceSunken}">
       <TextBlock x:Name="TxtPhraseEcho" FontFamily="Consolas" FontSize="16"
-                 FontWeight="Bold" Foreground="{StaticResource TextPrimary}"/>
+                 FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"/>
     </Border>
     <TextBox x:Name="TxtPhrase" Height="36" FontFamily="Consolas" FontSize="14"
              TextChanged="OnPhraseChanged"/>
     <TextBlock x:Name="TxtPhraseHint" Margin="0,6,0,0" FontSize="12"
-               Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
+               Foreground="{DynamicResource TextMuted}" TextWrapping="Wrap"/>
     <DockPanel Margin="0,20,0,0" LastChildFill="False">
       <Button x:Name="BtnConfirm" DockPanel.Dock="Right" Content="{loc:T remove_game}"
               MinWidth="140" Height="36" IsEnabled="False" IsDefault="True"
